@@ -317,8 +317,12 @@ func (d *Durable) input(ctx context.Context, req TurnRequest, scope agentkernel.
 	if uiErr != nil {
 		return planexec.Input{}, uiErr
 	}
+	systemPrompt, spErr := buildSystemPrompt(req.Case, req.Workspace, req.Mode, req.CreateInstruction)
+	if spErr != nil {
+		return planexec.Input{}, spErr
+	}
 	return planexec.Input{
-		SystemPrompt: buildSystemPrompt(req.Case, req.Workspace, req.Mode, req.CreateInstruction),
+		SystemPrompt: systemPrompt,
 		UserInput:    userInput,
 		// Without this the run has no language directive at all: the planner, the
 		// terminal output and the direct reply are each left to infer the language

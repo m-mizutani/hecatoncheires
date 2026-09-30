@@ -1,9 +1,15 @@
 package threadcase
 
 import (
+	_ "embed"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
+	"text/template"
 	"time"
+
+	"github.com/m-mizutani/goerr/v2"
 
 	"github.com/secmon-lab/hecatoncheires/pkg/agent/slackfmt"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
@@ -29,116 +35,164 @@ const (
 	ModeCreate
 )
 
+//go:embed prompts/system.md
+var systemPromptTemplateText string
+
+//go:embed prompts/user_input.md
+var userInputTemplateText string
+
+var (
+	systemPromptTemplate = template.Must(template.New("threadcase_system").Parse(systemPromptTemplateText))
+	userInputTemplate    = template.Must(template.New("threadcase_user_input").Parse(userInputTemplateText))
+)
+
+// systemPromptInput is the data prompts/system.md renders.
+type systemPromptInput struct {
+	// Mode is "create", "materialize" or "mention".
+	Mode string
+	// Case is nil when no case exists yet (ModeCreate).
+	Case            *systemPromptCase
+	Fields          []systemPromptField
+	ClosedStatusIDs string
+	SlackFormat     string
+	// CreatePrompt and TriggerContext are rendered in ModeCreate only.
+	CreatePrompt   string
+	TriggerContext string
+}
+
+type systemPromptCase struct {
+	Title       string
+	Description string
+	// Assignees is always rendered, "(empty)" when unset: the agent has no
+	// tool to read the case back, so an omitted line would leave it unable to
+	// tell "no assignees" from "not shown" before calling case__assign.
+	Assignees   string
+	BoardStatus string
+	FieldValues []systemPromptFieldValue
+}
+
+type systemPromptFieldValue struct {
+	ID    string
+	Value any
+}
+
+type systemPromptField struct {
+	Name        string
+	ID          string
+	Type        string
+	Required    bool
+	Description string
+	// Options is the comma-joined option ids.
+	Options string
+	// IsDate spells the RFC3339 format out: the validator rejects a bare date
+	// like "2026-07-14".
+	IsDate bool
+	// Semantic and SemanticHint tell the planner the expected value shape up
+	// front, since the validator rejects a value that does not fit.
+	Semantic     string
+	SemanticHint string
+}
+
+// userInputTemplateInput is the data prompts/user_input.md renders.
+type userInputTemplateInput struct {
+	// HasSystemMessages / HasDeltaMessages keep a section heading even when
+	// every message in it is the current mention and is skipped.
+	HasSystemMessages bool
+	SystemMessages    []userInputMessage
+	HasDeltaMessages  bool
+	DeltaMessages     []userInputMessage
+	MentionSpeaker    string
+	MentionText       string
+}
+
+type userInputMessage struct {
+	Timestamp string
+	Speaker   string
+	Text      string
+}
+
+func modeName(mode Mode) string {
+	switch mode {
+	case ModeCreate:
+		return "create"
+	case ModeMaterialize:
+		return "materialize"
+	default:
+		return "mention"
+	}
+}
+
 // buildSystemPrompt renders the planner system prompt for a thread-mode turn.
 // It inlines the case snapshot, the workspace field schema, and the board
 // status vocabulary so the planner can fill fields and pick a close status.
-func buildSystemPrompt(c *model.Case, ws *model.WorkspaceEntry, mode Mode, createInstruction string) string {
-	var b strings.Builder
-
-	b.WriteString("You are an investigation agent operating inside a Slack thread that represents a single case.\n")
-	switch mode {
-	case ModeCreate:
-		b.WriteString("A message was posted in a monitored channel, but NO case exists yet. Do NOT rush to create one. First do light investigation about the reporter and the topic (recent messages, related threads) using the read-only search tools. When the intent or required information is unclear, ask the user a `question` (a select / multi-select form) instead of guessing. Once the direction is clear, investigate deeper, and only then emit the final create decision with a concise title, a clear description, and every custom field required by the schema. The case is validated against the workspace field schema when it is created: satisfy every field marked (required), use only the listed option ids, and give date fields an RFC3339 timestamp. If a value is rejected the error is fed back to you and you get a few attempts to correct it, but aim to get it right the first time.\n")
-	case ModeMaterialize:
-		b.WriteString("A new case was just created from the first message in this thread. Investigate the message (using the read-only tools when helpful) and emit a `materialize` decision that fills a concise title, a clear description, and any custom fields you are confident about.\n")
-	default:
-		b.WriteString("A user mentioned you in this case thread. Investigate as needed. When the thread calls for a change to the case — a board status move (including closing it), an assignee change, or a content edit — dispatch a task that uses the matching `case__*` write tool; do NOT merely describe the change in your final answer, actually call the tool. Your terminal decision is then ONE of: `respond` to answer the user, or `materialize` to update the case title/description/fields.\n")
-	}
-	switch mode {
-	case ModeMention:
-		b.WriteString("You CANNOT create or manage Actions and you CANNOT create drafts — this is a thread-mode case. Sub-agents may read (Slack / Notion / GitHub / the web) and may write to this case: `case__update_case_status` (board status), `case__assign` / `case__unassign` (assignees), and `case__update_case` (title / description / custom fields). The assignee tools take Slack user IDs, never display names: resolve a name to its user ID from the thread messages first, and never guess an ID. Because a `materialize` decision REPLACES the title and description wholesale, pick one content path per turn — either edit with `case__update_case` inside the loop, or emit `materialize` at the end, never both.\n\n")
-	default:
-		b.WriteString("You CANNOT create or manage Actions and you CANNOT create drafts — this is a thread-mode case. Sub-agent tools are read-only.\n\n")
+func buildSystemPrompt(c *model.Case, ws *model.WorkspaceEntry, mode Mode, createInstruction string) (string, error) {
+	in := systemPromptInput{
+		Mode: modeName(mode),
+		// How to write anything that goes to Slack. Placed before the
+		// operator-supplied sections so the operator's text stays the last
+		// word, as it is for every other host. It is rendered in every mode:
+		// a create or materialize turn asks the user questions through Slack
+		// too (AllowQuestion is unconditional in Durable.StartTurn), and the
+		// section states its own scope — the case title, description and field
+		// values it produces are stored records and are excluded from it.
+		SlackFormat: slackfmt.Section(),
 	}
 
 	if c != nil {
-		b.WriteString("# Current case\n")
-		fmt.Fprintf(&b, "- Title: %s\n", orPlaceholder(c.Title))
-		fmt.Fprintf(&b, "- Description: %s\n", orPlaceholder(c.Description))
-		// Always rendered, including when empty: the agent has no tool to read the
-		// case back, so an omitted line would leave it unable to tell "no
-		// assignees" from "not shown" before calling case__assign / case__unassign.
-		fmt.Fprintf(&b, "- Assignees (Slack user IDs): %s\n", orPlaceholder(strings.Join(c.AssigneeIDs, ", ")))
-		if c.BoardStatus != "" {
-			fmt.Fprintf(&b, "- Current status: %s\n", c.BoardStatus)
+		pc := &systemPromptCase{
+			Title:       orPlaceholder(c.Title),
+			Description: orPlaceholder(c.Description),
+			Assignees:   orPlaceholder(strings.Join(c.AssigneeIDs, ", ")),
+			BoardStatus: c.BoardStatus,
 		}
-		if len(c.FieldValues) > 0 {
-			b.WriteString("- Existing field values:\n")
-			for id, fv := range c.FieldValues {
-				fmt.Fprintf(&b, "  - %s: %v\n", id, fv.Value)
-			}
+		for _, id := range slices.Sorted(maps.Keys(c.FieldValues)) {
+			pc.FieldValues = append(pc.FieldValues, systemPromptFieldValue{ID: id, Value: c.FieldValues[id].Value})
 		}
-		b.WriteString("\n")
+		in.Case = pc
 	}
 
-	if ws != nil && ws.FieldSchema != nil && len(ws.FieldSchema.Fields) > 0 {
-		b.WriteString("# Custom field schema (for materialize / create)\n")
+	if ws != nil && ws.FieldSchema != nil {
 		for _, f := range ws.FieldSchema.Fields {
-			fmt.Fprintf(&b, "- %s (id=%s, type=%s)", f.Name, f.ID, f.Type)
-			if f.Required {
-				b.WriteString(" (required)")
+			opts := make([]string, 0, len(f.Options))
+			for _, o := range f.Options {
+				opts = append(opts, o.ID)
 			}
-			if f.Description != "" {
-				fmt.Fprintf(&b, " description=%q", f.Description)
-			}
-			if len(f.Options) > 0 {
-				opts := make([]string, 0, len(f.Options))
-				for _, o := range f.Options {
-					opts = append(opts, o.ID)
-				}
-				fmt.Fprintf(&b, " options=[%s]", strings.Join(opts, ", "))
-			}
-			// Date fields are persisted as RFC3339 strings; the validator rejects
-			// a bare date like "2026-07-14". Spell the exact format out so the
-			// planner emits a valid value on the first attempt.
-			if f.Type == types.FieldTypeDate {
-				b.WriteString(" format=RFC3339 (e.g. 2026-07-14T00:00:00Z)")
-			}
-			// The validator rejects a value that does not fit the semantic, so
-			// the planner is told the expected shape up front.
-			if hint := semantic.PromptHint(f.Semantic); hint != "" {
-				fmt.Fprintf(&b, " semantic=%s (%s)", f.Semantic, hint)
-			}
-			b.WriteString("\n")
+			in.Fields = append(in.Fields, systemPromptField{
+				Name:         f.Name,
+				ID:           f.ID,
+				Type:         string(f.Type),
+				Required:     f.Required,
+				Description:  f.Description,
+				Options:      strings.Join(opts, ", "),
+				IsDate:       f.Type == types.FieldTypeDate,
+				Semantic:     string(f.Semantic),
+				SemanticHint: semantic.PromptHint(f.Semantic),
+			})
 		}
-		b.WriteString("\n")
 	}
 
 	if ws != nil && ws.CaseStatusSet != nil {
-		closed := ws.CaseStatusSet.ClosedIDs()
-		if len(closed) > 0 {
-			fmt.Fprintf(&b, "# Closed status ids (for close): %s\n\n", strings.Join(closed, ", "))
+		in.ClosedStatusIDs = strings.Join(ws.CaseStatusSet.ClosedIDs(), ", ")
+	}
+
+	if mode == ModeCreate {
+		// Workspace-specific instructions from TOML [case.prompts].create.
+		if ws != nil && strings.TrimSpace(ws.CaseCreatePrompt) != "" {
+			in.CreatePrompt = ws.CaseCreatePrompt
+		}
+		// Host-supplied trigger context (e.g. reaction-initiated creation):
+		// per-turn, not per-workspace, and only meaningful while initializing.
+		if strings.TrimSpace(createInstruction) != "" {
+			in.TriggerContext = createInstruction
 		}
 	}
 
-	// How to write anything that goes to Slack. Placed before the operator-supplied
-	// sections below so the operator's text stays the last word, as it is for every
-	// other host. It is rendered in every mode, not just ModeMention: a create or
-	// materialize turn asks the user questions through Slack too (AllowQuestion is
-	// unconditional in Durable.StartTurn), and the section states its own scope —
-	// the case title, description and field values it produces are stored records
-	// and are explicitly excluded from it.
-	b.WriteString(slackfmt.Section())
-	b.WriteString("\n\n")
-
-	// Workspace-specific instructions configured via TOML [case.prompts].create.
-	// Applies to the ModeCreate flow (case initialization).
-	if mode == ModeCreate && ws != nil && strings.TrimSpace(ws.CaseCreatePrompt) != "" {
-		b.WriteString("# Workspace-specific instructions\n")
-		b.WriteString(ws.CaseCreatePrompt)
-		b.WriteString("\n")
+	var b strings.Builder
+	if err := systemPromptTemplate.Execute(&b, in); err != nil {
+		return "", goerr.Wrap(err, "failed to render thread-case system prompt",
+			goerr.V("mode", in.Mode))
 	}
-
-	// Host-supplied trigger context (e.g. reaction-initiated creation). Kept
-	// separate from the workspace prompt: it is per-turn, not per-workspace, and
-	// only meaningful while initializing a case.
-	if mode == ModeCreate && strings.TrimSpace(createInstruction) != "" {
-		b.WriteString("# Trigger context\n")
-		b.WriteString(createInstruction)
-		b.WriteString("\n")
-	}
-
-	return b.String()
+	return b.String(), nil
 }
 
 // buildUserInput assembles the first user message handed to the planner. The
@@ -153,23 +207,17 @@ func buildSystemPrompt(c *model.Case, ws *model.WorkspaceEntry, mode Mode, creat
 // (Durable.inheritOpts → agentkit.WithInheritedHistory) and the system prompt is
 // not part of that history. See agent.PlannerMessage.
 func buildUserInput(now time.Time, systemMessages, deltaMessages []ConversationMessage, mention ConversationMessage) (string, error) {
+	in := userInputTemplateInput{
+		HasSystemMessages: len(systemMessages) > 0,
+		SystemMessages:    toUserInputMessages(systemMessages, mention.Timestamp),
+		HasDeltaMessages:  len(deltaMessages) > 0,
+		DeltaMessages:     toUserInputMessages(deltaMessages, mention.Timestamp),
+		MentionText:       mention.Text,
+		MentionSpeaker:    speakerLabel(mention),
+	}
 	var b strings.Builder
-	if len(systemMessages) > 0 {
-		b.WriteString("# Thread so far\n")
-		writeMessages(&b, systemMessages, mention.Timestamp)
-		b.WriteString("\n")
-	}
-	if len(deltaMessages) > 0 {
-		b.WriteString("# New messages since last mention\n")
-		writeMessages(&b, deltaMessages, mention.Timestamp)
-		b.WriteString("\n")
-	}
-	if mention.Text != "" {
-		b.WriteString("# Current mention\n")
-		if speaker := speakerLabel(mention); speaker != "" {
-			fmt.Fprintf(&b, "From: %s\n", speaker)
-		}
-		b.WriteString(mention.Text)
+	if err := userInputTemplate.Execute(&b, in); err != nil {
+		return "", goerr.Wrap(err, "failed to render thread-case user input")
 	}
 	body := b.String()
 	if body == "" {
@@ -182,13 +230,17 @@ func buildUserInput(now time.Time, systemMessages, deltaMessages []ConversationM
 	return agent.PlannerMessage{Now: now, Body: body}.Render()
 }
 
-func writeMessages(b *strings.Builder, msgs []ConversationMessage, skipTS string) {
+// toUserInputMessages drops the current mention (it is rendered on its own)
+// and resolves each author label.
+func toUserInputMessages(msgs []ConversationMessage, skipTS string) []userInputMessage {
+	out := make([]userInputMessage, 0, len(msgs))
 	for _, m := range msgs {
 		if skipTS != "" && m.Timestamp == skipTS {
 			continue
 		}
-		fmt.Fprintf(b, "[%s] %s: %s\n", m.Timestamp, speakerLabel(m), m.Text)
+		out = append(out, userInputMessage{Timestamp: m.Timestamp, Speaker: speakerLabel(m), Text: m.Text})
 	}
+	return out
 }
 
 // speakerLabel renders a message author as "Display Name (U123)", degrading to

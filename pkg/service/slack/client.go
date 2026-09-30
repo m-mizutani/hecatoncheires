@@ -13,6 +13,7 @@ import (
 	"github.com/slack-go/slack"
 
 	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
+	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
 	"github.com/secmon-lab/hecatoncheires/pkg/utils/uierr"
 )
 
@@ -134,6 +135,21 @@ func (c *client) ListJoinedChannels(ctx context.Context, teamID string) ([]Chann
 	return channels, nil
 }
 
+// channelUnavailableErrors are the conversations.info errors that mean the
+// channel does not exist for this bot (deleted, or private without the bot).
+var channelUnavailableErrors = map[string]bool{
+	"channel_not_found": true,
+	"not_in_channel":    true,
+}
+
+func isChannelUnavailable(err error) bool {
+	var resp slack.SlackErrorResponse
+	if errors.As(err, &resp) {
+		return channelUnavailableErrors[resp.Err]
+	}
+	return false
+}
+
 // GetChannelNames retrieves channel names for the given IDs with caching
 func (c *client) GetChannelNames(ctx context.Context, ids []string) (map[string]string, error) {
 	result := make(map[string]string)
@@ -168,8 +184,14 @@ func (c *client) GetChannelNames(ctx context.Context, ids []string) (map[string]
 				ChannelID: id,
 			})
 			if err != nil {
-				// If we can't get the channel info, skip it
-				// The caller will use the fallback name
+				// A name is supplementary: the ID is left out of the result
+				// and the caller falls back to the ID. A channel the bot
+				// cannot see is an expected outcome; any other failure is
+				// reported so an outage is not mistaken for "no name".
+				if !isChannelUnavailable(err) {
+					errutil.Handle(ctx, goerr.Wrap(err, "failed to get Slack channel info",
+						goerr.V("channel_id", id)), "failed to resolve Slack channel name")
+				}
 				continue
 			}
 

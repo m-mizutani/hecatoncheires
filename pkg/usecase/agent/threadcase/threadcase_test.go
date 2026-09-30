@@ -85,6 +85,68 @@ func TestBuildSystemPrompt_ThreadContext(t *testing.T) {
 	gt.String(t, prompt).Contains("CANNOT create or manage Actions")
 }
 
+// TestBuildSystemPrompt_TemplateRendersEverySection drives every action of
+// prompts/system.md with a fully populated input and pins the rendered
+// blocks, so a template edit that drops or reshapes a section fails here.
+func TestBuildSystemPrompt_TemplateRendersEverySection(t *testing.T) {
+	ws := newThreadWorkspace()
+	ws.FieldSchema = &config.FieldSchema{Fields: []config.FieldDefinition{
+		{ID: "severity", Name: "Severity", Type: types.FieldTypeSelect, Required: true, Description: `pick "one"`, Options: []config.FieldOption{{ID: "high"}, {ID: "low"}}},
+		{ID: "due", Name: "Due", Type: types.FieldTypeDate},
+	}}
+	ws.CaseCreatePrompt = "Operator create prompt"
+	c := newThreadCase()
+	c.Description = "desc"
+	c.AssigneeIDs = []string{"U1", "U2"}
+	c.FieldValues = map[string]model.FieldValue{
+		"zeta":     {FieldID: "zeta", Value: "z"},
+		"severity": {FieldID: "severity", Value: "high"},
+	}
+
+	prompt := threadcase.BuildSystemPromptForTest(c, ws, threadcase.ModeCreate, "reaction trigger")
+
+	gt.String(t, prompt).Contains("You are an investigation agent operating inside a Slack thread that represents a single case.\nA message was posted in a monitored channel, but NO case exists yet.")
+	gt.String(t, prompt).Contains("Sub-agent tools are read-only.\n\n# Current case\n")
+	// Field values are listed in id order.
+	gt.String(t, prompt).Contains("# Current case\n- Title: Initial title\n- Description: desc\n- Assignees (Slack user IDs): U1, U2\n- Current status: TRIAGE\n- Existing field values:\n  - severity: high\n  - zeta: z\n\n")
+	gt.String(t, prompt).Contains("# Custom field schema (for materialize / create)\n" +
+		"- Severity (id=severity, type=select) (required) description=\"pick \\\"one\\\"\" options=[high, low]\n" +
+		"- Due (id=due, type=date) format=RFC3339 (e.g. 2026-07-14T00:00:00Z)\n\n")
+	gt.String(t, prompt).Contains("# Closed status ids (for close): DONE\n\n" + slackfmt.Section() + "\n\n")
+	gt.Bool(t, strings.HasSuffix(prompt, "# Workspace-specific instructions\nOperator create prompt\n# Trigger context\nreaction trigger\n")).True()
+}
+
+// With no case, no workspace and a mention turn, only the fixed sections are
+// rendered — no empty headings.
+func TestBuildSystemPrompt_TemplateOmitsEmptySections(t *testing.T) {
+	prompt := threadcase.BuildSystemPromptForTest(nil, nil, threadcase.ModeMention, "ignored outside create")
+	for _, heading := range []string{"# Current case", "# Custom field schema", "# Closed status ids", "# Workspace-specific instructions", "# Trigger context"} {
+		gt.Bool(t, strings.Contains(prompt, heading)).False()
+	}
+	gt.String(t, prompt).Contains("A user mentioned you in this case thread.")
+	gt.Bool(t, strings.HasSuffix(prompt, "never both.\n\n"+slackfmt.Section()+"\n\n")).True()
+}
+
+func TestBuildUserInput_TemplateRendersEverySection(t *testing.T) {
+	now := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+	sys := []threadcase.ConversationMessage{
+		{Timestamp: "1.1", UserID: "U1", UserName: "alice", Text: "hi"},
+		{Timestamp: "1.2", UserID: "U2", Text: "the mention itself"},
+	}
+	delta := []threadcase.ConversationMessage{{Timestamp: "1.3", UserName: "bob", Text: "yo"}}
+	mention := threadcase.ConversationMessage{Timestamp: "1.2", UserID: "U2", UserName: "carol", Text: "please assign me"}
+
+	got, err := threadcase.BuildUserInputForTest(now, sys, delta, mention)
+	gt.NoError(t, err).Required()
+	// The mention is skipped from the thread listing and rendered last.
+	gt.String(t, got).Contains("# Thread so far\n[1.1] alice (U1): hi\n\n# New messages since last mention\n[1.3] bob: yo\n\n# Current mention\nFrom: carol (U2)\nplease assign me")
+	gt.Bool(t, strings.Contains(got, "the mention itself")).False()
+
+	empty, err := threadcase.BuildUserInputForTest(now, nil, nil, threadcase.ConversationMessage{})
+	gt.NoError(t, err).Required()
+	gt.String(t, empty).Contains("Investigate this case and decide the next action.")
+}
+
 func TestBuildSystemPrompt_FieldSemantic(t *testing.T) {
 	ws := newThreadWorkspace()
 	ws.FieldSchema = &config.FieldSchema{Fields: []config.FieldDefinition{

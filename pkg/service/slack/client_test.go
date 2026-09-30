@@ -1,10 +1,12 @@
 package slack_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,6 +19,7 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 	"github.com/secmon-lab/hecatoncheires/pkg/service/slack"
+	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
 	goslack "github.com/slack-go/slack"
 )
 
@@ -271,6 +274,41 @@ func (f *inviteFake) handler() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "channel": map[string]any{"id": "C1"}})
 	}
+}
+
+// A channel the bot cannot see is an expected "no name"; any other failure
+// must be reported, not silently dropped.
+func TestGetChannelNames_ReportsFailuresOtherThanUnavailableChannels(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/conversations.info", func(w http.ResponseWriter, r *http.Request) {
+		gt.NoError(t, r.ParseForm()).Required()
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Form.Get("channel") {
+		case "C1":
+			_, _ = w.Write([]byte(`{"ok":true,"channel":{"id":"C1","name":"general"}}`))
+		case "C2":
+			_, _ = w.Write([]byte(`{"ok":false,"error":"channel_not_found"}`))
+		default:
+			_, _ = w.Write([]byte(`{"ok":false,"error":"internal_error"}`))
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	svc, err := slack.NewWithAPIURLForTest("xoxb-test", srv.URL+"/")
+	gt.NoError(t, err).Required()
+
+	var logs bytes.Buffer
+	ctx := logging.With(context.Background(), slog.New(slog.NewJSONHandler(&logs, nil)))
+
+	names, err := svc.GetChannelNames(ctx, []string{"C1", "C2", "C3"})
+	gt.NoError(t, err).Required()
+	gt.Equal(t, names, map[string]string{"C1": "general"})
+
+	out := logs.String()
+	gt.Number(t, strings.Count(out, "failed to resolve Slack channel name")).Equal(1)
+	gt.String(t, out).Contains("C3")
+	gt.Bool(t, strings.Contains(out, `"C2"`)).False()
 }
 
 func TestInviteUsersToChannel_BadUserDoesNotBlockValidUsers(t *testing.T) {
