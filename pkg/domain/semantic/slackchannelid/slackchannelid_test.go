@@ -15,14 +15,14 @@ import (
 func TestValidate(t *testing.T) {
 	s := slackchannelid.New()
 
-	for _, v := range []string{"C0123ABCD", "C1"} {
+	for _, v := range []string{"C0123ABCD", "C1", "G0123ABCD"} {
 		t.Run("accepts "+v, func(t *testing.T) {
 			gt.NoError(t, s.Validate(v))
 		})
 	}
 
 	for _, v := range []string{
-		"G0123ABCD", "D0123", "c0123abcd", "C", "#general",
+		"D0123", "U0123ABCD", "c0123abcd", "g0123abcd", "C", "G", "#general",
 		"<#C0123ABCD>", " C0123ABCD", "C0123-ABC",
 	} {
 		t.Run("rejects "+v, func(t *testing.T) {

@@ -11,9 +11,13 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 )
 
-// The length of a channel ID is not documented by Slack, so only the prefix
-// and the character set are checked.
-var pattern = regexp.MustCompile(`^C[A-Z0-9]+$`)
+// Slack documents three conversation ID prefixes: C (public channels and
+// private channels created since March 2021), G (older private channels and
+// multi-person DMs) and D (direct messages). C and G are accepted; D is not a
+// channel. The length is not documented, so only the prefix and the character
+// set are checked.
+// https://docs.slack.dev/apis/web-api/using-the-conversations-api/
+var pattern = regexp.MustCompile(`^[CG][A-Z0-9]+$`)
 
 type slackChannelID struct{}
 
@@ -25,7 +29,7 @@ func (slackChannelID) ID() types.Semantic { return types.SemanticSlackChannelID 
 func (slackChannelID) Validate(value string) error {
 	if !pattern.MatchString(value) {
 		return goerr.Wrap(definition.ErrInvalidValue,
-			`Slack channel ID must be "C" followed by uppercase letters and digits (e.g. C0123456789), not a channel name or a <#...> link`,
+			`Slack channel ID must be "C" or "G" followed by uppercase letters and digits (e.g. C0123456789), not a channel name, a <#...> link or a direct message ID ("D...")`,
 			goerr.V("semantic", types.SemanticSlackChannelID),
 			goerr.V("value", value))
 	}
@@ -33,7 +37,7 @@ func (slackChannelID) Validate(value string) error {
 }
 
 func (slackChannelID) PromptHint() string {
-	return `Slack channel ID: "C" followed by uppercase letters and digits (e.g. C0123456789). ` +
+	return `Slack channel ID: "C" or "G" followed by uppercase letters and digits (e.g. C0123456789). ` +
 		`Write the ID itself, not a channel name ("#general") and not a mention ("<#C0123456789>").`
 }
 
