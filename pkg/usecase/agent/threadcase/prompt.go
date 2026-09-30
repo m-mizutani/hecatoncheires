@@ -215,19 +215,16 @@ func buildUserInput(now time.Time, systemMessages, deltaMessages []ConversationM
 		MentionText:       mention.Text,
 		MentionSpeaker:    speakerLabel(mention),
 	}
+	// The template falls back to a standing instruction when there is nothing
+	// else to send: planexec rejects an empty user input at Validate, and a
+	// materialize turn may have no mention text. The fallback lives in the
+	// body rather than relying on the time section, so the time cannot stand
+	// in for the instruction that belongs here.
 	var b strings.Builder
 	if err := userInputTemplate.Execute(&b, in); err != nil {
 		return "", goerr.Wrap(err, "failed to render thread-case user input")
 	}
-	body := b.String()
-	if body == "" {
-		// Defensive: never hand the planner an empty user input (planexec
-		// rejects it at Validate). Materialize turns may have no mention text.
-		// Checked on the body rather than on the assembled message, so the time
-		// section cannot stand in for the instruction that belongs here.
-		body = "Investigate this case and decide the next action."
-	}
-	return agent.PlannerMessage{Now: now, Body: body}.Render()
+	return agent.PlannerMessage{Now: now, Body: b.String()}.Render()
 }
 
 // toUserInputMessages drops the current mention (it is rendered on its own)

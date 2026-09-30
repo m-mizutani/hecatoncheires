@@ -288,6 +288,8 @@ func TestGetChannelNames_ReportsFailuresOtherThanUnavailableChannels(t *testing.
 			_, _ = w.Write([]byte(`{"ok":true,"channel":{"id":"C1","name":"general"}}`))
 		case "C2":
 			_, _ = w.Write([]byte(`{"ok":false,"error":"channel_not_found"}`))
+		case "C4":
+			_, _ = w.Write([]byte(`{"ok":false,"error":"not_in_channel"}`))
 		default:
 			_, _ = w.Write([]byte(`{"ok":false,"error":"internal_error"}`))
 		}
@@ -301,14 +303,17 @@ func TestGetChannelNames_ReportsFailuresOtherThanUnavailableChannels(t *testing.
 	var logs bytes.Buffer
 	ctx := logging.With(context.Background(), slog.New(slog.NewJSONHandler(&logs, nil)))
 
-	names, err := svc.GetChannelNames(ctx, []string{"C1", "C2", "C3"})
+	names, err := svc.GetChannelNames(ctx, []string{"C1", "C2", "C3", "C4"})
 	gt.NoError(t, err).Required()
 	gt.Equal(t, names, map[string]string{"C1": "general"})
 
+	// Only the unexpected failure (C3) is reported; channel_not_found (C2)
+	// and not_in_channel (C4) are expected outcomes.
 	out := logs.String()
 	gt.Number(t, strings.Count(out, "failed to resolve Slack channel name")).Equal(1)
-	gt.String(t, out).Contains("C3")
+	gt.String(t, out).Contains(`"C3"`)
 	gt.Bool(t, strings.Contains(out, `"C2"`)).False()
+	gt.Bool(t, strings.Contains(out, `"C4"`)).False()
 }
 
 func TestInviteUsersToChannel_BadUserDoesNotBlockValidUsers(t *testing.T) {

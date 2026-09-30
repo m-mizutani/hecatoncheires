@@ -13,3 +13,6 @@
 {{ if .MentionSpeaker }}From: {{ .MentionSpeaker }}
 {{ end }}{{ .MentionText }}
 {{- end -}}
+{{ if not (or .HasSystemMessages .HasDeltaMessages .MentionText) -}}
+Investigate this case and decide the next action.
+{{- end -}}
