@@ -86,9 +86,9 @@ func (h *mcpHandler) runListWorkspaces(_ context.Context, _ listWorkspacesInput)
 		if e.FieldSchema != nil {
 			for _, f := range e.FieldSchema.Fields {
 				wd.FieldSchema = append(wd.FieldSchema, fieldDef{
-					ID:       f.ID,
-					Name:     f.Name,
-					Type:     string(f.Type),
+					ID:           f.ID,
+					Name:         f.Name,
+					Type:         string(f.Type),
 					Semantic:     string(f.Semantic),
 					SemanticHint: semantic.PromptHint(f.Semantic),
 				})
