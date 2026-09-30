@@ -9,6 +9,7 @@ import (
 	"github.com/m-mizutani/gt"
 	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	domainConfig "github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 )
 
@@ -2033,6 +2034,89 @@ type = "text"
 
 // TestFieldDefinition_Validate_CaseRef tests the per-field validation
 // rules introduced with the case_ref / multi_case_ref types.
+func TestFieldDefinition_Validate_Semantic(t *testing.T) {
+	load := func(t *testing.T, content string) (*domainConfig.FieldSchema, error) {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "ws.toml")
+		gt.NoError(t, os.WriteFile(path, []byte(content), 0644)).Required()
+		return config.LoadFieldSchema(path)
+	}
+
+	t.Run("text with slack_channel_id is accepted and reaches the domain schema", func(t *testing.T) {
+		schema, err := load(t, `
+[[fields]]
+id = "channel"
+name = "Channel"
+type = "text"
+semantic = "slack_channel_id"
+`)
+		gt.NoError(t, err).Required()
+		gt.Array(t, schema.Fields).Length(1).Required()
+		gt.Value(t, schema.Fields[0].Semantic).Equal(types.SemanticSlackChannelID)
+	})
+
+	t.Run("text without semantic keeps an empty semantic", func(t *testing.T) {
+		schema, err := load(t, `
+[[fields]]
+id = "note"
+name = "Note"
+type = "text"
+`)
+		gt.NoError(t, err).Required()
+		gt.Value(t, schema.Fields[0].Semantic).Equal(types.Semantic(""))
+	})
+
+	t.Run("semantic on a non-text field is rejected", func(t *testing.T) {
+		_, err := load(t, `
+[[fields]]
+id = "body"
+name = "Body"
+type = "markdown"
+semantic = "slack_channel_id"
+`)
+		gt.Error(t, err).Is(config.ErrUnexpectedSemantic)
+	})
+
+	t.Run("unknown semantic is rejected", func(t *testing.T) {
+		_, err := load(t, `
+[[fields]]
+id = "channel"
+name = "Channel"
+type = "text"
+semantic = "nope"
+`)
+		gt.Error(t, err).Is(config.ErrUnknownSemantic)
+	})
+}
+
+// TestLoadWorkspaceConfigs_SemanticInMemo verifies memo fields accept a
+// semantic the same way case fields do.
+func TestLoadWorkspaceConfigs_SemanticInMemo(t *testing.T) {
+	content := `
+[workspace]
+id = "risk"
+name = "Risk"
+
+[memo]
+description = "Memo"
+
+[[memo.fields]]
+id = "channel"
+name = "Channel"
+type = "text"
+semantic = "slack_channel_id"
+`
+	configPath := filepath.Join(t.TempDir(), "risk.toml")
+	gt.NoError(t, os.WriteFile(configPath, []byte(content), 0644)).Required()
+
+	cfgs, err := config.LoadWorkspaceConfigs([]string{configPath})
+	gt.NoError(t, err).Required()
+	gt.Array(t, cfgs).Length(1).Required()
+	fields := cfgs[0].MemoConfig.FieldSchema.Fields
+	gt.Array(t, fields).Length(1).Required()
+	gt.Value(t, fields[0].Semantic).Equal(types.SemanticSlackChannelID)
+}
+
 func TestFieldDefinition_Validate_CaseRef(t *testing.T) {
 	t.Run("case_ref without reference_workspace is rejected", func(t *testing.T) {
 		content := `

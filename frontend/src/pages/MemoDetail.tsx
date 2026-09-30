@@ -4,6 +4,7 @@ import { useQuery, useMutation } from '@apollo/client'
 
 import Button from '../components/Button'
 import FieldDisplay from '../components/fields/FieldDisplay'
+import type { FieldValueDisplay } from '../components/fields/FieldValueSupplement'
 import MemoFormModal from '../components/memo/MemoFormModal'
 import MemoArchiveDialog from '../components/memo/MemoArchiveDialog'
 import { normalizeMemoFields } from '../components/memo/memoFields'
@@ -19,6 +20,7 @@ import {
 interface MemoFieldValue {
   fieldId: string
   value: unknown
+  display?: FieldValueDisplay | null
 }
 
 interface MemoData {
@@ -333,6 +335,7 @@ export default function MemoDetail() {
                 <FieldDisplay
                   field={{ ...f, options: f.options ?? undefined }}
                   value={fv?.value}
+                  display={fv?.display}
                 />
               </div>
             )

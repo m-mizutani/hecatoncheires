@@ -13,6 +13,7 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
 	slacksvc "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
@@ -728,6 +729,11 @@ func buildMaterializationErrorBlocks(targetWorkspaceName string) ([]goslack.Bloc
 // FieldValue for inclusion in a preview section block. All values are wrapped
 // in `code spans` for visual contrast against labels.
 func formatFieldValueForDisplay(fd config.FieldDefinition, fv model.FieldValue) string {
+	// Returned without the code span: Slack does not render a <#...> link
+	// inside backticks.
+	if s, ok := semantic.SlackMrkdwn(fd, fv.Value); ok {
+		return s
+	}
 	switch fd.Type {
 	case types.FieldTypeSelect:
 		if s, ok := fv.Value.(string); ok && s != "" {

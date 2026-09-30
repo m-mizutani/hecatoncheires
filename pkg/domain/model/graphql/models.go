@@ -6,6 +6,15 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 )
 
+// FieldValue is a custom GraphQL model so the Case / Memo fields resolvers can
+// hand the field definition's semantic to the display resolver. Semantic is
+// not exposed in the GraphQL schema.
+type FieldValue struct {
+	FieldID  string         `json:"fieldId"`
+	Value    any            `json:"value"`
+	Semantic types.Semantic `json:"-"`
+}
+
 // Case is a custom GraphQL model with WorkspaceID for argument-based propagation.
 // WorkspaceID is not exposed in the GraphQL schema; it is used internally
 // to pass workspace context to nested field resolvers (actions, knowledges, assignees).

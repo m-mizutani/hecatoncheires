@@ -73,3 +73,18 @@ func (t FieldType) IsCaseRef() bool {
 func (t FieldType) String() string {
 	return string(t)
 }
+
+// Semantic names how a text field's string value is interpreted: what the
+// string refers to. Validation, display and agent hints derive from it.
+// Empty means free text.
+type Semantic string
+
+const (
+	// SemanticSlackChannelID interprets the value as a Slack channel ID.
+	SemanticSlackChannelID Semantic = "slack_channel_id"
+)
+
+// String returns the string representation of the semantic
+func (s Semantic) String() string {
+	return string(s)
+}

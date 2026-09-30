@@ -7,6 +7,7 @@ import (
 
 	"github.com/secmon-lab/hecatoncheires/pkg/agent/slackfmt"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent"
 )
@@ -92,6 +93,11 @@ func buildSystemPrompt(c *model.Case, ws *model.WorkspaceEntry, mode Mode, creat
 			// planner emits a valid value on the first attempt.
 			if f.Type == types.FieldTypeDate {
 				b.WriteString(" format=RFC3339 (e.g. 2026-07-14T00:00:00Z)")
+			}
+			// The validator rejects a value that does not fit the semantic, so
+			// the planner is told the expected shape up front.
+			if hint := semantic.PromptHint(f.Semantic); hint != "" {
+				fmt.Fprintf(&b, " semantic=%s (%s)", f.Semantic, hint)
 			}
 			b.WriteString("\n")
 		}

@@ -140,6 +140,7 @@ description = "Overall severity assessment"
 | `required` | boolean | No | Whether the field is required (default: `false`) |
 | `description` | string | No | Help text shown in the UI |
 | `reference_workspace` | string | Case-reference only | Target workspace ID whose Cases this field references. **Required** for `case_ref` / `multi_case_ref`, and rejected for every other type. Must name a configured workspace (self-reference allowed) |
+| `semantic` | string | No | How a `text` value is interpreted (see [Text field semantics](#text-field-semantics)). Rejected for every other type and for an undefined semantic |
 
 ### Field ID Format
 
@@ -182,6 +183,9 @@ id = "description"
 name = "Description"
 type = "text"
 ```
+
+A `text` field may set `semantic` to say what its value refers to; see
+[Text field semantics](#text-field-semantics).
 
 ### `markdown`
 
@@ -343,6 +347,36 @@ reference_workspace = "incident-response"
 | `url` | URL input | No | No |
 | `case_ref` | Single Case reference in another workspace | No | **Yes** |
 | `multi_case_ref` | Multiple Case references in another workspace | No | **Yes** |
+
+### Text field semantics
+
+`semantic` tells Hecatoncheires what a `text` value refers to. The value is
+still stored and edited as plain text; the semantic adds validation on every
+write path and extra information wherever the value is shown. It is available
+for both Case fields (`[[fields]]`) and memo fields (`[[memo.fields]]`), and is
+rejected at config load on any other type or when the name is not defined.
+
+```toml
+[[fields]]
+id = "notify_channel"
+name = "Notification channel"
+type = "text"
+semantic = "slack_channel_id"
+```
+
+| Semantic | Accepted value | Web UI | Slack messages | Agent prompts |
+|----------|----------------|--------|----------------|---------------|
+| `slack_channel_id` | `C` followed by uppercase letters and digits (e.g. `C0123456789`). An empty value is accepted. A channel name (`#general`), a `<#C...>` mention, and IDs starting with `G` or `D` are rejected | The ID stays as the field value; a line under it shows the channel name linked to `https://slack.com/archives/<ID>`. When the name cannot be resolved (Slack not configured, a private channel the bot is not in, a deleted channel) the line shows only an **Open** link | Rendered as `<#ID>`, so Slack shows the channel name | The field is listed with `semantic=slack_channel_id` and a description of the expected value |
+
+The channel name is looked up with `conversations.info` — the same call the
+Case's own `slackChannelName` uses — so no additional Slack scope is needed.
+
+**Adding a semantic to an existing field.** Values stored before the semantic
+was set are left untouched and keep displaying as before. Writing a new value
+to the field is validated; updating other fields of the same Case is not
+blocked. Run `hecatoncheires validate --check-db` to list stored values that do
+not fit: they are reported as `field_value` with `expected` set to
+`text (slack_channel_id)`. Removing `semantic` restores the previous behaviour.
 
 ---
 

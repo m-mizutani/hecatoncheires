@@ -10,6 +10,7 @@ import (
 	"github.com/m-mizutani/gt"
 
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
 	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
 	"github.com/secmon-lab/hecatoncheires/pkg/utils/uierr"
@@ -47,6 +48,14 @@ func TestClassifyUserError(t *testing.T) {
 		gt.Value(t, got.Kind).Equal(uierr.KindValidation)
 		gt.Value(t, got.What).Equal(i18n.MsgUIErrFieldValidationWhat)
 		gt.Value(t, got.Cause).Equal("Priority, Due date")
+	})
+
+	t.Run("a value that breaks the field semantic is a validation error", func(t *testing.T) {
+		err := goerr.Wrap(semantic.ErrInvalidValue, "text value does not match the field semantic")
+		got, ok := usecase.ClassifyUserErrorForTest(err)
+		gt.Bool(t, ok).True()
+		gt.Value(t, got.Kind).Equal(uierr.KindValidation)
+		gt.Value(t, got.What).Equal(i18n.MsgUIErrFieldValidationWhat)
 	})
 
 	t.Run("no accessible workspace", func(t *testing.T) {

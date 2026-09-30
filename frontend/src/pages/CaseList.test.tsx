@@ -84,7 +84,11 @@ interface CaseRowMock {
   archivedAt: string | null
   createdAt: string
   updatedAt: string
-  fields: Array<{ fieldId: string; value: unknown }>
+  fields: Array<{
+    fieldId: string
+    value: unknown
+    display: { label: string | null; url: string | null } | null
+  }>
 }
 
 const caseRow = (id: number, title: string, status: 'OPEN' | 'CLOSED' | 'DRAFT'): CaseRowMock => ({
@@ -448,7 +452,7 @@ describe('CaseList row links', () => {
     )
     const fields = [{ id: 'doc', name: 'Doc', type: 'URL', options: null }]
     const rows = [
-      { ...caseRow(14, 'With Doc', 'OPEN'), fields: [{ fieldId: 'doc', value: 'https://example.com/x' }] },
+      { ...caseRow(14, 'With Doc', 'OPEN'), fields: [{ fieldId: 'doc', value: 'https://example.com/x', display: null }] },
     ]
     renderAt('/ws/risk/cases', rows, fields)
     await waitFor(() => {
@@ -457,6 +461,35 @@ describe('CaseList row links', () => {
     const cell = cellUnderHeader(14, 'Doc')
     expect(rowLinkIn(cell, 14)).toBeNull()
     expect(cell.querySelector('a[href="https://example.com/x"]')).not.toBeNull()
+  })
+
+  it('shows a text value with its supplementary link and keeps the row link on the cell', async () => {
+    localStorage.setItem(
+      'caseListColumns:risk',
+      JSON.stringify(['status', 'assignees', 'reporter', 'created', 'slack', 'field:channel']),
+    )
+    const fields = [{ id: 'channel', name: 'Channel', type: 'TEXT', options: null }]
+    const url = 'https://slack.com/archives/C0123ABCD'
+    const rows = [
+      {
+        ...caseRow(15, 'With Channel', 'OPEN'),
+        fields: [{ fieldId: 'channel', value: 'C0123ABCD', display: { label: '#general', url } }],
+      },
+    ]
+    renderAt('/ws/risk/cases', rows, fields)
+    await waitFor(() => {
+      expect(screen.getByTestId('case-row-link-15')).toBeInTheDocument()
+    })
+    const cell = cellUnderHeader(15, 'Channel')
+    expect(cell).toHaveTextContent('C0123ABCD')
+    const link = cell.querySelector(`a[href="${url}"]`)
+    expect(link).not.toBeNull()
+    expect(link).toHaveTextContent('#general')
+    // The value part still opens the Case: the overlay row link is a sibling
+    // of the supplementary link, not its parent.
+    const rowLink = rowLinkIn(cell, 15)
+    expect(rowLink).not.toBeNull()
+    expect(rowLink?.contains(link)).toBe(false)
   })
 })
 

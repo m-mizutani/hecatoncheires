@@ -9,6 +9,7 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
 )
@@ -138,9 +139,13 @@ func welcomeFieldEntry(fv model.FieldValue, def config.FieldDefinition) map[stri
 		}
 	default:
 		raw := fv.Value
+		name := raw
+		if s, ok := semantic.SlackMrkdwn(def, raw); ok {
+			name = s
+		}
 		return map[string]any{
 			"id":   raw,
-			"name": raw,
+			"name": name,
 		}
 	}
 }

@@ -13,6 +13,7 @@ import InlineMultiCaseSelect from './InlineMultiCaseSelect'
 import InlineMarkdownField from './InlineMarkdownField'
 import { REFERENCEABLE_CASES, CASE_REFS_BY_IDS } from '../../graphql/caseRef'
 import type { CaseRefItem } from './InlineCaseSelect'
+import FieldValueSupplement, { type FieldValueDisplay } from '../fields/FieldValueSupplement'
 
 interface FieldOption {
   id: string
@@ -39,6 +40,8 @@ interface Props {
   testId?: string
   /** Hint that this TEXT field is multi-line. */
   longText?: boolean
+  /** Server-resolved supplementary info shown under the value (FieldValue.display). */
+  display?: FieldValueDisplay | null
 }
 
 interface CaseRefLoaderProps {
@@ -121,11 +124,24 @@ function CaseRefInlineLoader({ field, value, onSave, disabled, testId, multi }: 
   )
 }
 
-// Inline edit renderer for custom fields. Maps field.type → the appropriate
-// Inline* component; saves immediately (or via Save button for long text).
-export default function InlineCustomField({
+// Inline edit renderer for custom fields. The editor for field.type is left
+// exactly as it is; the supplementary line (what the value refers to) goes
+// directly under it, outside the editor so clicking it never starts an edit.
+export default function InlineCustomField({ display, ...rest }: Props) {
+  if (!display) return <InlineFieldEditor {...rest} />
+  return (
+    <div>
+      <InlineFieldEditor {...rest} />
+      <FieldValueSupplement display={display} testId={`${rest.testId ?? `field-${rest.field.id}`}-supplement`} />
+    </div>
+  )
+}
+
+// Maps field.type → the appropriate Inline* component; saves immediately
+// (or via Save button for long text).
+function InlineFieldEditor({
   field, value, users = [], disabled, onSave, testId, longText,
-}: Props) {
+}: Omit<Props, 'display'>) {
   const tid = testId ?? `field-${field.id}`
   const placeholder = '—'
   const ariaLabel = field.name

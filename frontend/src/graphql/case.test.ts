@@ -97,6 +97,8 @@ const MUTATION_PATHS = [
   'updatedAt',
   'fields.fieldId',
   'fields.value',
+  'fields.display.label',
+  'fields.display.url',
 ].sort()
 
 const LIST_PATHS = [...MUTATION_PATHS, 'slackThreadTS', 'isThreadBound', 'boardStatus'].sort()

@@ -171,6 +171,37 @@ func TestValidateDB_SelectInvalidOptionID(t *testing.T) {
 	gt.Value(t, result.Issues[0].Expected).Equal(string(types.FieldTypeSelect))
 }
 
+func TestValidateDB_TextSemanticViolation(t *testing.T) {
+	wsID := "ws-semantic"
+	schema := &config.FieldSchema{
+		Fields: []config.FieldDefinition{
+			{ID: "channel", Name: "Channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+		},
+		Labels: config.EntityLabels{Case: "Case"},
+	}
+	repo, uc := setupValidateTest(t, wsID, schema)
+	ctx := context.Background()
+
+	for _, v := range []string{"#general", "C0123ABCD", ""} {
+		_, err := repo.Case().Create(ctx, wsID, &model.Case{
+			ReporterID: "U-TEST-DEFAULT",
+			Title:      "Channel " + v,
+			FieldValues: map[string]model.FieldValue{
+				"channel": {FieldID: "channel", Type: types.FieldTypeText, Value: v},
+			},
+		})
+		gt.NoError(t, err).Required()
+	}
+
+	result, err := uc.ValidateDB(ctx)
+	gt.NoError(t, err).Required()
+	gt.Array(t, result.Issues).Length(1).Required()
+	gt.Value(t, result.Issues[0].Kind).Equal(usecase.IssueKindFieldValue)
+	gt.Value(t, result.Issues[0].FieldID).Equal("channel")
+	gt.Value(t, result.Issues[0].Actual).Equal("#general")
+	gt.Value(t, result.Issues[0].Expected).Equal("text (slack_channel_id)")
+}
+
 func TestValidateDB_SelectWrongType(t *testing.T) {
 	wsID := "ws-select-wrong-type"
 	repo, uc := setupValidateTest(t, wsID, buildValidateTestSchema())

@@ -718,6 +718,7 @@ export const en: Messages = {
   // Case reference field
   placeholderSelectCaseRef: 'Select a case...',
   caseRefUnavailable: 'Unavailable (#{id})',
+  fieldValueOpenLink: 'Open',
 
   // Home page
   sectionA: 'My Actions Due',

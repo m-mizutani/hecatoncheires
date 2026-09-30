@@ -5,3 +5,12 @@
 [workspace]
 id   = "extra01"
 name = "E2E Extra 01"
+
+# Also hosts the text-field semantic E2E (inline-edit.spec.ts). It lives here
+# rather than in config.test.toml so the main workspace's New Case modal does
+# not grow.
+[[fields]]
+id       = "notify_channel"
+name     = "Notify Channel"
+type     = "text"
+semantic = "slack_channel_id"

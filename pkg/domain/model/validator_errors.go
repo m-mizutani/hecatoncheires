@@ -33,4 +33,5 @@ const (
 	ActualTypeKey   = "actual_type"
 	OptionIDKey     = "option_id"
 	FieldValueKey   = "field_value"
+	SemanticKey     = "semantic"
 )

@@ -13,6 +13,7 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/authz"
 	domainConfig "github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
 	"github.com/urfave/cli/v3"
@@ -344,6 +345,7 @@ type FieldDefinition struct {
 	Description        string        `toml:"description"`
 	Options            []FieldOption `toml:"options"`
 	ReferenceWorkspace string        `toml:"reference_workspace"`
+	Semantic           string        `toml:"semantic"`
 }
 
 // Validate checks if the FieldDefinition is valid
@@ -420,6 +422,20 @@ func (f *FieldDefinition) Validate() error {
 		return goerr.Wrap(ErrUnexpectedReferenceWorkspace, "reference_workspace is only valid for case_ref fields",
 			goerr.V(FieldIDKey, f.ID),
 			goerr.V(FieldTypeKey, f.Type))
+	}
+
+	if f.Semantic != "" {
+		if fieldType != types.FieldTypeText {
+			return goerr.Wrap(ErrUnexpectedSemantic, "semantic is only valid for text fields",
+				goerr.V(FieldIDKey, f.ID),
+				goerr.V(FieldTypeKey, f.Type),
+				goerr.V(SemanticKey, f.Semantic))
+		}
+		if _, ok := semantic.Lookup(types.Semantic(f.Semantic)); !ok {
+			return goerr.Wrap(ErrUnknownSemantic, "semantic must be one of the defined semantics",
+				goerr.V(FieldIDKey, f.ID),
+				goerr.V(SemanticKey, f.Semantic))
+		}
 	}
 
 	return nil
@@ -1078,6 +1094,7 @@ func toDomainFields(in []FieldDefinition) []domainConfig.FieldDefinition {
 			Description:        field.Description,
 			Options:            options,
 			ReferenceWorkspace: field.ReferenceWorkspace,
+			Semantic:           types.Semantic(field.Semantic),
 		}
 	}
 	return fields

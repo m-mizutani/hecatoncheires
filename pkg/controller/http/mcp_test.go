@@ -16,6 +16,8 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/auth"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/authz"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
 	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
@@ -61,6 +63,10 @@ func newMCPTestEnv(t *testing.T, policy *fakePolicy) *mcpTestEnv {
 	registry.Register(&model.WorkspaceEntry{
 		Workspace:       model.Workspace{ID: testWorkspaceID, Name: "Test Workspace", Description: "for MCP tests"},
 		ActionStatusSet: model.DefaultActionStatusSet(),
+		FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+			{ID: "channel", Name: "Channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+			{ID: "note", Name: "Note", Type: types.FieldTypeText},
+		}},
 	})
 
 	caseUC := usecase.NewCaseUseCase(repo, registry, nil, nil, "")
@@ -146,6 +152,29 @@ func TestMCP_ListWorkspaces(t *testing.T) {
 	gt.Array(t, out.Workspaces).Length(1)
 	gt.Value(t, out.Workspaces[0].ID).Equal(testWorkspaceID)
 	gt.Value(t, out.Workspaces[0].Name).Equal("Test Workspace")
+}
+
+func TestMCP_ListWorkspaces_FieldSemantic(t *testing.T) {
+	env := newMCPTestEnv(t, allowAsMember())
+	res := env.callTool(t, "hecaton_list_workspaces", map[string]any{})
+	gt.Bool(t, res.IsError).False()
+
+	var out struct {
+		Workspaces []struct {
+			FieldSchema []map[string]any `json:"field_schema"`
+		} `json:"workspaces"`
+	}
+	decodeStructured(t, res, &out)
+	gt.Array(t, out.Workspaces).Length(1).Required()
+	fields := out.Workspaces[0].FieldSchema
+	gt.Array(t, fields).Length(2).Required()
+	gt.Value(t, fields[0]["id"]).Equal("channel")
+	gt.Value(t, fields[0]["semantic"]).Equal("slack_channel_id")
+	gt.Value(t, fields[0]["semantic_hint"]).Equal(semantic.PromptHint(types.SemanticSlackChannelID))
+	_, hasSemantic := fields[1]["semantic"]
+	gt.Bool(t, hasSemantic).False()
+	_, hasHint := fields[1]["semantic_hint"]
+	gt.Bool(t, hasHint).False()
 }
 
 func TestMCP_ListCases_ExcludesPrivate(t *testing.T) {

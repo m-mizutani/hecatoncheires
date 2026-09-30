@@ -6,8 +6,10 @@ import (
 
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
 	graphql1 "github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/slack"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 )
 
@@ -287,6 +289,49 @@ func toGraphQLFieldValues(fieldValues map[string]model.FieldValue) []*graphql1.F
 		})
 	}
 	return result
+}
+
+// withSemantics returns copies of fields with Semantic stamped from the
+// matching field definition, so the display resolver knows how to interpret
+// each value. A field no longer in defs keeps an empty Semantic.
+func withSemantics(fields []*graphql1.FieldValue, defs []config.FieldDefinition) []*graphql1.FieldValue {
+	semByID := make(map[string]types.Semantic, len(defs))
+	for _, d := range defs {
+		if d.Semantic != "" {
+			semByID[d.ID] = d.Semantic
+		}
+	}
+	out := make([]*graphql1.FieldValue, 0, len(fields))
+	for _, f := range fields {
+		if f == nil {
+			continue
+		}
+		c := *f
+		c.Semantic = semByID[f.FieldID]
+		out = append(out, &c)
+	}
+	return out
+}
+
+// toGraphQLFieldValueDisplay converts a resolved Display, mapping empty parts
+// to null. nil in, nil out.
+func toGraphQLFieldValueDisplay(d *definition.Display) *graphql1.FieldValueDisplay {
+	if d == nil {
+		return nil
+	}
+	out := &graphql1.FieldValueDisplay{}
+	if d.Label != "" {
+		label := d.Label
+		out.Label = &label
+	}
+	if d.URL != "" {
+		url := d.URL
+		out.URL = &url
+	}
+	if out.Label == nil && out.URL == nil {
+		return nil
+	}
+	return out
 }
 
 // toDomainFieldValues converts GraphQL FieldValueInput slice to domain FieldValues map

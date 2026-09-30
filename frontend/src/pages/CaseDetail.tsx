@@ -1012,6 +1012,7 @@ export default function CaseDetail() {
                       key={f.id}
                       field={f}
                       value={fv?.value}
+                      display={fv?.display}
                       users={slackUsers}
                       disabled={updating}
                       onSave={(v) => handleFieldChange(f.id, v)}

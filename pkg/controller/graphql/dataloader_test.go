@@ -2,6 +2,8 @@ package graphql_test
 
 import (
 	"context"
+	"errors"
+	"sort"
 	"sync/atomic"
 	"testing"
 
@@ -9,6 +11,10 @@ import (
 	graphqlctrl "github.com/secmon-lab/hecatoncheires/pkg/controller/graphql"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	gqlmodel "github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
 )
 
@@ -27,7 +33,7 @@ func TestSlackUser_NormalizesCompositeSubClaim(t *testing.T) {
 		{ID: "W04ENT", Name: "bob", RealName: "Bob"},
 	})).Required()
 
-	dl := graphqlctrl.NewDataLoaders(repo, nil)
+	dl := graphqlctrl.NewDataLoaders(repo, nil, nil)
 
 	users, errs := dl.SlackUser.LoadMany(ctx, []string{
 		"U01ABC-T02XYZ", // composite, user-first
@@ -57,7 +63,7 @@ func TestSlackUser_PreservesBareIDs(t *testing.T) {
 		{ID: "U01ABC", Name: "alice", RealName: "Alice"},
 	})).Required()
 
-	dl := graphqlctrl.NewDataLoaders(repo, nil)
+	dl := graphqlctrl.NewDataLoaders(repo, nil, nil)
 
 	user, err := dl.SlackUser.Load(ctx, "U01ABC")()
 	gt.NoError(t, err).Required()
@@ -80,7 +86,7 @@ func TestSlackUser_MissingIDReturnsNilData(t *testing.T) {
 		{ID: "U01ABC", Name: "alice", RealName: "Alice"},
 	})).Required()
 
-	dl := graphqlctrl.NewDataLoaders(repo, nil)
+	dl := graphqlctrl.NewDataLoaders(repo, nil, nil)
 
 	users, errs := dl.SlackUser.LoadMany(ctx, []string{"U01ABC", "UNOPE"})()
 	for _, e := range errs {
@@ -116,7 +122,7 @@ func TestSlackUser_BatchCollapse(t *testing.T) {
 	counter := &slackUserCallCounter{inner: repo.SlackUser()}
 	counted := &countingRepo{Repository: repo, slackUser: counter}
 
-	dl := graphqlctrl.NewDataLoaders(counted, nil)
+	dl := graphqlctrl.NewDataLoaders(counted, nil, nil)
 
 	// Enqueue 20 single-ID Load calls concurrently the same way gqlgen
 	// would when 20 case rows each resolve their reporter in parallel.
@@ -192,3 +198,103 @@ type countingRepo struct {
 }
 
 func (c *countingRepo) SlackUser() interfaces.SlackUserRepository { return c.slackUser }
+
+type fakeTextDisplayResolver struct {
+	calls   map[types.Semantic][][]string
+	results map[types.Semantic]map[string]definition.Display
+	errs    map[types.Semantic]error
+}
+
+func (f *fakeTextDisplayResolver) ResolveTextDisplays(_ context.Context, id types.Semantic, values []string) (map[string]definition.Display, error) {
+	if f.calls == nil {
+		f.calls = map[types.Semantic][][]string{}
+	}
+	f.calls[id] = append(f.calls[id], values)
+	if err := f.errs[id]; err != nil {
+		return nil, err
+	}
+	return f.results[id], nil
+}
+
+func TestTextDisplayLoader(t *testing.T) {
+	ctx := context.Background()
+	const other types.Semantic = "other_semantic"
+
+	t.Run("one call per semantic; a failure only fails its own keys", func(t *testing.T) {
+		cause := errors.New("lookup failed")
+		fake := &fakeTextDisplayResolver{
+			results: map[types.Semantic]map[string]definition.Display{
+				types.SemanticSlackChannelID: {"C1": {Label: "#one", URL: "https://slack.com/archives/C1"}},
+			},
+			errs: map[types.Semantic]error{other: cause},
+		}
+		dl := graphqlctrl.NewDataLoaders(memory.New(), nil, fake)
+
+		got, errs := graphqlctrl.LoadTextDisplaysForTest(ctx, dl, []graphqlctrl.TextDisplayKeyForTest{
+			{Semantic: types.SemanticSlackChannelID, Value: "C1"},
+			{Semantic: other, Value: "x"},
+			{Semantic: types.SemanticSlackChannelID, Value: "C2"},
+		})
+		gt.Array(t, got).Length(3).Required()
+		gt.Value(t, got[0]).NotNil().Required()
+		gt.Value(t, *got[0]).Equal(definition.Display{Label: "#one", URL: "https://slack.com/archives/C1"})
+		gt.Value(t, got[2]).Nil()
+		gt.Array(t, errs).Length(3).Required()
+		gt.NoError(t, errs[0])
+		gt.Error(t, errs[1]).Is(cause)
+		gt.NoError(t, errs[2])
+
+		// The loader does not keep key order within a batch.
+		slackCalls := fake.calls[types.SemanticSlackChannelID]
+		gt.Array(t, slackCalls).Length(1).Required()
+		sort.Strings(slackCalls[0])
+		gt.Equal(t, slackCalls[0], []string{"C1", "C2"})
+		gt.Equal(t, fake.calls[other], [][]string{{"x"}})
+	})
+
+	t.Run("without a resolver every key is nil", func(t *testing.T) {
+		dl := graphqlctrl.NewDataLoaders(memory.New(), nil, nil)
+		got, errs := graphqlctrl.LoadTextDisplaysForTest(ctx, dl, []graphqlctrl.TextDisplayKeyForTest{
+			{Semantic: types.SemanticSlackChannelID, Value: "C1"},
+		})
+		gt.Array(t, got).Length(1).Required()
+		gt.Value(t, got[0]).Nil()
+		for _, err := range errs {
+			gt.NoError(t, err)
+		}
+	})
+}
+
+func TestWithSemantics(t *testing.T) {
+	fields := []*gqlmodel.FieldValue{
+		{FieldID: "channel", Value: "C1"},
+		{FieldID: "note", Value: "x"},
+		{FieldID: "removed", Value: "y"},
+	}
+	defs := []config.FieldDefinition{
+		{ID: "channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+		{ID: "note", Type: types.FieldTypeText},
+	}
+	got := graphqlctrl.WithSemanticsForTest(fields, defs)
+	gt.Array(t, got).Length(3).Required()
+	gt.Value(t, got[0].Semantic).Equal(types.SemanticSlackChannelID)
+	gt.Value(t, got[1].Semantic).Equal(types.Semantic(""))
+	gt.Value(t, got[2].Semantic).Equal(types.Semantic(""))
+	// The input is not mutated: it may be shared with other resolvers.
+	gt.Value(t, fields[0].Semantic).Equal(types.Semantic(""))
+}
+
+func TestToGraphQLFieldValueDisplay(t *testing.T) {
+	gt.Value(t, graphqlctrl.ToGraphQLFieldValueDisplayForTest(nil)).Nil()
+	gt.Value(t, graphqlctrl.ToGraphQLFieldValueDisplayForTest(&definition.Display{})).Nil()
+
+	linkOnly := graphqlctrl.ToGraphQLFieldValueDisplayForTest(&definition.Display{URL: "https://slack.com/archives/C1"})
+	gt.Value(t, linkOnly).NotNil().Required()
+	gt.Value(t, linkOnly.Label).Nil()
+	gt.Value(t, *linkOnly.URL).Equal("https://slack.com/archives/C1")
+
+	both := graphqlctrl.ToGraphQLFieldValueDisplayForTest(&definition.Display{Label: "#one", URL: "u"})
+	gt.Value(t, both).NotNil().Required()
+	gt.Value(t, *both.Label).Equal("#one")
+	gt.Value(t, *both.URL).Equal("u")
+}

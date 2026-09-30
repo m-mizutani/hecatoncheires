@@ -34,6 +34,7 @@ type ResolverRoot interface {
 	ActionComment() ActionCommentResolver
 	ActionEvent() ActionEventResolver
 	Case() CaseResolver
+	FieldValue() FieldValueResolver
 	Memo() MemoResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
@@ -230,8 +231,14 @@ type ComplexityRoot struct {
 	}
 
 	FieldValue struct {
+		Display func(childComplexity int) int
 		FieldID func(childComplexity int) int
 		Value   func(childComplexity int) int
+	}
+
+	FieldValueDisplay struct {
+		Label func(childComplexity int) int
+		URL   func(childComplexity int) int
 	}
 
 	GitHubConfig struct {
@@ -672,6 +679,9 @@ type CaseResolver interface {
 	SlackMessages(ctx context.Context, obj *graphql1.Case, limit *int, cursor *string) (*graphql1.SlackMessageConnection, error)
 
 	AgentSources(ctx context.Context, obj *graphql1.Case) ([]*graphql1.Source, error)
+}
+type FieldValueResolver interface {
+	Display(ctx context.Context, obj *graphql1.FieldValue) (*graphql1.FieldValueDisplay, error)
 }
 type MemoResolver interface {
 	Case(ctx context.Context, obj *graphql1.Memo) (*graphql1.Case, error)
@@ -1620,6 +1630,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.FieldOption.Name(childComplexity), true
 
+	case "FieldValue.display":
+		if e.ComplexityRoot.FieldValue.Display == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FieldValue.Display(childComplexity), true
 	case "FieldValue.fieldId":
 		if e.ComplexityRoot.FieldValue.FieldID == nil {
 			break
@@ -1632,6 +1648,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.FieldValue.Value(childComplexity), true
+
+	case "FieldValueDisplay.label":
+		if e.ComplexityRoot.FieldValueDisplay.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FieldValueDisplay.Label(childComplexity), true
+	case "FieldValueDisplay.url":
+		if e.ComplexityRoot.FieldValueDisplay.URL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FieldValueDisplay.URL(childComplexity), true
 
 	case "GitHubConfig.repositories":
 		if e.ComplexityRoot.GitHubConfig.Repositories == nil {
@@ -4051,6 +4080,21 @@ type FieldValue {
   fieldId: String!
   # Value encoded as JSON. Clients parse based on field type from FieldConfiguration.
   value: Any!
+  # What the value refers to, resolved from the semantic the field definition
+  # sets. null when the field has no semantic, the value is empty or does not
+  # fit the semantic, or nothing was found. Clients show it alongside value,
+  # not instead of it.
+  display: FieldValueDisplay
+}
+
+# Supplementary information shown under a field value. At least one of label
+# and url is non-null.
+type FieldValueDisplay {
+  # e.g. "#general" for a slack_channel_id value. null when no label was resolved.
+  label: String
+  # Page the value refers to, e.g. "https://slack.com/archives/C0123ABCD".
+  # null when the semantic has no page to link to.
+  url: String
 }
 
 input FieldValueInput {
@@ -5622,8 +5666,20 @@ func (ec *executionContext) childFields_FieldValue(ctx context.Context, field gr
 		return ec.fieldContext_FieldValue_fieldId(ctx, field)
 	case "value":
 		return ec.fieldContext_FieldValue_value(ctx, field)
+	case "display":
+		return ec.fieldContext_FieldValue_display(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type FieldValue", field.Name)
+}
+
+func (ec *executionContext) childFields_FieldValueDisplay(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "label":
+		return ec.fieldContext_FieldValueDisplay_label(ctx, field)
+	case "url":
+		return ec.fieldContext_FieldValueDisplay_url(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type FieldValueDisplay", field.Name)
 }
 
 func (ec *executionContext) childFields_GitHubRepoValidationResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -11829,6 +11885,84 @@ func (ec *executionContext) _FieldValue_value(ctx context.Context, field graphql
 }
 func (ec *executionContext) fieldContext_FieldValue_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("FieldValue", field, false, false, errors.New("field of type Any does not have child fields"))
+}
+
+func (ec *executionContext) _FieldValue_display(ctx context.Context, field graphql.CollectedField, obj *graphql1.FieldValue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_FieldValue_display(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.FieldValue().Display(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *graphql1.FieldValueDisplay) graphql.Marshaler {
+			return ec.marshalOFieldValueDisplay2ᚖgithubᚗcomᚋsecmonᚑlabᚋhecatoncheiresᚋpkgᚋdomainᚋmodelᚋgraphqlᚐFieldValueDisplay(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_FieldValue_display(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FieldValue",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_FieldValueDisplay(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FieldValueDisplay_label(ctx context.Context, field graphql.CollectedField, obj *graphql1.FieldValueDisplay) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_FieldValueDisplay_label(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_FieldValueDisplay_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("FieldValueDisplay", field, false, false, errors.New("field of type String does not have child fields"))
+}
+
+func (ec *executionContext) _FieldValueDisplay_url(ctx context.Context, field graphql.CollectedField, obj *graphql1.FieldValueDisplay) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_FieldValueDisplay_url(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.URL, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_FieldValueDisplay_url(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("FieldValueDisplay", field, false, false, errors.New("field of type String does not have child fields"))
 }
 
 func (ec *executionContext) _GitHubConfig_repositories(ctx context.Context, field graphql.CollectedField, obj *graphql1.GitHubConfig) (ret graphql.Marshaler) {
@@ -25046,11 +25180,92 @@ func (ec *executionContext) _FieldValue(ctx context.Context, sel ast.SelectionSe
 		case "fieldId":
 			out.Values[i] = ec._FieldValue_fieldId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "value":
 			out.Values[i] = ec._FieldValue_value(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "display":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._FieldValue_display(ctx, field, obj)
+				if res == graphql.RequiredNull {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.IsDeferred() {
+				deferredFieldSet.AddField(field)
+				fieldIndex := len(deferredFieldSet.Values) - 1
+				deferredFieldSet.Concurrently(fieldIndex, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, deferredFieldSet)
+				})
+
+				for _, deferrable := range field.Deferrables {
+					view, ok := deferLabelToView[deferrable.Label]
+					if !ok {
+						view = deferredFieldSet.NewView()
+						deferLabelToView[deferrable.Label] = view
+					}
+					view.AddIndices(fieldIndex)
+				}
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(min(len(deferLabelToView), math.MaxInt32)))
+
+	ec.ProcessDeferredGroup(graphql.DeferredGroup{
+		Defers:   deferLabelToView,
+		Path:     graphql.GetPath(ctx),
+		FieldSet: deferredFieldSet,
+		Context:  ctx,
+	})
+
+	return out
+}
+
+var fieldValueDisplayImplementors = []string{"FieldValueDisplay"}
+
+func (ec *executionContext) _FieldValueDisplay(ctx context.Context, sel ast.SelectionSet, obj *graphql1.FieldValueDisplay) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, fieldValueDisplayImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferredFieldSet := graphql.NewFieldSet(nil)
+	deferLabelToView := make(map[string]*graphql.FieldSetView)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FieldValueDisplay")
+		case "label":
+			out.Values[i] = ec._FieldValueDisplay_label(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "url":
+			out.Values[i] = ec._FieldValueDisplay_url(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
 		default:
@@ -30963,6 +31178,13 @@ func (ec *executionContext) marshalOFieldOption2ᚕᚖgithubᚗcomᚋsecmonᚑla
 	}
 
 	return ret
+}
+
+func (ec *executionContext) marshalOFieldValueDisplay2ᚖgithubᚗcomᚋsecmonᚑlabᚋhecatoncheiresᚋpkgᚋdomainᚋmodelᚋgraphqlᚐFieldValueDisplay(ctx context.Context, sel ast.SelectionSet, v *graphql1.FieldValueDisplay) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._FieldValueDisplay(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOFieldValueInput2ᚕᚖgithubᚗcomᚋsecmonᚑlabᚋhecatoncheiresᚋpkgᚋdomainᚋmodelᚋgraphqlᚐFieldValueInputᚄ(ctx context.Context, v any) ([]*graphql1.FieldValueInput, error) {

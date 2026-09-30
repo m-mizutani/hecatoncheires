@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 )
 
@@ -37,9 +38,13 @@ func (h *mcpHandler) registerTools(s *mcp.Server) {
 type listWorkspacesInput struct{}
 
 type fieldDef struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Type string `json:"type"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Semantic string `json:"semantic,omitempty"`
+	// SemanticHint describes the expected value so a client can fill the
+	// field without knowing the semantic by name.
+	SemanticHint string `json:"semantic_hint,omitempty"`
 }
 
 type workspaceDetail struct {
@@ -81,9 +86,11 @@ func (h *mcpHandler) runListWorkspaces(_ context.Context, _ listWorkspacesInput)
 		if e.FieldSchema != nil {
 			for _, f := range e.FieldSchema.Fields {
 				wd.FieldSchema = append(wd.FieldSchema, fieldDef{
-					ID:   f.ID,
-					Name: f.Name,
-					Type: string(f.Type),
+					ID:       f.ID,
+					Name:     f.Name,
+					Type:     string(f.Type),
+					Semantic:     string(f.Semantic),
+					SemanticHint: semantic.PromptHint(f.Semantic),
 				})
 			}
 		}

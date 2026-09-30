@@ -87,6 +87,47 @@ func TestMemoUseCase_CreateMemo(t *testing.T) {
 		gt.Value(t, got.FieldValues["body"].Value).Equal("observed something")
 	})
 
+	t.Run("rejects a value that breaks the field semantic", func(t *testing.T) {
+		reg := model.NewWorkspaceRegistry()
+		reg.Register(&model.WorkspaceEntry{
+			Workspace: model.Workspace{ID: memoTestWorkspaceID, Name: "Memo WS"},
+			MemoConfig: &config.MemoConfig{
+				Description: "investigation memory",
+				FieldSchema: &config.FieldSchema{
+					Fields: []config.FieldDefinition{
+						{ID: "channel", Name: "Channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+					},
+				},
+			},
+		})
+		repo := memory.New()
+		uc := usecase.NewMemoUseCase(repo, reg)
+		ctx := auth.ContextWithToken(context.Background(), &auth.Token{Sub: "UCREATOR"})
+		caseID := seedCase(t, repo, ctx, &model.Case{ReporterID: "UCREATOR", Title: "Case", AssigneeIDs: []string{}})
+
+		_, err := uc.CreateMemo(ctx, memoTestWorkspaceID, usecase.CreateMemoInput{
+			CaseID:      caseID,
+			Title:       "bad channel",
+			FieldValues: map[string]model.FieldValue{"channel": {FieldID: "channel", Value: "#general"}},
+		})
+		gt.Error(t, err).Is(model.ErrCaseFieldValidation)
+		gt.String(t, err.Error()).Contains(`Slack channel ID must be "C"`)
+
+		memos, err := repo.Memo().List(ctx, memoTestWorkspaceID, caseID, interfaces.MemoListOptions{})
+		gt.NoError(t, err).Required()
+		gt.Array(t, memos).Length(0)
+
+		created, err := uc.CreateMemo(ctx, memoTestWorkspaceID, usecase.CreateMemoInput{
+			CaseID:      caseID,
+			Title:       "good channel",
+			FieldValues: map[string]model.FieldValue{"channel": {FieldID: "channel", Value: "C0123ABCD"}},
+		})
+		gt.NoError(t, err).Required()
+		got, err := repo.Memo().Get(ctx, memoTestWorkspaceID, caseID, created.ID)
+		gt.NoError(t, err).Required()
+		gt.Value(t, got.FieldValues["channel"].Value).Equal("C0123ABCD")
+	})
+
 	t.Run("rejects missing required field", func(t *testing.T) {
 		uc, repo := newMemoUC(t)
 		ctx := auth.ContextWithToken(context.Background(), &auth.Token{Sub: "UCREATOR"})

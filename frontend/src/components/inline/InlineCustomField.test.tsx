@@ -105,6 +105,43 @@ describe('InlineCustomField — CASE_REF', () => {
   })
 })
 
+describe('InlineCustomField — supplementary line', () => {
+  const textField = { id: 'channel', name: 'Channel', type: 'TEXT' }
+  const display = { label: '#general', url: 'https://slack.com/archives/C0123ABCD' }
+
+  it('keeps the value editable and shows the resolved name under it', () => {
+    renderWithProviders(
+      <InlineCustomField field={textField} value="C0123ABCD" onSave={vi.fn()} testId="ch" display={display} />,
+      [],
+    )
+    expect(screen.getByTestId('ch')).toHaveTextContent('C0123ABCD')
+    const link = screen.getByTestId('ch-supplement').querySelector('a')
+    expect(link).not.toBeNull()
+    expect(link).toHaveTextContent('#general')
+    expect(link).toHaveAttribute('href', display.url)
+  })
+
+  it('clicking the link does not start editing; clicking the value does', () => {
+    renderWithProviders(
+      <InlineCustomField field={textField} value="C0123ABCD" onSave={vi.fn()} testId="ch" display={display} />,
+      [],
+    )
+    fireEvent.click(screen.getByTestId('ch-supplement').querySelector('a')!)
+    expect(screen.queryByTestId('ch-input')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('ch'))
+    expect(screen.getByTestId('ch-input')).toHaveValue('C0123ABCD')
+  })
+
+  it('renders no supplementary line without a display', () => {
+    renderWithProviders(
+      <InlineCustomField field={textField} value="C0123ABCD" onSave={vi.fn()} testId="ch" />,
+      [],
+    )
+    expect(screen.queryByTestId('ch-supplement')).toBeNull()
+  })
+})
+
 describe('InlineCustomField — MARKDOWN', () => {
   const markdownField = { id: 'md1', name: 'Notes', type: 'MARKDOWN' }
 

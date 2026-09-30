@@ -817,7 +817,7 @@ func cmdServe() *cli.Command {
 			// dataloader/v7's batching window only collapses calls
 			// inside one Load(...) tick anyway.
 			gqlHandlerBase := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				loaders := gqlctrl.NewDataLoaders(repo, slackSvc)
+				loaders := gqlctrl.NewDataLoaders(repo, slackSvc, uc)
 				ctx := gqlctrl.WithDataLoaders(r.Context(), loaders)
 				srv.ServeHTTP(w, r.WithContext(ctx))
 			})

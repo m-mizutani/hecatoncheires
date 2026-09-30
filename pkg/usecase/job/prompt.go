@@ -16,6 +16,7 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/slack"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 )
 
@@ -200,7 +201,10 @@ type systemPromptField struct {
 	Type        string
 	Required    bool
 	Description string
-	Options     []systemPromptFieldOption
+	// Semantic is "<semantic id> — <hint>" for a text field that sets one,
+	// empty otherwise.
+	Semantic string
+	Options  []systemPromptFieldOption
 }
 
 type systemPromptFieldOption struct {
@@ -365,6 +369,7 @@ func buildSystemPromptData(in PromptInputs) systemPromptData {
 					Type:        string(f.Type),
 					Required:    f.Required,
 					Description: f.Description,
+					Semantic:    semantic.Label(f.Semantic),
 				}
 				if len(f.Options) > 0 {
 					meta.options = make(map[string]config.FieldOption, len(f.Options))
@@ -412,6 +417,7 @@ func buildSystemPromptData(in PromptInputs) systemPromptData {
 					Type:        string(f.Type),
 					Required:    f.Required,
 					Description: f.Description,
+					Semantic:    semantic.Label(f.Semantic),
 				}
 				for _, o := range f.Options {
 					field.Options = append(field.Options, systemPromptFieldOption{

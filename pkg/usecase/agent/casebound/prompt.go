@@ -9,6 +9,7 @@ import (
 
 	"github.com/secmon-lab/hecatoncheires/pkg/agent/slackfmt"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 )
 
 //go:embed prompts/system.md
@@ -65,7 +66,10 @@ type promptFieldDef struct {
 	Type        string
 	Required    bool
 	Description string
-	Options     []promptFieldOption
+	// Semantic is "<semantic id> — <hint>" for a text field that sets one,
+	// empty otherwise.
+	Semantic string
+	Options  []promptFieldOption
 }
 
 // promptStatus is one board status id the agent may move the case to via
@@ -138,6 +142,7 @@ func buildSystemPrompt(c *model.Case, entry *model.WorkspaceEntry, channelID, th
 				Type:        string(fd.Type),
 				Required:    fd.Required,
 				Description: fd.Description,
+				Semantic:    semantic.Label(fd.Semantic),
 			}
 			for _, o := range fd.Options {
 				def.Options = append(def.Options, promptFieldOption{ID: o.ID, Name: o.Name, Description: o.Description})

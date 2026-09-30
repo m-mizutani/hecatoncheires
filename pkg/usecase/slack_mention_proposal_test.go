@@ -197,6 +197,27 @@ func newRegistryWithSchema(workspaceID, workspaceName string, schema *config.Fie
 // purpose / privacy), and surrounding conversation. This is the seam
 // where channel-level context is injected so the planner can anchor
 // workspace inference without spending a tool call on it.
+func TestBuildFieldPairSections_Semantic(t *testing.T) {
+	fields := []config.FieldDefinition{
+		{ID: "channel", Name: "Notify", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+		{ID: "legacy", Name: "Legacy", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+		{ID: "note", Name: "Note", Type: types.FieldTypeText},
+	}
+	values := map[string]model.FieldValue{
+		"channel": {FieldID: "channel", Value: "C0123ABCD"},
+		"legacy":  {FieldID: "legacy", Value: "#old"},
+		"note":    {FieldID: "note", Value: "C0123ABCD"},
+	}
+
+	blocks := usecase.BuildFieldPairSectionsForTest(fields, values)
+	gt.Array(t, blocks).Length(1).Required()
+	section, ok := blocks[0].(*goslack.SectionBlock)
+	gt.Bool(t, ok).True()
+	// The channel link is not wrapped in a code span, where Slack would not
+	// render it; values without a usable semantic keep the code span.
+	gt.Value(t, section.Text.Text).Equal("*Notify:* <#C0123ABCD>\n*Legacy:* `#old`\n*Note:* `C0123ABCD`")
+}
+
 func TestBuildDraftUserInput_ChannelContext(t *testing.T) {
 	d := &model.CaseProposal{
 		RawMessages: []model.ProposalMessage{

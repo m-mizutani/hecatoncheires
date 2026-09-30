@@ -20,6 +20,7 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/agent/slackfmt"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/repository/agentarchive"
 	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
@@ -544,6 +545,23 @@ func TestBuildSystemPrompt_ChannelIDAndTime(t *testing.T) {
 	gt.String(t, prompt).Contains("slack__get_messages")
 	gt.String(t, prompt).Contains("## Current Time")
 	gt.String(t, prompt).Contains("2026-05-04T12:30:45Z")
+}
+
+func TestBuildSystemPrompt_FieldSemantic(t *testing.T) {
+	entry := &model.WorkspaceEntry{
+		Workspace: model.Workspace{ID: "ws-test", Name: "Test"},
+		FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+			{ID: "notify_channel", Name: "Notify", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+			{ID: "note", Name: "Note", Type: types.FieldTypeText},
+		}},
+	}
+	c := &model.Case{Title: "Test Case", Status: types.CaseStatusOpen}
+	now := time.Date(2026, 5, 4, 12, 30, 45, 0, time.UTC)
+
+	prompt := casebound.BuildSystemPromptForTest(c, entry, "C0123ABC", "", now, nil, nil, nil)
+
+	gt.String(t, prompt).Contains("- id=`notify_channel` name=\"Notify\" type=text semantic=" + semantic.Label(types.SemanticSlackChannelID))
+	gt.String(t, prompt).Contains("- id=`note` name=\"Note\" type=text\n")
 }
 
 // A turn with no thread must not render a dangling "Thread TS:" label the model

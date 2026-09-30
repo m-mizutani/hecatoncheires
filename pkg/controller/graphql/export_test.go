@@ -1,5 +1,12 @@
 package graphql
 
+import (
+	"context"
+
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+)
+
 // ToGraphQLCaseForTest exposes the unexported toGraphQLCase converter so the
 // external graphql_test package can assert the domain → GraphQL field mapping
 // (notably the empty-ReporterID → nil-pointer rule for reporterless thread-mode
@@ -36,3 +43,26 @@ var ToGraphQLActionCommentForTest = toGraphQLActionComment
 // so the external graphql_test package can assert the domain → GraphQL field
 // type enum bridge (notably the markdown mapping).
 var ToGraphQLFieldTypeForTest = toGraphQLFieldType
+
+// TextDisplayKeyForTest names one (semantic, value) pair for
+// LoadTextDisplaysForTest.
+type TextDisplayKeyForTest struct {
+	Semantic types.Semantic
+	Value    string
+}
+
+// LoadTextDisplaysForTest loads every key in ONE dataloader batch, so a test
+// can assert how the batch groups keys by semantic.
+func LoadTextDisplaysForTest(ctx context.Context, d *DataLoaders, keys []TextDisplayKeyForTest) ([]*definition.Display, []error) {
+	internal := make([]textDisplayKey, len(keys))
+	for i, k := range keys {
+		internal[i] = textDisplayKey{semantic: k.Semantic, value: k.Value}
+	}
+	return d.TextDisplay.LoadMany(ctx, internal)()
+}
+
+// WithSemanticsForTest exposes the unexported withSemantics converter.
+var WithSemanticsForTest = withSemantics
+
+// ToGraphQLFieldValueDisplayForTest exposes the unexported display converter.
+var ToGraphQLFieldValueDisplayForTest = toGraphQLFieldValueDisplay

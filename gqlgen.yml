@@ -87,6 +87,12 @@ models:
     fields:
       author:
         resolver: true
+  FieldValue:
+    model:
+      - github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql.FieldValue
+    fields:
+      display:
+        resolver: true
   Memo:
     model:
       - github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql.Memo

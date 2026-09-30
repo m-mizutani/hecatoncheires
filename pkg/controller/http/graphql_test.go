@@ -15,6 +15,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
+	gollemmock "github.com/gollem-dev/gollem/mock"
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 	"github.com/robfig/cron/v3"
@@ -72,7 +73,7 @@ func setupGraphQLServer(repo interfaces.Repository) (http.Handler, error) {
 
 	// Wrap with dataloader middleware (same as serve.go)
 	gqlHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		loaders := gqlctrl.NewDataLoaders(repo, nil)
+		loaders := gqlctrl.NewDataLoaders(repo, nil, nil)
 		ctx := gqlctrl.WithDataLoaders(r.Context(), loaders)
 		srv.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -4126,7 +4127,7 @@ func setupGraphQLServerWithAuth(repo interfaces.Repository, authUC usecase.AuthU
 		gqlctrl.NewExecutableSchema(gqlctrl.Config{Resolvers: resolver}),
 	)
 	gqlHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		loaders := gqlctrl.NewDataLoaders(repo, nil)
+		loaders := gqlctrl.NewDataLoaders(repo, nil, nil)
 		ctx := gqlctrl.WithDataLoaders(r.Context(), loaders)
 		srv.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -4690,7 +4691,7 @@ func TestGraphQLHandler_CaseJobsQuery(t *testing.T) {
 			gqlctrl.NewExecutableSchema(gqlctrl.Config{Resolvers: resolver}),
 		)
 		gqlHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			loaders := gqlctrl.NewDataLoaders(repo, nil)
+			loaders := gqlctrl.NewDataLoaders(repo, nil, nil)
 			ctx := gqlctrl.WithDataLoaders(r.Context(), loaders)
 			srv.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -4849,7 +4850,7 @@ func TestGraphQLHandler_TriggerCaseJobMutation(t *testing.T) {
 			return gqlErr
 		})
 		gqlHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			loaders := gqlctrl.NewDataLoaders(repo, nil)
+			loaders := gqlctrl.NewDataLoaders(repo, nil, nil)
 			ctx := gqlctrl.WithDataLoaders(r.Context(), loaders)
 			srv.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -5751,7 +5752,7 @@ func TestGraphQLHandler_ReferenceableCases(t *testing.T) {
 			gqlctrl.NewExecutableSchema(gqlctrl.Config{Resolvers: resolver}),
 		)
 		gqlHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			loaders := gqlctrl.NewDataLoaders(repo, nil)
+			loaders := gqlctrl.NewDataLoaders(repo, nil, nil)
 			ctx := gqlctrl.WithDataLoaders(r.Context(), loaders)
 			srv.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -5844,7 +5845,7 @@ func TestGraphQLHandler_CaseRefWrite(t *testing.T) {
 	resolver := gqlctrl.NewResolver(repo, uc)
 	srv := handler.NewDefaultServer(gqlctrl.NewExecutableSchema(gqlctrl.Config{Resolvers: resolver}))
 	gqlHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		loaders := gqlctrl.NewDataLoaders(repo, nil)
+		loaders := gqlctrl.NewDataLoaders(repo, nil, nil)
 		ctx := gqlctrl.WithDataLoaders(r.Context(), loaders)
 		srv.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -5957,7 +5958,7 @@ func TestGraphQLHandler_WorkspaceAccessControl(t *testing.T) {
 		return gqlErr
 	})
 	gqlHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := gqlctrl.WithDataLoaders(r.Context(), gqlctrl.NewDataLoaders(repo, nil))
+		ctx := gqlctrl.WithDataLoaders(r.Context(), gqlctrl.NewDataLoaders(repo, nil, nil))
 		srv.ServeHTTP(w, r.WithContext(ctx))
 	})
 	h, err := httpctrl.New(gqlHandler)
@@ -6107,4 +6108,154 @@ func TestGraphQLHandler_WorkspaceAccessControl(t *testing.T) {
 		resp := parseGraphQLResponse(t, executeGraphQLRequest(t, h, casesQuery, map[string]any{"workspaceId": wsB}))
 		gt.Array(t, resp.Errors).Length(0)
 	})
+}
+
+// channelNameSlack is a Slack fake that answers GetChannelNames from a map
+// and records every lookup.
+type channelNameSlack struct {
+	mockSlackServiceForCommand
+	names   map[string]string
+	lookups [][]string
+}
+
+func (s *channelNameSlack) GetChannelNames(_ context.Context, ids []string) (map[string]string, error) {
+	s.lookups = append(s.lookups, ids)
+	out := map[string]string{}
+	for _, id := range ids {
+		if name, ok := s.names[id]; ok {
+			out[id] = name
+		}
+	}
+	return out, nil
+}
+
+// TestGraphQLHandler_FieldValueDisplay drives FieldValue.display end to end:
+// the fields resolvers stamp the definition's semantic, the display resolver
+// batches through the dataloader into UseCases.ResolveTextDisplays, and the
+// raw value stays untouched beside it.
+func TestGraphQLHandler_FieldValueDisplay(t *testing.T) {
+	const wsID = "semantic-ws"
+	repo := memory.New()
+	registry := model.NewWorkspaceRegistry()
+	registry.Register(&model.WorkspaceEntry{
+		Workspace: model.Workspace{ID: wsID, Name: "Semantic"},
+		FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+			{ID: "channel", Name: "Channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+			{ID: "note", Name: "Note", Type: types.FieldTypeText},
+		}},
+		MemoConfig: &config.MemoConfig{
+			Description: "memo",
+			FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+				{ID: "channel", Name: "Channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+			}},
+		},
+	})
+	slackFake := &channelNameSlack{names: map[string]string{"C0123ABCD": "general"}}
+	uc := usecase.New(repo, registry,
+		usecase.WithLLMClient(&gollemmock.LLMClientMock{}),
+		usecase.WithSlackService(slackFake),
+	)
+	srv := handler.NewDefaultServer(gqlctrl.NewExecutableSchema(gqlctrl.Config{Resolvers: gqlctrl.NewResolver(repo, uc)}))
+	h, err := httpctrl.New(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := gqlctrl.WithDataLoaders(r.Context(), gqlctrl.NewDataLoaders(repo, slackFake, uc))
+		srv.ServeHTTP(w, r.WithContext(ctx))
+	}))
+	gt.NoError(t, err).Required()
+
+	ctx := context.Background()
+	named, err := repo.Case().Create(ctx, wsID, &model.Case{
+		Title: "named", ReporterID: "U-REP", Status: types.CaseStatusOpen,
+		FieldValues: map[string]model.FieldValue{
+			"channel": {FieldID: "channel", Type: types.FieldTypeText, Value: "C0123ABCD"},
+			"note":    {FieldID: "note", Type: types.FieldTypeText, Value: "C0123ABCD"},
+		},
+	})
+	gt.NoError(t, err).Required()
+	unnamed, err := repo.Case().Create(ctx, wsID, &model.Case{
+		Title: "unnamed", ReporterID: "U-REP", Status: types.CaseStatusOpen,
+		FieldValues: map[string]model.FieldValue{
+			"channel": {FieldID: "channel", Type: types.FieldTypeText, Value: "C9999ZZZZ"},
+		},
+	})
+	gt.NoError(t, err).Required()
+
+	type display struct {
+		Label *string `json:"label"`
+		URL   *string `json:"url"`
+	}
+	type fieldValue struct {
+		FieldID string   `json:"fieldId"`
+		Value   any      `json:"value"`
+		Display *display `json:"display"`
+	}
+	byID := func(fields []fieldValue) map[string]fieldValue {
+		out := map[string]fieldValue{}
+		for _, f := range fields {
+			out[f.FieldID] = f
+		}
+		return out
+	}
+
+	const casesQuery = `query($ws: String!) { cases(workspaceId: $ws) { id fields { fieldId value display { label url } } } }`
+	resp := parseGraphQLResponse(t, executeGraphQLRequest(t, h, casesQuery, map[string]any{"ws": wsID}))
+	gt.Array(t, resp.Errors).Length(0).Required()
+	var data struct {
+		Cases []struct {
+			ID     int          `json:"id"`
+			Fields []fieldValue `json:"fields"`
+		} `json:"cases"`
+	}
+	gt.NoError(t, json.Unmarshal(resp.Data, &data)).Required()
+	gt.Array(t, data.Cases).Length(2).Required()
+
+	seen := map[int64]bool{}
+	for _, c := range data.Cases {
+		fields := byID(c.Fields)
+		seen[int64(c.ID)] = true
+		switch int64(c.ID) {
+		case named.ID:
+			ch := fields["channel"]
+			gt.Value(t, ch.Value).Equal("C0123ABCD")
+			gt.Value(t, ch.Display).NotNil().Required()
+			gt.Value(t, *ch.Display.Label).Equal("#general")
+			gt.Value(t, *ch.Display.URL).Equal("https://slack.com/archives/C0123ABCD")
+			// A text field without a semantic gets no display even when its
+			// value happens to look like a channel ID.
+			gt.Value(t, fields["note"].Display).Nil()
+		case unnamed.ID:
+			ch := fields["channel"]
+			gt.Value(t, ch.Value).Equal("C9999ZZZZ")
+			gt.Value(t, ch.Display).NotNil().Required()
+			gt.Value(t, ch.Display.Label).Nil()
+			gt.Value(t, *ch.Display.URL).Equal("https://slack.com/archives/C9999ZZZZ")
+		}
+	}
+	gt.Bool(t, seen[named.ID] && seen[unnamed.ID]).True()
+	// Both cases' channel values were resolved in one Slack lookup.
+	gt.Array(t, slackFake.lookups).Length(1).Required()
+	gt.Array(t, slackFake.lookups[0]).Length(2)
+
+	memoCtx := auth.ContextWithToken(ctx, &auth.Token{Sub: "U-REP"})
+	memo, err := uc.Memo.CreateMemo(memoCtx, wsID, usecase.CreateMemoInput{
+		CaseID:      named.ID,
+		Title:       "memo",
+		FieldValues: map[string]model.FieldValue{"channel": {FieldID: "channel", Value: "C0123ABCD"}},
+	})
+	gt.NoError(t, err).Required()
+
+	const memoQuery = `query($ws: String!, $caseID: Int!, $id: ID!) { memo(workspaceId: $ws, caseID: $caseID, id: $id) { fields { fieldId value display { label url } } } }`
+	resp = parseGraphQLResponse(t, executeGraphQLRequest(t, h, memoQuery, map[string]any{
+		"ws": wsID, "caseID": named.ID, "id": string(memo.ID),
+	}))
+	gt.Array(t, resp.Errors).Length(0).Required()
+	var memoData struct {
+		Memo struct {
+			Fields []fieldValue `json:"fields"`
+		} `json:"memo"`
+	}
+	gt.NoError(t, json.Unmarshal(resp.Data, &memoData)).Required()
+	ch := byID(memoData.Memo.Fields)["channel"]
+	gt.Value(t, ch.Value).Equal("C0123ABCD")
+	gt.Value(t, ch.Display).NotNil().Required()
+	gt.Value(t, *ch.Display.Label).Equal("#general")
 }

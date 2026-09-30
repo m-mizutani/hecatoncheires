@@ -10,6 +10,7 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/auth"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
 )
@@ -271,6 +272,30 @@ func TestGetWorkspace_FieldsWithoutOptions(t *testing.T) {
 	gt.Value(t, fields[0]["required"]).Equal(false)
 	_, hasOptions := fields[0]["options"]
 	gt.Bool(t, hasOptions).False()
+}
+
+func TestGetWorkspace_FieldSemantic(t *testing.T) {
+	r := model.NewWorkspaceRegistry()
+	r.Register(&model.WorkspaceEntry{
+		Workspace: model.Workspace{ID: "ws", Name: "WS"},
+		FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+			{ID: "channel", Name: "Channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+			{ID: "note", Name: "Note", Type: types.FieldTypeText},
+		}},
+	})
+
+	tools := wsmeta.New(wsmeta.Deps{Registry: r})
+	out, err := tools[1].Run(context.Background(), map[string]any{"workspace_id": "ws"})
+	gt.NoError(t, err).Required()
+
+	fields := out["fields"].([]map[string]any)
+	gt.Array(t, fields).Length(2).Required()
+	gt.Value(t, fields[0]["semantic"]).Equal("slack_channel_id")
+	gt.Value(t, fields[0]["semantic_hint"]).Equal(semantic.PromptHint(types.SemanticSlackChannelID))
+	_, hasSemantic := fields[1]["semantic"]
+	gt.Bool(t, hasSemantic).False()
+	_, hasHint := fields[1]["semantic_hint"]
+	gt.Bool(t, hasHint).False()
 }
 
 func TestGetWorkspace_NoSourceRepoReturnsEmptySources(t *testing.T) {

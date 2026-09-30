@@ -17,6 +17,7 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 )
 
 // Deps groups the read-only collaborators wsmeta tools need.
@@ -175,6 +176,10 @@ func fieldsToMaps(schema *config.FieldSchema) []map[string]any {
 			"type":        string(fd.Type),
 			"required":    fd.Required,
 			"description": fd.Description,
+		}
+		if fd.Semantic != "" {
+			field["semantic"] = string(fd.Semantic)
+			field["semantic_hint"] = semantic.PromptHint(fd.Semantic)
 		}
 		if len(fd.Options) > 0 {
 			opts := make([]map[string]any, 0, len(fd.Options))

@@ -24,7 +24,7 @@ func TestCaseResolver_Reporter(t *testing.T) {
 
 	t.Run("missing reporter resolves to nil without error (thread-mode)", func(t *testing.T) {
 		resolver := graphqlctrl.NewResolver(repo, nil)
-		ctx := graphqlctrl.WithDataLoaders(context.Background(), graphqlctrl.NewDataLoaders(repo, nil))
+		ctx := graphqlctrl.WithDataLoaders(context.Background(), graphqlctrl.NewDataLoaders(repo, nil, nil))
 		user, err := resolver.Case().Reporter(ctx, &graphql1.Case{ID: 1, ReporterID: &reporterID, IsThreadBound: true})
 		gt.NoError(t, err)
 		gt.Value(t, user).Nil()
@@ -32,7 +32,7 @@ func TestCaseResolver_Reporter(t *testing.T) {
 
 	t.Run("missing reporter resolves to nil without error (channel-mode)", func(t *testing.T) {
 		resolver := graphqlctrl.NewResolver(repo, nil)
-		ctx := graphqlctrl.WithDataLoaders(context.Background(), graphqlctrl.NewDataLoaders(repo, nil))
+		ctx := graphqlctrl.WithDataLoaders(context.Background(), graphqlctrl.NewDataLoaders(repo, nil, nil))
 		user, err := resolver.Case().Reporter(ctx, &graphql1.Case{ID: 2, ReporterID: &reporterID, IsThreadBound: false})
 		gt.NoError(t, err)
 		gt.Value(t, user).Nil()
@@ -44,7 +44,7 @@ func TestCaseResolver_Reporter(t *testing.T) {
 			{ID: model.SlackUserID(reporterID), Name: "mizu", RealName: "Mizu San"},
 		})).Required()
 		resolver := graphqlctrl.NewResolver(seeded, nil)
-		ctx := graphqlctrl.WithDataLoaders(context.Background(), graphqlctrl.NewDataLoaders(seeded, nil))
+		ctx := graphqlctrl.WithDataLoaders(context.Background(), graphqlctrl.NewDataLoaders(seeded, nil, nil))
 		user, err := resolver.Case().Reporter(ctx, &graphql1.Case{ID: 3, ReporterID: &reporterID, IsThreadBound: true})
 		gt.NoError(t, err).Required()
 		gt.Value(t, user).NotNil().Required()
@@ -54,7 +54,7 @@ func TestCaseResolver_Reporter(t *testing.T) {
 
 	t.Run("empty reporter id resolves to nil without error", func(t *testing.T) {
 		resolver := graphqlctrl.NewResolver(repo, nil)
-		ctx := graphqlctrl.WithDataLoaders(context.Background(), graphqlctrl.NewDataLoaders(repo, nil))
+		ctx := graphqlctrl.WithDataLoaders(context.Background(), graphqlctrl.NewDataLoaders(repo, nil, nil))
 		user, err := resolver.Case().Reporter(ctx, &graphql1.Case{ID: 4, ReporterID: nil})
 		gt.NoError(t, err)
 		gt.Value(t, user).Nil()

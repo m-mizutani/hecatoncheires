@@ -9,6 +9,7 @@ import (
 
 	gqlctrl "github.com/secmon-lab/hecatoncheires/pkg/controller/graphql"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
 )
 
@@ -42,6 +43,7 @@ func TestErrorCode(t *testing.T) {
 		{"already closed", goerr.Wrap(usecase.ErrCaseAlreadyClosed, "x"), gqlctrl.ErrCodeConflict},
 		{"invalid argument", goerr.Wrap(usecase.ErrInvalidArgument, "x"), gqlctrl.ErrCodeBadUserInput},
 		{"missing required (model)", goerr.Wrap(model.ErrMissingRequired, "x"), gqlctrl.ErrCodeBadUserInput},
+		{"value breaks the field semantic", goerr.Wrap(semantic.ErrInvalidValue, "x"), gqlctrl.ErrCodeBadUserInput},
 		{"workspace not found", goerr.Wrap(model.ErrWorkspaceNotFound, "x"), gqlctrl.ErrCodeNotFound},
 		{"action comment not found", goerr.Wrap(usecase.ErrActionCommentNotFound, "x"), gqlctrl.ErrCodeNotFound},
 		// The knowledge write path's rejections. Classifying them is what keeps

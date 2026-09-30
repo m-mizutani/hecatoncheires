@@ -889,6 +889,8 @@ groups, never `null`:
 `kind` values and their meaning are the `Reported as` column of the
 [check catalog](./cli.md#what---check-db-checks). `sample` carries
 `action_id` only for `action` targets and `memo_id` only for `memo` targets.
+For a `field_value` issue on a `text` field that sets `semantic`, `expected`
+names both, e.g. `text (slack_channel_id)`.
 Finding issues is still `200` — the check ran successfully. Other statuses:
 
 | Status | Meaning |

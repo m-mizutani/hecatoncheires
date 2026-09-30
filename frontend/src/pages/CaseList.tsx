@@ -8,6 +8,7 @@ import {
 } from '../graphql/case'
 import { GET_DRAFTS } from '../graphql/drafts'
 import { GET_FIELD_CONFIGURATION } from '../graphql/fieldConfiguration'
+import FieldValueSupplement, { type FieldValueDisplay } from '../components/fields/FieldValueSupplement'
 import { useWorkspace } from '../contexts/workspace-context'
 import { useTranslation } from '../i18n'
 import Button from '../components/Button'
@@ -137,7 +138,7 @@ interface CaseRow {
   archivedAt?: string | null
   createdAt: string
   updatedAt: string
-  fields: Array<{ fieldId: string; value: any }>
+  fields: Array<{ fieldId: string; value: any; display?: FieldValueDisplay | null }>
 }
 
 const BUILTIN_COLUMNS = [
@@ -760,8 +761,14 @@ export default function CaseList() {
       }
     } else {
       const fieldDef = col.def!
-      const v = c.fields.find((cf) => cf.fieldId === fieldDef.id)?.value
-      return renderFieldValue(v, fieldDef)
+      const fv = c.fields.find((cf) => cf.fieldId === fieldDef.id)
+      if (!fv?.display) return renderFieldValue(fv?.value, fieldDef)
+      return (
+        <div>
+          {renderFieldValue(fv.value, fieldDef)}
+          <FieldValueSupplement display={fv.display} testId={`case-cell-${fieldDef.id}-supplement`} />
+        </div>
+      )
     }
     return null
   }

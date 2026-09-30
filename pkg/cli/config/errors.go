@@ -165,6 +165,12 @@ var (
 	// ErrUnknownLLMModelRef is returned when a Job — or the --llm-model flag —
 	// names a model that no [[llm_model]] entry defines.
 	ErrUnknownLLMModelRef = goerr.New("model reference name is not defined")
+	// ErrUnexpectedSemantic is returned when a field sets semantic on a type
+	// other than text.
+	ErrUnexpectedSemantic = goerr.New("semantic is only valid for text fields")
+	// ErrUnknownSemantic is returned when a field names a semantic that the
+	// catalog (pkg/domain/semantic) does not define.
+	ErrUnknownSemantic = goerr.New("unknown semantic")
 )
 
 // Context keys for error values
@@ -172,6 +178,7 @@ const (
 	ConfigPathKey       = "config_path"
 	FieldIDKey          = "field_id"
 	FieldTypeKey        = "field_type"
+	SemanticKey         = "semantic"
 	OptionIDKey         = "option_id"
 	FieldIndexKey       = "field_index"
 	OptionIndexKey      = "option_index"

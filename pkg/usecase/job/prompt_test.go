@@ -12,6 +12,7 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/slack"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/usecase/job"
 )
@@ -499,6 +500,34 @@ func TestTruncateRunes(t *testing.T) {
 	out, full = job.TruncateRunesForTest("anything", 0)
 	gt.String(t, out).Equal("")
 	gt.Number(t, full).Equal(0)
+}
+
+func TestBuildSystemPrompt_FieldSemantic(t *testing.T) {
+	ws := newWorkspace("ws", "WS")
+	ws.FieldSchema = &config.FieldSchema{Fields: []config.FieldDefinition{
+		{ID: "notify_channel", Name: "Notify", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+		{ID: "note", Name: "Note", Type: types.FieldTypeText},
+	}}
+	ws.MemoConfig = &config.MemoConfig{
+		Description: "memo",
+		FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+			{ID: "memo_channel", Name: "Memo channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+		}},
+	}
+	j := &model.Job{ID: "j", Prompt: "do it", Events: model.JobEvents{
+		Case: &model.CaseEventConfig{On: []model.CaseLifecycle{model.CaseLifecycleCreated}},
+	}}
+	got, err := job.BuildSystemPrompt(job.PromptInputs{
+		Job: j, Workspace: ws, Case: newCase(1),
+		Event: job.Event{Domain: model.JobEventDomainCase, WorkspaceID: "ws", CaseID: 1, CaseLifecycle: model.CaseLifecycleCreated},
+	})
+	gt.NoError(t, err).Required()
+
+	label := semantic.Label(types.SemanticSlackChannelID)
+	mustContain(t, got, "  - notify_channel (text): Notify\n    semantic: "+label)
+	mustContain(t, got, "  - memo_channel (text): Memo channel\n    semantic: "+label)
+	// A text field without a semantic renders no semantic line.
+	mustNotContain(t, got, "  - note (text): Note\n    semantic:")
 }
 
 func mustContain(t *testing.T, s, sub string) {

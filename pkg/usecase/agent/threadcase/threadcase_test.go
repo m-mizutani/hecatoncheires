@@ -10,6 +10,7 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/agent/slackfmt"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/threadcase"
 )
@@ -82,6 +83,19 @@ func TestBuildSystemPrompt_ThreadContext(t *testing.T) {
 	gt.String(t, prompt).Contains("severity")
 	gt.String(t, prompt).Contains("DONE")
 	gt.String(t, prompt).Contains("CANNOT create or manage Actions")
+}
+
+func TestBuildSystemPrompt_FieldSemantic(t *testing.T) {
+	ws := newThreadWorkspace()
+	ws.FieldSchema = &config.FieldSchema{Fields: []config.FieldDefinition{
+		{ID: "notify_channel", Name: "Notify", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+		{ID: "note", Name: "Note", Type: types.FieldTypeText},
+	}}
+
+	prompt := threadcase.BuildSystemPromptForTest(newThreadCase(), ws, threadcase.ModeMention, "")
+	gt.String(t, prompt).Contains("- Notify (id=notify_channel, type=text) semantic=slack_channel_id (" +
+		semantic.PromptHint(types.SemanticSlackChannelID) + ")\n")
+	gt.String(t, prompt).Contains("- Note (id=note, type=text)\n")
 }
 
 // A mention turn advertises the full case writer set, so the prompt must name

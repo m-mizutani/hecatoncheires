@@ -8,6 +8,7 @@ import (
 	"github.com/m-mizutani/gt"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 )
 
@@ -417,6 +418,72 @@ func TestFieldValidator_Markdown(t *testing.T) {
 	t.Run("required markdown field missing is rejected", func(t *testing.T) {
 		_, err := v.ValidateCaseFieldsAll(map[string]model.FieldValue{})
 		gt.Error(t, err).Is(model.ErrCaseFieldValidation)
+	})
+}
+
+func TestFieldValidator_TextSemantic(t *testing.T) {
+	schema := &config.FieldSchema{
+		Fields: []config.FieldDefinition{
+			{ID: "channel", Name: "Channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+			{ID: "note", Name: "Note", Type: types.FieldTypeText},
+		},
+	}
+	v := model.NewFieldValidator(schema)
+
+	valid := map[string]model.FieldValue{"channel": {FieldID: "channel", Value: "C0123ABCD"}}
+	invalid := map[string]model.FieldValue{"channel": {FieldID: "channel", Value: "#general"}}
+
+	t.Run("fail-fast variants accept an ID and reject a channel name", func(t *testing.T) {
+		for name, fn := range map[string]func(map[string]model.FieldValue) (map[string]model.FieldValue, error){
+			"ValidateCaseFields":        v.ValidateCaseFields,
+			"ValidateCaseFieldsPartial": v.ValidateCaseFieldsPartial,
+		} {
+			t.Run(name, func(t *testing.T) {
+				out, err := fn(valid)
+				gt.NoError(t, err).Required()
+				gt.Value(t, out["channel"].Value).Equal("C0123ABCD")
+
+				_, err = fn(invalid)
+				gt.Error(t, err).Is(semantic.ErrInvalidValue)
+			})
+		}
+	})
+
+	t.Run("accumulating variants report the field and the rule", func(t *testing.T) {
+		for name, fn := range map[string]func(map[string]model.FieldValue) (map[string]model.FieldValue, error){
+			"ValidateCaseFieldsAll":           v.ValidateCaseFieldsAll,
+			"ValidateCaseFieldsPartialStrict": v.ValidateCaseFieldsPartialStrict,
+		} {
+			t.Run(name, func(t *testing.T) {
+				_, err := fn(valid)
+				gt.NoError(t, err).Required()
+
+				_, err = fn(invalid)
+				gt.Error(t, err).Is(model.ErrCaseFieldValidation)
+				gt.String(t, err.Error()).Contains(`field "channel"`)
+				gt.String(t, err.Error()).Contains(`Slack channel ID must be "C"`)
+			})
+		}
+	})
+
+	t.Run("empty string is accepted", func(t *testing.T) {
+		_, err := v.ValidateCaseFieldsPartial(map[string]model.FieldValue{"channel": {FieldID: "channel", Value: ""}})
+		gt.NoError(t, err)
+	})
+
+	t.Run("a text field without semantic keeps accepting any string", func(t *testing.T) {
+		_, err := v.ValidateCaseFieldsPartial(map[string]model.FieldValue{"note": {FieldID: "note", Value: "#general"}})
+		gt.NoError(t, err)
+	})
+
+	t.Run("ValidateStored reports a stored value that breaks the rule", func(t *testing.T) {
+		violations := v.ValidateStored(map[string]model.FieldValue{
+			"channel": {FieldID: "channel", Type: types.FieldTypeText, Value: "#general"},
+			"note":    {FieldID: "note", Type: types.FieldTypeText, Value: "#general"},
+		})
+		gt.Array(t, violations).Length(1).Required()
+		gt.Value(t, violations[0].FieldID).Equal("channel")
+		gt.Error(t, violations[0].Err).Is(semantic.ErrInvalidValue)
 	})
 }
 

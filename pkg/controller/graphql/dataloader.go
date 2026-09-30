@@ -8,6 +8,8 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	graphql1 "github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	slacksvc "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
 	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
 	"github.com/secmon-lab/hecatoncheires/pkg/utils/slackid"
@@ -22,6 +24,17 @@ import (
 // client that the resolver actually failed, not that the data is
 // genuinely absent.
 var ErrSlackUserNotInRepo = goerr.New("slack user not found in repository")
+
+type textDisplayKey struct {
+	semantic types.Semantic
+	value    string
+}
+
+// textDisplayResolver is the usecase entry point the display loader batches
+// into. *usecase.UseCases satisfies it.
+type textDisplayResolver interface {
+	ResolveTextDisplays(ctx context.Context, id types.Semantic, values []string) (map[string]definition.Display, error)
+}
 
 type actionKey struct {
 	workspaceID string
@@ -51,14 +64,17 @@ type DataLoaders struct {
 	ActiveActionsByCaseLoader   *dataloader.Loader[actionsByCaseKey, []*model.Action]
 	ArchivedActionsByCaseLoader *dataloader.Loader[actionsByCaseKey, []*model.Action]
 	AllActionsByCaseLoader      *dataloader.Loader[actionsByCaseKey, []*model.Action]
+	TextDisplay                 *dataloader.Loader[textDisplayKey, *definition.Display]
 }
 
 // NewDataLoaders constructs a fresh set of request-scoped loaders.
 // slackSvc may be nil when Slack is not configured; in that case the
 // channel-name loader returns nil for every key (matching the old
-// per-resolver behaviour).
-func NewDataLoaders(repo interfaces.Repository, slackSvc slacksvc.Service) *DataLoaders {
+// per-resolver behaviour). textDisplay may be nil; every display then
+// resolves to nil.
+func NewDataLoaders(repo interfaces.Repository, slackSvc slacksvc.Service, textDisplay textDisplayResolver) *DataLoaders {
 	return &DataLoaders{
+		TextDisplay:                 dataloader.NewBatchedLoader(buildTextDisplayBatch(textDisplay)),
 		SlackUser:                   dataloader.NewBatchedLoader(buildSlackUserBatch(repo)),
 		SlackChannelName:            dataloader.NewBatchedLoader(buildSlackChannelNameBatch(slackSvc)),
 		Action:                      dataloader.NewBatchedLoader(buildActionBatch(repo)),
@@ -226,6 +242,55 @@ func buildSlackChannelNameBatch(slackSvc slacksvc.Service) dataloader.BatchFunc[
 				continue
 			}
 			results[i] = &dataloader.Result[*string]{Data: nil}
+		}
+		return results
+	}
+}
+
+// buildTextDisplayBatch groups the keys by semantic and calls the usecase
+// once per semantic. A failure fails only the keys of that semantic.
+func buildTextDisplayBatch(r textDisplayResolver) dataloader.BatchFunc[textDisplayKey, *definition.Display] {
+	return func(ctx context.Context, keys []textDisplayKey) []*dataloader.Result[*definition.Display] {
+		results := make([]*dataloader.Result[*definition.Display], len(keys))
+		if r == nil {
+			for i := range results {
+				results[i] = &dataloader.Result[*definition.Display]{Data: nil}
+			}
+			return results
+		}
+
+		var order []types.Semantic
+		valuesBySemantic := make(map[types.Semantic][]string)
+		for _, k := range keys {
+			if _, ok := valuesBySemantic[k.semantic]; !ok {
+				order = append(order, k.semantic)
+			}
+			valuesBySemantic[k.semantic] = append(valuesBySemantic[k.semantic], k.value)
+		}
+
+		resolved := make(map[types.Semantic]map[string]definition.Display, len(order))
+		failed := make(map[types.Semantic]error)
+		for _, sem := range order {
+			displays, err := r.ResolveTextDisplays(ctx, sem, valuesBySemantic[sem])
+			if err != nil {
+				failed[sem] = goerr.Wrap(err, "failed to resolve text field displays",
+					goerr.V("semantic", sem))
+				continue
+			}
+			resolved[sem] = displays
+		}
+
+		for i, k := range keys {
+			if err, ok := failed[k.semantic]; ok {
+				results[i] = &dataloader.Result[*definition.Display]{Error: err}
+				continue
+			}
+			if d, ok := resolved[k.semantic][k.value]; ok {
+				disp := d
+				results[i] = &dataloader.Result[*definition.Display]{Data: &disp}
+				continue
+			}
+			results[i] = &dataloader.Result[*definition.Display]{Data: nil}
 		}
 		return results
 	}

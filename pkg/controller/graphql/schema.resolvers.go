@@ -395,7 +395,7 @@ func (r *caseResolver) Fields(ctx context.Context, obj *graphql1.Case) ([]*graph
 	if obj.Fields == nil {
 		return []*graphql1.FieldValue{}, nil
 	}
-	return obj.Fields, nil
+	return withSemantics(obj.Fields, r.UseCases.Case.GetFieldConfiguration(obj.WorkspaceID).Fields), nil
 }
 
 // Actions is the resolver for the actions field.
@@ -493,6 +493,22 @@ func (r *caseResolver) AgentSources(ctx context.Context, obj *graphql1.Case) ([]
 	return out, nil
 }
 
+// Display is the resolver for the display field.
+func (r *fieldValueResolver) Display(ctx context.Context, obj *graphql1.FieldValue) (*graphql1.FieldValueDisplay, error) {
+	if obj.Semantic == "" {
+		return nil, nil
+	}
+	value, ok := obj.Value.(string)
+	if !ok || value == "" {
+		return nil, nil
+	}
+	disp, err := GetDataLoaders(ctx).TextDisplay.Load(ctx, textDisplayKey{semantic: obj.Semantic, value: value})()
+	if err != nil {
+		return nil, err
+	}
+	return toGraphQLFieldValueDisplay(disp), nil
+}
+
 // Case is the resolver for the case field.
 func (r *memoResolver) Case(ctx context.Context, obj *graphql1.Memo) (*graphql1.Case, error) {
 	loaders := GetDataLoaders(ctx)
@@ -513,7 +529,11 @@ func (r *memoResolver) Fields(ctx context.Context, obj *graphql1.Memo) ([]*graph
 	if obj.Fields == nil {
 		return []*graphql1.FieldValue{}, nil
 	}
-	return obj.Fields, nil
+	cfg, err := r.UseCases.Memo.MemoConfiguration(obj.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return withSemantics(obj.Fields, cfg.Fields), nil
 }
 
 // Noop is the resolver for the noop field.
@@ -2010,6 +2030,9 @@ func (r *Resolver) ActionEvent() ActionEventResolver { return &actionEventResolv
 // Case returns CaseResolver implementation.
 func (r *Resolver) Case() CaseResolver { return &caseResolver{r} }
 
+// FieldValue returns FieldValueResolver implementation.
+func (r *Resolver) FieldValue() FieldValueResolver { return &fieldValueResolver{r} }
+
 // Memo returns MemoResolver implementation.
 func (r *Resolver) Memo() MemoResolver { return &memoResolver{r} }
 
@@ -2024,6 +2047,7 @@ type (
 	actionCommentResolver struct{ *Resolver }
 	actionEventResolver   struct{ *Resolver }
 	caseResolver          struct{ *Resolver }
+	fieldValueResolver    struct{ *Resolver }
 	memoResolver          struct{ *Resolver }
 	mutationResolver      struct{ *Resolver }
 	queryResolver         struct{ *Resolver }

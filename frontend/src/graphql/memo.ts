@@ -7,6 +7,10 @@ const MEMO_FIELDS = `
   fields {
     fieldId
     value
+    display {
+      label
+      url
+    }
   }
   archivedAt
   createdAt

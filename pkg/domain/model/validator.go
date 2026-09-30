@@ -11,6 +11,7 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 )
 
@@ -249,11 +250,16 @@ func (v *FieldValidator) validateFieldValue(fieldDef config.FieldDefinition, fv 
 
 // validateText validates a text field value
 func (v *FieldValidator) validateText(fieldDef config.FieldDefinition, fv FieldValue) error {
-	_, ok := fv.Value.(string)
+	s, ok := fv.Value.(string)
 	if !ok {
 		return goerr.Wrap(ErrInvalidFieldType, "value must be string",
 			goerr.V(ExpectedTypeKey, types.FieldTypeText),
 			goerr.V(ActualTypeKey, fmt.Sprintf("%T", fv.Value)))
+	}
+	if err := semantic.Validate(fieldDef.Semantic, s); err != nil {
+		return goerr.Wrap(err, "text value does not match the field semantic",
+			goerr.V(FieldIDKey, fieldDef.ID),
+			goerr.V(SemanticKey, fieldDef.Semantic))
 	}
 	return nil
 }

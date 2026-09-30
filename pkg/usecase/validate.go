@@ -329,6 +329,9 @@ func addFieldViolations(
 		expected := ""
 		if fd, ok := defByID[v.FieldID]; ok {
 			expected = string(fd.Type)
+			if fd.Semantic != "" {
+				expected = fmt.Sprintf("%s (%s)", fd.Type, fd.Semantic)
+			}
 		}
 		actual := ""
 		if fv, ok := values[v.FieldID]; ok {

@@ -1,0 +1,35 @@
+/* Supplementary line under a field value (e.g. the channel name a Slack
+   channel ID refers to). Smaller and quieter than the value itself. */
+.supplement {
+  display: block;
+  margin-top: var(--sp-1);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--fg-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Raised above a sibling row-link overlay (Case list cells), so the value
+   part of the cell still opens the Case while this link opens its target.
+   The two anchors are siblings, never nested. */
+.link {
+  position: relative;
+  z-index: 2;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.icon {
+  vertical-align: -1px;
+  margin-left: var(--sp-1);
+}

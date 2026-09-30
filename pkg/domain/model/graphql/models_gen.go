@@ -246,9 +246,9 @@ type FieldOption struct {
 	Metadata    *string `json:"metadata,omitempty"`
 }
 
-type FieldValue struct {
-	FieldID string `json:"fieldId"`
-	Value   any    `json:"value"`
+type FieldValueDisplay struct {
+	Label *string `json:"label,omitempty"`
+	URL   *string `json:"url,omitempty"`
 }
 
 type FieldValueInput struct {

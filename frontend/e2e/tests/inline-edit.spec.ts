@@ -102,3 +102,58 @@ test.describe('Inline edit — covered field types', () => {
     await expect(page.getByTestId('field-description')).toContainText('hello world');
   });
 });
+
+// extra01 defines `notify_channel` as a text field with
+// semantic = "slack_channel_id". The E2E backend has no Slack, so the server
+// resolves no channel name and the supplementary line carries only the link.
+test.describe('Inline edit — text field semantic', () => {
+  const SEMANTIC_WORKSPACE_ID = 'extra01';
+
+  test('rejects a channel name, stores a channel ID, and links it under the value', async ({ page }) => {
+    const caseListPage = new CaseListPage(page);
+    const caseFormPage = new CaseFormPage(page);
+    const caseDetailPage = new CaseDetailPage(page);
+    const title = `Semantic channel ${Date.now()}`;
+
+    await caseListPage.navigate(SEMANTIC_WORKSPACE_ID);
+    await caseListPage.waitForTableLoad();
+    await caseListPage.clickNewCaseButton();
+    await caseFormPage.createCase({ title, description: 'Used by inline-edit.spec semantic test' });
+    await caseListPage.waitForTableLoad();
+    await caseListPage.fillSearchFilter(title);
+    await caseListPage.clickCaseByTitle(title);
+    expect(await caseDetailPage.isPageLoaded()).toBeTruthy();
+
+    const isUpdateCaseResponse = (r: import('@playwright/test').Response) => {
+      if (!r.url().includes('/graphql') || r.request().method() !== 'POST') return false;
+      const body = r.request().postDataJSON?.();
+      return body?.operationName === 'UpdateCase';
+    };
+
+    // A channel name breaks the semantic: the server rejects the write and
+    // the editor stays open for a retry.
+    await page.getByTestId('field-notify_channel').click();
+    const input = page.getByTestId('field-notify_channel-input');
+    await input.fill('#general');
+    const rejected = page.waitForResponse(isUpdateCaseResponse);
+    await input.press('Enter');
+    const rejectedBody = await (await rejected).json();
+    expect(Array.isArray(rejectedBody.errors) && rejectedBody.errors.length > 0).toBeTruthy();
+    await expect(input).toBeVisible();
+
+    // A channel ID is stored.
+    await input.fill('C0123ABCD');
+    const accepted = page.waitForResponse(isUpdateCaseResponse);
+    await input.press('Enter');
+    const acceptedBody = await (await accepted).json();
+    expect(acceptedBody.errors ?? []).toEqual([]);
+
+    // After a reload the value is shown as stored, with the link under it.
+    await page.reload();
+    await caseDetailPage.waitForPageLoad();
+    await expect(page.getByTestId('field-notify_channel')).toContainText('C0123ABCD');
+    const supplementLink = page.getByTestId('field-notify_channel-supplement').locator('a');
+    await expect(supplementLink).toHaveAttribute('href', 'https://slack.com/archives/C0123ABCD');
+    await expect(supplementLink).toHaveAttribute('target', '_blank');
+  });
+});

@@ -5,6 +5,7 @@ import { displayName } from '../../utils/user'
 import { CASE_REFS_BY_IDS } from '../../graphql/caseRef'
 import { useTranslation } from '../../i18n'
 import MarkdownContent from '../markdown/MarkdownContent'
+import FieldValueSupplement, { type FieldValueDisplay } from './FieldValueSupplement'
 
 interface FieldOption {
   id: string
@@ -30,6 +31,8 @@ interface Props {
   field: FieldDef
   value: any
   users?: User[]
+  /** Server-resolved supplementary info shown under the value (FieldValue.display). */
+  display?: FieldValueDisplay | null
 }
 
 interface CaseRef {
@@ -133,7 +136,18 @@ function CaseRefDisplay({ field, value, multi }: { field: FieldDef; value: any; 
 
 // Read-only display for a custom field value, used in the case detail
 // sidebar. Mirrors the design's flat label / value layout (no input chrome).
-export default function FieldDisplay({ field, value, users = [] }: Props) {
+// The value is always shown as stored; the supplementary line goes under it.
+export default function FieldDisplay({ display, ...rest }: Props) {
+  if (!display) return <FieldValueView {...rest} />
+  return (
+    <div>
+      <FieldValueView {...rest} />
+      <FieldValueSupplement display={display} />
+    </div>
+  )
+}
+
+function FieldValueView({ field, value, users = [] }: Omit<Props, 'display'>) {
   if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
     return <span className="soft" style={{ fontSize: 13 }}>—</span>
   }

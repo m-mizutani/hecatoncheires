@@ -9,6 +9,29 @@ function renderWithI18n(ui: React.ReactNode) {
 }
 
 const markdownField = { id: 'body', name: 'Body', type: 'MARKDOWN' }
+const textField = { id: 'channel', name: 'Channel', type: 'TEXT' }
+
+describe('FieldDisplay supplementary line', () => {
+  it('keeps the stored value and adds the resolved name under it', () => {
+    renderWithI18n(
+      <FieldDisplay
+        field={textField}
+        value="C0123ABCD"
+        display={{ label: '#general', url: 'https://slack.com/archives/C0123ABCD' }}
+      />,
+    )
+    expect(screen.getByText('C0123ABCD')).toBeInTheDocument()
+    const link = screen.getByRole('link')
+    expect(link).toHaveTextContent('#general')
+    expect(link).toHaveAttribute('href', 'https://slack.com/archives/C0123ABCD')
+  })
+
+  it('has no supplementary line without a display', () => {
+    renderWithI18n(<FieldDisplay field={textField} value="C0123ABCD" />)
+    expect(screen.getByText('C0123ABCD')).toBeInTheDocument()
+    expect(screen.queryByTestId('field-value-supplement')).toBeNull()
+  })
+})
 
 describe('FieldDisplay MARKDOWN', () => {
   it('renders the value as Markdown', () => {

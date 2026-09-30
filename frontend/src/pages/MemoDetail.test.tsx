@@ -23,8 +23,8 @@ function memoData(overrides: Partial<Record<string, unknown>> = {}) {
     caseID: CASE_ID,
     title: 'Phase check 2026-07-13',
     fields: [
-      { __typename: 'FieldValue', fieldId: 'severity', value: 'high' },
-      { __typename: 'FieldValue', fieldId: 'note', value: 'plain text note' },
+      { __typename: 'FieldValue', fieldId: 'severity', value: 'high', display: null },
+      { __typename: 'FieldValue', fieldId: 'note', value: 'plain text note', display: null },
     ],
     archivedAt: null,
     createdAt: '2026-07-13T01:15:41Z',

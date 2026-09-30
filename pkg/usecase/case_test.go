@@ -582,6 +582,80 @@ func TestCaseUseCase_UpdateCase_PreservesUnpatchedFields(t *testing.T) {
 	gt.Value(t, byThread.Description).Equal("edited description")
 }
 
+func TestCaseUseCase_UpdateCase_TextSemantic(t *testing.T) {
+	setup := func(t *testing.T) (*memory.Memory, *usecase.CaseUseCase, *model.Case) {
+		t.Helper()
+		repo := memory.New()
+		registry := model.NewWorkspaceRegistry()
+		registry.Register(&model.WorkspaceEntry{
+			Workspace: model.Workspace{ID: "support"},
+			CaseMode:  model.CaseModeChannel,
+			FieldSchema: &config.FieldSchema{
+				Fields: []config.FieldDefinition{
+					{ID: "channel", Name: "Channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+					{ID: "note", Name: "Note", Type: types.FieldTypeText},
+				},
+			},
+		})
+		uc := usecase.NewCaseUseCase(repo, registry, nil, nil, "")
+		created, err := repo.Case().Create(context.Background(), "support", &model.Case{
+			Title:      "Case",
+			Status:     types.CaseStatusOpen,
+			ReporterID: "U-REP",
+			// A value stored before the semantic was configured.
+			FieldValues: map[string]model.FieldValue{
+				"channel": {FieldID: "channel", Type: types.FieldTypeText, Value: "#legacy"},
+			},
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		})
+		gt.NoError(t, err).Required()
+		return repo, uc, created
+	}
+	ctx := context.Background()
+
+	t.Run("a channel name is rejected and nothing is written", func(t *testing.T) {
+		repo, uc, created := setup(t)
+		_, err := uc.UpdateCase(ctx, "support", created.ID, usecase.CaseUpdate{
+			Fields: map[string]model.FieldValue{"channel": {FieldID: "channel", Value: "#general"}},
+		})
+		// UpdateCase accumulates violations into ErrCaseFieldValidation; the
+		// rule reaches the caller (and an agent) through the message.
+		gt.Error(t, err).Is(model.ErrCaseFieldValidation)
+		gt.String(t, err.Error()).Contains(`Slack channel ID must be "C"`)
+
+		reloaded, err := repo.Case().Get(ctx, "support", created.ID)
+		gt.NoError(t, err).Required()
+		gt.Value(t, reloaded.FieldValues["channel"].Value).Equal("#legacy")
+	})
+
+	t.Run("a channel ID is stored", func(t *testing.T) {
+		repo, uc, created := setup(t)
+		_, err := uc.UpdateCase(ctx, "support", created.ID, usecase.CaseUpdate{
+			Fields: map[string]model.FieldValue{"channel": {FieldID: "channel", Value: "C0123ABCD"}},
+		})
+		gt.NoError(t, err).Required()
+
+		reloaded, err := repo.Case().Get(ctx, "support", created.ID)
+		gt.NoError(t, err).Required()
+		gt.Value(t, reloaded.FieldValues["channel"].Value).Equal("C0123ABCD")
+		gt.Value(t, reloaded.FieldValues["channel"].Type).Equal(types.FieldTypeText)
+	})
+
+	t.Run("updating another field leaves a legacy value untouched", func(t *testing.T) {
+		repo, uc, created := setup(t)
+		_, err := uc.UpdateCase(ctx, "support", created.ID, usecase.CaseUpdate{
+			Fields: map[string]model.FieldValue{"note": {FieldID: "note", Value: "hello"}},
+		})
+		gt.NoError(t, err).Required()
+
+		reloaded, err := repo.Case().Get(ctx, "support", created.ID)
+		gt.NoError(t, err).Required()
+		gt.Value(t, reloaded.FieldValues["note"].Value).Equal("hello")
+		gt.Value(t, reloaded.FieldValues["channel"].Value).Equal("#legacy")
+	})
+}
+
 // TestCaseUseCase_UpdateCase_NoRenameWhenFieldValidationFails guards the update
 // ordering: the Slack channel rename is an external side effect that cannot be
 // rolled back, so it must happen only after EVERY validation has passed. When a

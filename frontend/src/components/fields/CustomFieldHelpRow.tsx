@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import InlineCustomField from '../inline/InlineCustomField'
+import type { FieldValueDisplay } from './FieldValueSupplement'
 import FieldHelpButton from './FieldHelpButton'
 import FieldCatalogPopover, { type FieldDefinitionForHelp } from './FieldCatalogPopover'
 import ValueDescTooltip from './ValueDescTooltip'
@@ -34,6 +35,8 @@ interface Props {
   disabled?: boolean
   onSave: (next: unknown) => Promise<void> | void
   testId?: string
+  /** Server-resolved supplementary info shown under the value (FieldValue.display). */
+  display?: FieldValueDisplay | null
 }
 
 function fieldHasHelp(field: CustomFieldDefinition): boolean {
@@ -46,7 +49,7 @@ function fieldHasHelp(field: CustomFieldDefinition): boolean {
 // MULTI_SELECT display values with hover/focus tooltips for option
 // descriptions.
 export default function CustomFieldHelpRow({
-  field, value, users, disabled, onSave, testId,
+  field, value, users, disabled, onSave, testId, display,
 }: Props) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -88,6 +91,7 @@ export default function CustomFieldHelpRow({
               disabled={disabled}
               onSave={onSave}
               testId={`field-${field.id}`}
+              display={display}
             />
           )}
       </span>

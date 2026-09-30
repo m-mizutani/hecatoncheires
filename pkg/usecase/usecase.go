@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"time"
 
 	"github.com/gollem-dev/gollem"
@@ -11,6 +12,9 @@ import (
 	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/webfetch"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/service/notion"
 	"github.com/secmon-lab/hecatoncheires/pkg/service/slack"
 )
@@ -38,6 +42,7 @@ type UseCases struct {
 	notificationSlotDuration time.Duration
 	dashboardStaleThreshold  time.Duration
 	homeMessageLLMClient     gollem.LLMClient
+	textDisplayer            *semantic.Displayer
 	Case                     *CaseUseCase
 	Action                   *ActionUseCase
 	Memo                     *MemoUseCase
@@ -265,6 +270,14 @@ func New(repo interfaces.Repository, registry *model.WorkspaceRegistry, opts ...
 		uc.webfetchClient = webfetch.NewClient(cfg)
 	}
 
+	// Assign only a non-nil service: a nil slack.Service stored in the
+	// ChannelNameLookup field would still be a non-nil interface value.
+	displayDeps := semantic.Deps{}
+	if uc.slackService != nil {
+		displayDeps.SlackChannelNames = uc.slackService
+	}
+	uc.textDisplayer = semantic.NewDisplayer(displayDeps)
+
 	uc.Case = NewCaseUseCase(repo, registry, uc.slackService, uc.slackAdminService, uc.baseURL)
 	uc.Case.workspaceAccess = uc.WorkspaceAccess
 	slotCoord := newNotificationSlotCoordinator(repo.NotificationSlot(), uc.slackService, uc.notificationSlotDuration, nil)
@@ -379,6 +392,14 @@ func (uc *UseCases) WorkspaceGroups() *model.WorkspaceGroupRegistry {
 // SlackService returns the Slack service (may be nil if not configured)
 func (uc *UseCases) SlackService() slack.Service {
 	return uc.slackService
+}
+
+// ResolveTextDisplays returns the supplementary information (label and link)
+// shown under text field values that carry the semantic id, keyed by value.
+// It is the controller's entry point, so the external lookups a semantic
+// performs stay behind the usecase layer.
+func (uc *UseCases) ResolveTextDisplays(ctx context.Context, id types.Semantic, values []string) (map[string]definition.Display, error) {
+	return uc.textDisplayer.Resolve(ctx, id, values)
 }
 
 // WebFetchClient returns the agent webfetch client (nil when the tool is

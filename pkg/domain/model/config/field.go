@@ -23,6 +23,9 @@ type FieldDefinition struct {
 	// multi_case_ref types; empty for all other types. May point at the
 	// field's own workspace (self-reference is allowed).
 	ReferenceWorkspace string
+	// Semantic is how a text field's value is interpreted (e.g. as a Slack
+	// channel ID). Only meaningful for the text type; empty means free text.
+	Semantic types.Semantic
 }
 
 // EntityLabels holds display labels for entities

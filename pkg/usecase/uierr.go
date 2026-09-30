@@ -8,6 +8,7 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
 	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
 	"github.com/secmon-lab/hecatoncheires/pkg/utils/uierr"
@@ -47,7 +48,8 @@ func classifyUserError(err error) (uierr.UserFacing, bool) {
 		errors.Is(err, model.ErrCaseFieldValidation),
 		errors.Is(err, model.ErrMissingRequired),
 		errors.Is(err, model.ErrInvalidFieldType),
-		errors.Is(err, model.ErrInvalidOptionID):
+		errors.Is(err, model.ErrInvalidOptionID),
+		errors.Is(err, semantic.ErrInvalidValue):
 		return uierr.UserFacing{
 			Kind:        uierr.KindValidation,
 			What:        i18n.MsgUIErrFieldValidationWhat,

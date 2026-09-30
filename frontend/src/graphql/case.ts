@@ -49,6 +49,10 @@ const CASE_MUTATION_FIELDS = gql`
     fields {
       fieldId
       value
+      display {
+        label
+        url
+      }
     }
   }
 `

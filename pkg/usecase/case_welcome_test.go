@@ -83,6 +83,35 @@ func TestWelcomeRenderer_AccessesSelectFieldByIDAndName(t *testing.T) {
 	gt.Value(t, out[0]).Equal("Severity: High (high) / Risk: Critical")
 }
 
+func TestWelcomeRenderer_SemanticFieldName(t *testing.T) {
+	r, err := usecase.NewWelcomeRendererForTest([]string{
+		"Notify: {{.Fields.channel.name}} ({{.Fields.channel.id}}) / Legacy: {{.Fields.legacy.name}} / Note: {{.Fields.note.name}}",
+	})
+	gt.NoError(t, err).Required()
+
+	c := &model.Case{
+		FieldValues: map[string]model.FieldValue{
+			"channel": {FieldID: "channel", Type: types.FieldTypeText, Value: "C0123ABCD"},
+			"legacy":  {FieldID: "legacy", Type: types.FieldTypeText, Value: "#old"},
+			"note":    {FieldID: "note", Type: types.FieldTypeText, Value: "C0123ABCD"},
+		},
+	}
+	schema := &config.FieldSchema{
+		Fields: []config.FieldDefinition{
+			{ID: "channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+			{ID: "legacy", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+			{ID: "note", Type: types.FieldTypeText},
+		},
+	}
+	out, err := usecase.WelcomeRendererRenderForTest(r, usecase.WelcomeContextForTest{
+		Case:   c,
+		Fields: usecase.BuildWelcomeFieldsForTest(c, schema),
+	})
+	gt.NoError(t, err).Required()
+	gt.Array(t, out).Length(1).Required()
+	gt.Value(t, out[0]).Equal("Notify: <#C0123ABCD> (C0123ABCD) / Legacy: #old / Note: C0123ABCD")
+}
+
 func TestWelcomeRenderer_AccessesMultiSelectItems(t *testing.T) {
 	r, err := usecase.NewWelcomeRendererForTest([]string{
 		"Tags: {{range $i, $t := .Fields.tags.items}}{{if $i}}, {{end}}{{$t.name}}{{end}}",

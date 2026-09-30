@@ -5,6 +5,7 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
 )
 
@@ -69,6 +70,7 @@ func ErrorCode(err error) string {
 	// Generic categories — match existing HTTP status mapping.
 	case errors.Is(err, model.ErrInvalidFieldType),
 		errors.Is(err, model.ErrInvalidOptionID),
+		errors.Is(err, semantic.ErrInvalidValue),
 		errors.Is(err, model.ErrMissingRequired),
 		errors.Is(err, model.ErrCaseFieldValidation),
 		errors.Is(err, model.ErrInvalidNotionID),

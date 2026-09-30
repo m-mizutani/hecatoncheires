@@ -48,7 +48,7 @@ function memoRow(id: string, title: string, archivedAt: string | null) {
     title,
     fields:
       archivedAt === null
-        ? [{ __typename: 'FieldValue', fieldId: 'severity', value: 'high' }]
+        ? [{ __typename: 'FieldValue', fieldId: 'severity', value: 'high', display: null }]
         : [],
     archivedAt,
     createdAt: '2026-07-13T01:00:00Z',

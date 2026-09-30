@@ -10,6 +10,7 @@ import (
 
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
 	"github.com/secmon-lab/hecatoncheires/pkg/service/slack"
@@ -116,6 +117,9 @@ func renderSummaryFields(c *model.Case, entry *model.WorkspaceEntry) []string {
 }
 
 func renderFieldValue(def config.FieldDefinition, fv model.FieldValue) string {
+	if s, ok := semantic.SlackMrkdwn(def, fv.Value); ok {
+		return s
+	}
 	switch def.Type {
 	case types.FieldTypeSelect:
 		if id, ok := fv.Value.(string); ok {

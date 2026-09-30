@@ -144,6 +144,14 @@ var NewWelcomeRendererForTest = newWelcomeRenderer
 // BuildWelcomeFieldsForTest is exported for testing
 var BuildWelcomeFieldsForTest = buildWelcomeFields
 
+// RenderSummaryFieldsForTest exposes the thread-mode create summary's field
+// lines.
+var RenderSummaryFieldsForTest = renderSummaryFields
+
+// BuildFieldPairSectionsForTest exposes the mention draft preview's field
+// section builder.
+var BuildFieldPairSectionsForTest = buildFieldPairSections
+
 // WelcomeContextForTest is exported for testing
 type WelcomeContextForTest = welcomeContext
 
