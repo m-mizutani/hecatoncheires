@@ -4,7 +4,8 @@ import { useTranslation } from '../../i18n'
 import styles from './FieldValueSupplement.module.css'
 
 // What a field value refers to, as resolved by the server from the field's
-// semantic (FieldValue.display). Either part may be null.
+// semantic (FieldValue.display). A null label means the name could not be
+// resolved.
 export interface FieldValueDisplay {
   label?: string | null
   url?: string | null
@@ -20,13 +21,23 @@ interface Props {
 const stop = (e: MouseEvent) => e.stopPropagation()
 
 // Supplementary line rendered directly under a field value. It never replaces
-// the value; it only adds what the value refers to. It knows nothing about
-// individual semantics: the server decides the label and the link.
+// the value; it only adds the resolved name (e.g. "#general"), or says the
+// name could not be resolved. It knows nothing about individual semantics:
+// the server decides the label and the link.
 export default function FieldValueSupplement({ display, testId = 'field-value-supplement' }: Props) {
   const { t } = useTranslation()
-  const label = display?.label || null
-  const url = display?.url || null
-  if (!label && !url) return null
+  if (!display) return null
+
+  const label = display.label || null
+  const url = display.url || null
+
+  if (!label) {
+    return (
+      <span className={`${styles.supplement} ${styles.error}`} role="status" data-testid={testId}>
+        {t('fieldValueUnresolved')}
+      </span>
+    )
+  }
 
   if (!url) {
     return <span className={styles.supplement} data-testid={testId}>{label}</span>
@@ -42,7 +53,7 @@ export default function FieldValueSupplement({ display, testId = 'field-value-su
         onClick={stop}
         onMouseDown={stop}
       >
-        {label ?? t('fieldValueOpenLink')}
+        {label}
         <IconExt size={10} className={styles.icon} aria-hidden="true" />
       </a>
     </span>

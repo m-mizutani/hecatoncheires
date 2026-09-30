@@ -313,8 +313,10 @@ func withSemantics(fields []*graphql1.FieldValue, defs []config.FieldDefinition)
 	return out
 }
 
-// toGraphQLFieldValueDisplay converts a resolved Display, mapping empty parts
-// to null. nil in, nil out.
+// toGraphQLFieldValueDisplay converts a Display, mapping empty parts to null.
+// An unresolved Display is still returned (with a null label) so the client
+// can tell "the name could not be resolved" apart from "this field has no
+// semantic" (a nil display). nil in, nil out.
 func toGraphQLFieldValueDisplay(d *definition.Display) *graphql1.FieldValueDisplay {
 	if d == nil {
 		return nil
@@ -327,9 +329,6 @@ func toGraphQLFieldValueDisplay(d *definition.Display) *graphql1.FieldValueDispl
 	if d.URL != "" {
 		url := d.URL
 		out.URL = &url
-	}
-	if out.Label == nil && out.URL == nil {
-		return nil
 	}
 	return out
 }

@@ -366,7 +366,7 @@ semantic = "slack_channel_id"
 
 | Semantic | Accepted value | Web UI | Slack messages | Agent prompts |
 |----------|----------------|--------|----------------|---------------|
-| `slack_channel_id` | `C` followed by uppercase letters and digits (e.g. `C0123456789`). An empty value is accepted. A channel name (`#general`), a `<#C...>` mention, and IDs starting with `G` or `D` are rejected | The ID stays as the field value; a line under it shows the channel name linked to `https://slack.com/archives/<ID>`. When the name cannot be resolved (Slack not configured, a private channel the bot is not in, a deleted channel) the line shows only an **Open** link | Rendered as `<#ID>`, so Slack shows the channel name | The field is listed with `semantic=slack_channel_id` and a description of the expected value |
+| `slack_channel_id` | `C` followed by uppercase letters and digits (e.g. `C0123456789`). An empty value is accepted. A channel name (`#general`), a `<#C...>` mention, and IDs starting with `G` or `D` are rejected | The ID stays as the field value; a line under it shows the channel name linked to `https://slack.com/archives/<ID>`. When the name cannot be resolved (Slack not configured, a private channel the bot is not in, a deleted channel, or a stored value that is not a channel ID) the line says so as an error ("Couldn't resolve the name") and carries no link | Rendered as `<#ID>`, so Slack shows the channel name | The field is listed with `semantic=slack_channel_id` and a description of the expected value |
 
 The channel name is looked up with `conversations.info` — the same call the
 Case's own `slackChannelName` uses — so no additional Slack scope is needed.

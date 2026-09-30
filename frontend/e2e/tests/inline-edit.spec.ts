@@ -105,11 +105,11 @@ test.describe('Inline edit — covered field types', () => {
 
 // extra01 defines `notify_channel` as a text field with
 // semantic = "slack_channel_id". The E2E backend has no Slack, so the server
-// resolves no channel name and the supplementary line carries only the link.
+// cannot resolve a channel name and reports every value as unresolved.
 test.describe('Inline edit — text field semantic', () => {
   const SEMANTIC_WORKSPACE_ID = 'extra01';
 
-  test('rejects a channel name, stores a channel ID, and links it under the value', async ({ page }) => {
+  test('rejects a channel name, stores a channel ID, and says its name could not be resolved', async ({ page }) => {
     const caseListPage = new CaseListPage(page);
     const caseFormPage = new CaseFormPage(page);
     const caseDetailPage = new CaseDetailPage(page);
@@ -148,12 +148,36 @@ test.describe('Inline edit — text field semantic', () => {
     const acceptedBody = await (await accepted).json();
     expect(acceptedBody.errors ?? []).toEqual([]);
 
-    // After a reload the value is shown as stored, with the link under it.
+    // After a reload the value is shown as stored. With no Slack the name
+    // cannot be resolved, so the line under it says so and links nowhere.
     await page.reload();
     await caseDetailPage.waitForPageLoad();
     await expect(page.getByTestId('field-notify_channel')).toContainText('C0123ABCD');
-    const supplementLink = page.getByTestId('field-notify_channel-supplement').locator('a');
-    await expect(supplementLink).toHaveAttribute('href', 'https://slack.com/archives/C0123ABCD');
-    await expect(supplementLink).toHaveAttribute('target', '_blank');
+    const supplement = page.getByTestId('field-notify_channel-supplement');
+    await expect(supplement).toContainText("Couldn't resolve the name");
+    await expect(supplement.locator('a')).toHaveCount(0);
+
+    // With a resolved name (the GraphQL display rewritten to what a Slack
+    // workspace would return), the ID stays as the value and the channel
+    // name is shown under it, linked to the channel.
+    await page.route('**/graphql', async (route) => {
+      const body = route.request().postDataJSON?.();
+      if (body?.operationName !== 'GetCase') return route.continue();
+      const response = await route.fetch();
+      const json = await response.json();
+      for (const f of json?.data?.case?.fields ?? []) {
+        if (f.fieldId === 'notify_channel') {
+          f.display = { label: '#general', url: 'https://slack.com/archives/C0123ABCD' };
+        }
+      }
+      await route.fulfill({ response, json });
+    });
+    await page.reload();
+    await caseDetailPage.waitForPageLoad();
+    await expect(page.getByTestId('field-notify_channel')).toContainText('C0123ABCD');
+    const nameLink = supplement.locator('a');
+    await expect(nameLink).toHaveText('#general');
+    await expect(nameLink).toHaveAttribute('href', 'https://slack.com/archives/C0123ABCD');
+    await expect(nameLink).toHaveAttribute('target', '_blank');
   });
 });

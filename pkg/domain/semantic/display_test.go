@@ -28,7 +28,7 @@ func (f *fakeChannelNames) GetChannelNames(_ context.Context, ids []string) (map
 func TestDisplayerResolve(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("label and link for resolved ids, link only otherwise, one deduplicated lookup", func(t *testing.T) {
+	t.Run("resolved ids get label and link, unresolved ids an empty display, one deduplicated lookup", func(t *testing.T) {
 		lookup := &fakeChannelNames{names: map[string]string{"C1": "general"}}
 		d := semantic.NewDisplayer(semantic.Deps{SlackChannelNames: lookup})
 
@@ -36,28 +36,28 @@ func TestDisplayerResolve(t *testing.T) {
 		gt.NoError(t, err).Required()
 		gt.Equal(t, got, map[string]definition.Display{
 			"C1": {Label: "#general", URL: "https://slack.com/archives/C1"},
-			"C2": {Label: "", URL: "https://slack.com/archives/C2"},
+			"C2": {},
 		})
+		gt.Bool(t, got["C1"].Resolved()).True()
+		gt.Bool(t, got["C2"].Resolved()).False()
 		gt.Equal(t, lookup.calls, [][]string{{"C1", "C2"}})
 	})
 
-	t.Run("invalid values never reach the lookup and are absent", func(t *testing.T) {
+	t.Run("a value that does not fit is unresolved and never reaches the lookup", func(t *testing.T) {
 		lookup := &fakeChannelNames{names: map[string]string{}}
 		d := semantic.NewDisplayer(semantic.Deps{SlackChannelNames: lookup})
 
 		got, err := d.Resolve(ctx, types.SemanticSlackChannelID, []string{"#general", ""})
 		gt.NoError(t, err).Required()
-		gt.Equal(t, got, map[string]definition.Display{})
+		gt.Equal(t, got, map[string]definition.Display{"#general": {}})
 		gt.Equal(t, len(lookup.calls), 0)
 	})
 
-	t.Run("without Slack the link is still returned", func(t *testing.T) {
+	t.Run("without Slack every value is unresolved", func(t *testing.T) {
 		d := semantic.NewDisplayer(semantic.Deps{})
 		got, err := d.Resolve(ctx, types.SemanticSlackChannelID, []string{"C1"})
 		gt.NoError(t, err).Required()
-		gt.Equal(t, got, map[string]definition.Display{
-			"C1": {URL: "https://slack.com/archives/C1"},
-		})
+		gt.Equal(t, got, map[string]definition.Display{"C1": {}})
 	})
 
 	t.Run("unknown or empty semantic returns nothing", func(t *testing.T) {

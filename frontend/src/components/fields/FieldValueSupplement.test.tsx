@@ -27,20 +27,19 @@ describe('FieldValueSupplement', () => {
     expect(screen.queryByRole('link')).toBeNull()
   })
 
-  it('shows the generic open link when only the url is known', () => {
-    renderWithI18n(<FieldValueSupplement display={{ label: null, url: URL }} />)
-    const link = screen.getByRole('link')
-    expect(link).toHaveTextContent(en.fieldValueOpenLink)
-    expect(link).toHaveAttribute('href', URL)
+  it('says the name could not be resolved when the label is missing, without a link', () => {
+    renderWithI18n(<FieldValueSupplement display={{ label: null, url: null }} />)
+    expect(screen.getByTestId('field-value-supplement')).toHaveTextContent(en.fieldValueUnresolved)
+    expect(screen.queryByRole('link')).toBeNull()
   })
 
-  it('renders nothing without a display', () => {
+  it('treats an empty label as unresolved', () => {
+    renderWithI18n(<FieldValueSupplement display={{ label: '', url: '' }} />)
+    expect(screen.getByTestId('field-value-supplement')).toHaveTextContent(en.fieldValueUnresolved)
+  })
+
+  it('renders nothing without a display (the field has no semantic)', () => {
     const { container } = renderWithI18n(<FieldValueSupplement display={null} />)
-    expect(container).toBeEmptyDOMElement()
-  })
-
-  it('renders nothing when both parts are empty', () => {
-    const { container } = renderWithI18n(<FieldValueSupplement display={{ label: '', url: '' }} />)
     expect(container).toBeEmptyDOMElement()
   })
 

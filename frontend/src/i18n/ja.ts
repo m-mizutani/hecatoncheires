@@ -718,7 +718,7 @@ export const ja: Messages = {
   // Case reference field
   placeholderSelectCaseRef: 'ケースを選択...',
   caseRefUnavailable: '参照不可 (#{id})',
-  fieldValueOpenLink: '開く',
+  fieldValueUnresolved: '名前を取得できませんでした',
 
   // Home page
   sectionA: '自分の未完了アクション',

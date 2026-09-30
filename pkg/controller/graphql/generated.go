@@ -4081,19 +4081,19 @@ type FieldValue {
   # Value encoded as JSON. Clients parse based on field type from FieldConfiguration.
   value: Any!
   # What the value refers to, resolved from the semantic the field definition
-  # sets. null when the field has no semantic, the value is empty or does not
-  # fit the semantic, or nothing was found. Clients show it alongside value,
-  # not instead of it.
+  # sets. null when the field has no semantic or the value is empty. Clients
+  # show it alongside value, not instead of it.
   display: FieldValueDisplay
 }
 
-# Supplementary information shown under a field value. At least one of label
-# and url is non-null.
+# Supplementary information shown under a field value.
 type FieldValueDisplay {
-  # e.g. "#general" for a slack_channel_id value. null when no label was resolved.
+  # e.g. "#general" for a slack_channel_id value. null when the name could not
+  # be resolved (the service is not configured, the lookup found nothing, or the
+  # value does not fit the semantic); clients show that as an error.
   label: String
   # Page the value refers to, e.g. "https://slack.com/archives/C0123ABCD".
-  # null when the semantic has no page to link to.
+  # Set only together with label.
   url: String
 }
 

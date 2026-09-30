@@ -6224,10 +6224,12 @@ func TestGraphQLHandler_FieldValueDisplay(t *testing.T) {
 			gt.Value(t, fields["note"].Display).Nil()
 		case unnamed.ID:
 			ch := fields["channel"]
+			// The name could not be resolved: a display with a null label
+			// (shown as an error by the client) and no link.
 			gt.Value(t, ch.Value).Equal("C9999ZZZZ")
 			gt.Value(t, ch.Display).NotNil().Required()
 			gt.Value(t, ch.Display.Label).Nil()
-			gt.Value(t, *ch.Display.URL).Equal("https://slack.com/archives/C9999ZZZZ")
+			gt.Value(t, ch.Display.URL).Nil()
 		}
 	}
 	gt.Bool(t, seen[named.ID] && seen[unnamed.ID]).True()

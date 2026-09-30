@@ -31,15 +31,20 @@ type Semantic interface {
 	Link(value string) string
 }
 
-// Display is the supplementary information shown under a field value.
-// Either part may be empty; a Display with both empty is never returned.
+// Display is the supplementary information shown under a field value that
+// carries a semantic. An empty Label means the name could not be resolved
+// (the service is not configured, the lookup found nothing, or the stored
+// value does not fit the semantic); clients show that as an error.
 type Display struct {
-	// Label is what the value refers to, e.g. "#general". Empty when no
-	// label was resolved.
+	// Label is what the value refers to, e.g. "#general".
 	Label string
-	// URL comes from Semantic.Link. Empty when the semantic has no page.
+	// URL comes from Semantic.Link. It is set only together with Label, so
+	// an unresolved value is never linked.
 	URL string
 }
+
+// Resolved reports whether the name behind the value was found.
+func (d Display) Resolved() bool { return d.Label != "" }
 
 // Resolver fetches labels for one semantic. It is the only part of a
 // semantic that reaches an external service, and it does so solely through

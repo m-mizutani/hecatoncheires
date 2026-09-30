@@ -9,6 +9,11 @@
   overflow-wrap: anywhere;
 }
 
+/* The name behind the value could not be resolved. */
+.error {
+  color: var(--danger);
+}
+
 /* Raised above a sibling row-link overlay (Case list cells), so the value
    part of the cell still opens the Case while this link opens its target.
    The two anchors are siblings, never nested. */

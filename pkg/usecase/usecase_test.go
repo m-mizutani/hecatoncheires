@@ -37,13 +37,11 @@ func TestUseCases_ResolveTextDisplays(t *testing.T) {
 		gt.Equal(t, lookedUp, [][]string{{"C0123ABCD"}})
 	})
 
-	t.Run("without Slack only the link is returned", func(t *testing.T) {
+	t.Run("without Slack the value is reported as unresolved", func(t *testing.T) {
 		uc := usecase.New(memory.New(), model.NewWorkspaceRegistry())
 
 		got, err := uc.ResolveTextDisplays(ctx, types.SemanticSlackChannelID, []string{"C0123ABCD"})
 		gt.NoError(t, err).Required()
-		gt.Equal(t, got, map[string]definition.Display{
-			"C0123ABCD": {URL: "https://slack.com/archives/C0123ABCD"},
-		})
+		gt.Equal(t, got, map[string]definition.Display{"C0123ABCD": {}})
 	})
 }

@@ -286,12 +286,13 @@ func TestWithSemantics(t *testing.T) {
 
 func TestToGraphQLFieldValueDisplay(t *testing.T) {
 	gt.Value(t, graphqlctrl.ToGraphQLFieldValueDisplayForTest(nil)).Nil()
-	gt.Value(t, graphqlctrl.ToGraphQLFieldValueDisplayForTest(&definition.Display{})).Nil()
 
-	linkOnly := graphqlctrl.ToGraphQLFieldValueDisplayForTest(&definition.Display{URL: "https://slack.com/archives/C1"})
-	gt.Value(t, linkOnly).NotNil().Required()
-	gt.Value(t, linkOnly.Label).Nil()
-	gt.Value(t, *linkOnly.URL).Equal("https://slack.com/archives/C1")
+	// An unresolved value keeps a display object so the client can show an
+	// error, distinct from a field with no semantic (nil).
+	unresolved := graphqlctrl.ToGraphQLFieldValueDisplayForTest(&definition.Display{})
+	gt.Value(t, unresolved).NotNil().Required()
+	gt.Value(t, unresolved.Label).Nil()
+	gt.Value(t, unresolved.URL).Nil()
 
 	both := graphqlctrl.ToGraphQLFieldValueDisplayForTest(&definition.Display{Label: "#one", URL: "u"})
 	gt.Value(t, both).NotNil().Required()
