@@ -562,6 +562,30 @@ func TestBuildSystemPrompt_FieldSemantic(t *testing.T) {
 
 	gt.String(t, prompt).Contains("- id=`notify_channel` name=\"Notify\" type=text semantic=" + semantic.Label(types.SemanticSlackChannelID))
 	gt.String(t, prompt).Contains("- id=`note` name=\"Note\" type=text\n")
+	gt.Bool(t, strings.Contains(prompt, "## Memo Fields")).False()
+}
+
+// The memo__* tools reach this agent whenever memos are enabled, and their
+// `fields` parameter defers to the system prompt for ids and value shapes.
+func TestBuildSystemPrompt_MemoFields(t *testing.T) {
+	entry := &model.WorkspaceEntry{
+		Workspace: model.Workspace{ID: "ws-test", Name: "Test"},
+		MemoConfig: &config.MemoConfig{
+			Description: "A memo records one observation.",
+			FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+				{ID: "source_channel", Name: "Source", Type: types.FieldTypeText, Required: true, Semantic: types.SemanticSlackChannelID},
+				{ID: "kind", Name: "Kind", Type: types.FieldTypeSelect, Options: []config.FieldOption{{ID: "fact", Name: "Fact"}}},
+			}},
+		},
+	}
+	c := &model.Case{Title: "Test Case", Status: types.CaseStatusOpen}
+	now := time.Date(2026, 5, 4, 12, 30, 45, 0, time.UTC)
+
+	prompt := casebound.BuildSystemPromptForTest(c, entry, "C0123ABC", "", now, nil, nil, nil)
+
+	gt.String(t, prompt).Contains("## Memo Fields\nMemos are this case's persistent memory, written with the `memo__*` tools. A memo records one observation.\n")
+	gt.String(t, prompt).Contains("- id=`source_channel` name=\"Source\" type=text (required) semantic=" + semantic.Label(types.SemanticSlackChannelID) + "\n")
+	gt.String(t, prompt).Contains("- id=`kind` name=\"Kind\" type=select\n  - option id=`fact` name=\"Fact\"\n")
 }
 
 // A turn with no thread must not render a dangling "Thread TS:" label the model

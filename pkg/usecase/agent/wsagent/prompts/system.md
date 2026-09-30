@@ -26,6 +26,18 @@ How this workspace is organised (thread mode):
 - The configured board status ids are: {{ range $i, $s := .BoardStatuses }}{{ if $i }}, {{ end }}{{ $s }}{{ end }}.
 {{- end }}
 {{- end }}
+{{- if .Fields }}
+
+Custom fields of this workspace's cases. Set them through the `fields` parameter
+of case__create_case / case__update_case, using the field id and, for select /
+multi-select, the listed option ids:
+{{- range .Fields }}
+- id=`{{ .ID }}` name="{{ .Name }}" type={{ .Type }}{{ if .Required }} (required){{ end }}{{ if .Description }} — {{ .Description }}{{ end }}{{ if .Semantic }} semantic={{ .Semantic }}{{ end }}
+{{- range .Options }}
+  - option id=`{{ .ID }}`{{ if .Name }} name="{{ .Name }}"{{ end }}{{ if .Description }} — {{ .Description }}{{ end }}
+{{- end }}
+{{- end }}
+{{- end }}
 
 {{ .SlackFormat }}
 {{- if .CustomPrompt }}

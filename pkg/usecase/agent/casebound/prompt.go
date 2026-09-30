@@ -9,6 +9,7 @@ import (
 
 	"github.com/secmon-lab/hecatoncheires/pkg/agent/slackfmt"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
 )
 
@@ -88,15 +89,20 @@ type promptData struct {
 	// because the agent holds slack__get_messages, whose targets take a
 	// (channel_id, ts) pair: without the ts it has to invent one, and the tool
 	// rejects the call or looks up a message that does not exist.
-	ThreadTS      string
-	Now           string
-	Case          *model.Case
-	Fields        []promptField
-	FieldSchema   []promptFieldDef
-	BoardStatuses []promptStatus
-	CurrentAction *promptCurrentAction
-	Actions       []promptAction
-	Messages      []promptMessage
+	ThreadTS    string
+	Now         string
+	Case        *model.Case
+	Fields      []promptField
+	FieldSchema []promptFieldDef
+	// MemoDefinition and MemoFieldSchema describe the workspace's memos. The
+	// memo__* tools reach this agent whenever memos are enabled, and their
+	// `fields` parameter points here for the field ids and value shapes.
+	MemoDefinition  string
+	MemoFieldSchema []promptFieldDef
+	BoardStatuses   []promptStatus
+	CurrentAction   *promptCurrentAction
+	Actions         []promptAction
+	Messages        []promptMessage
 	// SlackFormat is the shared Slack message formatting section
 	// (slackfmt.Section()). This agent's answer is posted to the thread verbatim.
 	SlackFormat string
@@ -135,20 +141,11 @@ func buildSystemPrompt(c *model.Case, entry *model.WorkspaceEntry, channelID, th
 	// Advertise the editable field schema and board statuses so the agent can
 	// drive case__update_case / case__update_case_status with valid ids.
 	if entry != nil && entry.FieldSchema != nil {
-		for _, fd := range entry.FieldSchema.Fields {
-			def := promptFieldDef{
-				ID:          fd.ID,
-				Name:        fd.Name,
-				Type:        string(fd.Type),
-				Required:    fd.Required,
-				Description: fd.Description,
-				Semantic:    semantic.Label(fd.Semantic),
-			}
-			for _, o := range fd.Options {
-				def.Options = append(def.Options, promptFieldOption{ID: o.ID, Name: o.Name, Description: o.Description})
-			}
-			data.FieldSchema = append(data.FieldSchema, def)
-		}
+		data.FieldSchema = promptFieldDefs(entry.FieldSchema.Fields)
+	}
+	if entry != nil && entry.MemoConfig.Enabled() {
+		data.MemoDefinition = entry.MemoConfig.Description
+		data.MemoFieldSchema = promptFieldDefs(entry.MemoConfig.FieldSchema.Fields)
 	}
 	if entry != nil && entry.CaseStatusSet != nil {
 		for _, s := range entry.CaseStatusSet.Statuses() {
@@ -205,4 +202,25 @@ func buildSystemPrompt(c *model.Case, entry *model.WorkspaceEntry, channelID, th
 		return fmt.Sprintf("You are an AI assistant. Case: %s", c.Title)
 	}
 	return buf.String()
+}
+
+// promptFieldDefs lists field definitions for the prompt, with the ids, types,
+// option ids and semantic the agent needs to write a valid value.
+func promptFieldDefs(fields []config.FieldDefinition) []promptFieldDef {
+	defs := make([]promptFieldDef, 0, len(fields))
+	for _, fd := range fields {
+		def := promptFieldDef{
+			ID:          fd.ID,
+			Name:        fd.Name,
+			Type:        string(fd.Type),
+			Required:    fd.Required,
+			Description: fd.Description,
+			Semantic:    semantic.Label(fd.Semantic),
+		}
+		for _, o := range fd.Options {
+			def.Options = append(def.Options, promptFieldOption{ID: o.ID, Name: o.Name, Description: o.Description})
+		}
+		defs = append(defs, def)
+	}
+	return defs
 }

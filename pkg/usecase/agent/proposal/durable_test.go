@@ -755,6 +755,14 @@ func TestDurablePromptCarriesTheSlackFormatting(t *testing.T) {
 	}
 }
 
+// get_workspace returns `semantic` / `semantic_hint` on a text field; the prompt
+// is what tells the planner that those keys constrain the value it writes.
+func TestDurablePromptTellsThePlannerToFollowTheSemanticHint(t *testing.T) {
+	got, err := proposal.RenderDurablePromptForTest([]*model.WorkspaceEntry{draftWorkspace()}, false)
+	gt.NoError(t, err).Required()
+	gt.String(t, got).Contains("- Text fields that `get_workspace` returns with a `semantic` (e.g. `slack_channel_id`): the value MUST have the shape its `semantic_hint` describes")
+}
+
 // The planner is shown the requester's accessible workspaces, not the whole
 // registry: a workspace the requester may not access must not be offered.
 func TestDurablePromptListsOnlyTheRequestersWorkspaces(t *testing.T) {

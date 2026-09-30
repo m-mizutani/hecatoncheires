@@ -368,6 +368,12 @@ semantic = "slack_channel_id"
 |----------|----------------|--------|----------------|---------------|
 | `slack_channel_id` | `C` or `G` followed by uppercase letters and digits (e.g. `C0123456789`). `C` is a public channel or a private channel created since March 2021; `G` is an older private channel or a multi-person DM ([Slack docs](https://docs.slack.dev/apis/web-api/using-the-conversations-api/)). An empty value is accepted. A channel name (`#general`), a `<#C...>` mention, and a direct-message ID starting with `D` are rejected. Slack may change a `G` ID to `C` when the channel is shared with another organization; update the stored value if that happens | The ID stays as the field value; a line under it shows the channel name linked to `https://slack.com/archives/<ID>`. When the name cannot be resolved (Slack not configured, a private channel the bot is not in, a deleted channel, or a stored value that is not a channel ID) the line says so as an error ("Couldn't resolve the name") and carries no link | Rendered as `<#ID>`, so Slack shows the channel name | The field is listed with `semantic=slack_channel_id` and a description of the expected value |
 
+Every agent that can write a field value is told the field's semantic and the
+expected value shape: the thread-mode case agent, the case-channel agent (Case
+and memo fields), the workspace-channel agent, the Job agent (Case and memo
+fields) and the case-draft agent (through `get_workspace`). The read-only MCP
+tool `hecaton_list_workspaces` also returns it in the field schema.
+
 The channel name is looked up with `conversations.info` — the same call the
 Case's own `slackChannelName` uses — so no additional Slack scope is needed.
 

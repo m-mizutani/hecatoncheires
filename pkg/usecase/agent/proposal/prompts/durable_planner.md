@@ -102,6 +102,7 @@ For every genuine, real-world case leave it false. When in any doubt, leave it f
 - Title: about 80 characters or fewer (multibyte characters count as one). A noun phrase that fits one line. No leading verb, no trailing ellipsis.
 - Description: Markdown is fine, but never exceed 2,000 characters. Summarise; do not paste raw log lines or whole transcripts. When the source is longer, distil the key facts and link to the original thread or ticket.
 - Text field values: a few hundred characters at most.
+- Text fields that `get_workspace` returns with a `semantic` (e.g. `slack_channel_id`): the value MUST have the shape its `semantic_hint` describes — for a Slack channel ID, the ID itself, never a channel name or a `<#…>` mention. A value of the wrong shape is rejected when the case is created. If you cannot determine it, leave the field empty.
 - User-type fields (`user` / `multi_user`): the value MUST be a real Slack user id — uppercase, starting with `U` or `W`, e.g. `U01ABCDEF23`. Never a display name, an email, mention syntax (`<@U…>`), or a guess. If you cannot determine the id, leave the field empty even when it is required, and let the human pick the user in the review modal.
 
 Required fields you cannot infer may be left out — the review UI blocks submit until the user fills them. Do not fabricate a value to satisfy "required".
