@@ -43,9 +43,6 @@ type Display struct {
 	URL string
 }
 
-// Resolved reports whether the name behind the value was found.
-func (d Display) Resolved() bool { return d.Label != "" }
-
 // Resolver fetches labels for one semantic. It is the only part of a
 // semantic that reaches an external service, and it does so solely through
 // an interface the semantic's package declares and the caller injects.

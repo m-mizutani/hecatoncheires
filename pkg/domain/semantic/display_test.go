@@ -38,8 +38,6 @@ func TestDisplayerResolve(t *testing.T) {
 			"C1": {Label: "#general", URL: "https://slack.com/archives/C1"},
 			"C2": {},
 		})
-		gt.Bool(t, got["C1"].Resolved()).True()
-		gt.Bool(t, got["C2"].Resolved()).False()
 		gt.Equal(t, lookup.calls, [][]string{{"C1", "C2"}})
 	})
 
