@@ -29,6 +29,9 @@ do not assume any other value for "now".
 {{- if .Semantic }}
     semantic: {{ .Semantic }}
 {{- end }}
+{{- if .Pattern }}
+    pattern: {{ .Pattern }}
+{{- end }}
 {{- if .Options }}
     options:
 {{- range .Options }}
@@ -161,6 +164,9 @@ round trip each, and every round trip re-sends this whole conversation.
 {{- end }}
 {{- if .Semantic }}
     semantic: {{ .Semantic }}
+{{- end }}
+{{- if .Pattern }}
+    pattern: {{ .Pattern }}
 {{- end }}
 {{- if .Options }}
     options:

@@ -70,7 +70,10 @@ type promptFieldDef struct {
 	// Semantic is "<semantic id> — <hint>" for a text field that sets one,
 	// empty otherwise.
 	Semantic string
-	Options  []promptFieldOption
+	// Pattern is "`<pattern>` — <hint>" for a text field that sets
+	// validation.pattern, empty otherwise.
+	Pattern string
+	Options []promptFieldOption
 }
 
 // promptStatus is one board status id the agent may move the case to via
@@ -205,7 +208,7 @@ func buildSystemPrompt(c *model.Case, entry *model.WorkspaceEntry, channelID, th
 }
 
 // promptFieldDefs lists field definitions for the prompt, with the ids, types,
-// option ids and semantic the agent needs to write a valid value.
+// option ids, semantic and pattern the agent needs to write a valid value.
 func promptFieldDefs(fields []config.FieldDefinition) []promptFieldDef {
 	defs := make([]promptFieldDef, 0, len(fields))
 	for _, fd := range fields {
@@ -216,6 +219,7 @@ func promptFieldDefs(fields []config.FieldDefinition) []promptFieldDef {
 			Required:    fd.Required,
 			Description: fd.Description,
 			Semantic:    semantic.Label(fd.Semantic),
+			Pattern:     fd.Validation.Pattern.Label(),
 		}
 		for _, o := range fd.Options {
 			def.Options = append(def.Options, promptFieldOption{ID: o.ID, Name: o.Name, Description: o.Description})

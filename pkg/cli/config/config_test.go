@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
 	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
@@ -585,6 +586,26 @@ reference_workspace = "absent"
 	})
 	gt.Value(t, err).NotNil()
 	gt.Error(t, err).Is(config.ErrUnknownReferenceWorkspace)
+}
+
+func TestParseWorkspaceConfigs_InvalidPattern(t *testing.T) {
+	_, err := config.ParseWorkspaceConfigs([]config.WorkspaceConfigSource{
+		{
+			Name: "risk.toml",
+			Data: []byte(`
+[workspace]
+id = "risk"
+name = "Risk"
+
+[[fields]]
+id = "code"
+name = "Code"
+type = "text"
+validation = { pattern = '[a-' }
+`),
+		},
+	})
+	gt.Error(t, err).Is(config.ErrInvalidPattern)
 }
 
 // TestParseWorkspaceConfigs_PromptFileNotReadWithoutBaseDir pins that a document
@@ -2115,6 +2136,291 @@ semantic = "slack_channel_id"
 	fields := cfgs[0].MemoConfig.FieldSchema.Fields
 	gt.Array(t, fields).Length(1).Required()
 	gt.Value(t, fields[0].Semantic).Equal(types.SemanticSlackChannelID)
+}
+
+func TestFieldDefinition_Validate_Pattern(t *testing.T) {
+	load := func(t *testing.T, content string) (*domainConfig.FieldSchema, error) {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "ws.toml")
+		gt.NoError(t, os.WriteFile(path, []byte(content), 0644)).Required()
+		return config.LoadFieldSchema(path)
+	}
+	patternOf := func(t *testing.T, content string) types.TextPattern {
+		t.Helper()
+		schema, err := load(t, content)
+		gt.NoError(t, err).Required()
+		gt.Array(t, schema.Fields).Length(1).Required()
+		return schema.Fields[0].Validation.Pattern
+	}
+
+	t.Run("inline table reaches the domain schema", func(t *testing.T) {
+		got := patternOf(t, `
+[[fields]]
+id = "channel"
+name = "Channel"
+type = "text"
+validation = { pattern = '^C[0-9]+$' }
+`)
+		gt.Value(t, got).Equal(types.TextPattern("^C[0-9]+$"))
+	})
+
+	t.Run("no validation table means no pattern", func(t *testing.T) {
+		got := patternOf(t, `
+[[fields]]
+id = "note"
+name = "Note"
+type = "text"
+`)
+		gt.Value(t, got).Equal(types.TextPattern(""))
+	})
+
+	t.Run("empty validation table means no pattern", func(t *testing.T) {
+		got := patternOf(t, `
+[[fields]]
+id = "note"
+name = "Note"
+type = "text"
+validation = {}
+`)
+		gt.Value(t, got).Equal(types.TextPattern(""))
+	})
+
+	t.Run("multi-line inline table with a trailing comma reads the same", func(t *testing.T) {
+		got := patternOf(t, `
+[[fields]]
+id = "ticket_id"
+name = "Ticket ID"
+type = "text"
+validation = {
+  pattern = '[A-Z]{2,5}-[0-9]+',
+}
+`)
+		gt.Value(t, got).Equal(types.TextPattern("[A-Z]{2,5}-[0-9]+"))
+	})
+
+	t.Run("sub-table form attaches to the preceding field", func(t *testing.T) {
+		schema, err := load(t, `
+[[fields]]
+id = "first"
+name = "First"
+type = "text"
+
+[[fields]]
+id = "ticket_id"
+name = "Ticket ID"
+type = "text"
+
+[fields.validation]
+pattern = '[A-Z]{2,5}-[0-9]+'
+`)
+		gt.NoError(t, err).Required()
+		gt.Array(t, schema.Fields).Length(2).Required()
+		gt.Value(t, schema.Fields[0].Validation.Pattern).Equal(types.TextPattern(""))
+		gt.Value(t, schema.Fields[1].Validation.Pattern).Equal(types.TextPattern("[A-Z]{2,5}-[0-9]+"))
+	})
+
+	t.Run("unknown key inside validation is ignored", func(t *testing.T) {
+		got := patternOf(t, `
+[[fields]]
+id = "summary"
+name = "Summary"
+type = "text"
+validation = { max_length = 120 }
+`)
+		gt.Value(t, got).Equal(types.TextPattern(""))
+	})
+
+	for _, typ := range []string{"number", "markdown", "url"} {
+		t.Run("pattern on "+typ+" is rejected", func(t *testing.T) {
+			_, err := load(t, `
+[[fields]]
+id = "score"
+name = "Score"
+type = "`+typ+`"
+validation = { pattern = '[0-9]+' }
+`)
+			gt.Error(t, err).Is(config.ErrUnexpectedPattern)
+		})
+	}
+
+	t.Run("pattern that does not compile is rejected with the field and pattern", func(t *testing.T) {
+		_, err := load(t, `
+[[fields]]
+id = "code"
+name = "Code"
+type = "text"
+validation = { pattern = '[a-' }
+`)
+		gt.Error(t, err).Is(config.ErrInvalidPattern)
+		values := goerr.Values(err)
+		gt.Value(t, values[config.FieldIDKey]).Equal("code")
+		gt.Value(t, values[config.PatternKey]).Equal("[a-")
+		// The message alone must name them: POST /api/validate/db returns only it.
+		gt.String(t, err.Error()).Contains(`field "code": validation.pattern "[a-" must be a valid Go RE2 regular expression: missing closing ]`)
+	})
+
+	t.Run("unbalanced pattern that would close the anchoring group is rejected", func(t *testing.T) {
+		_, err := load(t, `
+[[fields]]
+id = "code"
+name = "Code"
+type = "text"
+validation = { pattern = 'a)|(.*' }
+`)
+		gt.Error(t, err).Is(config.ErrInvalidPattern)
+	})
+
+	t.Run("pattern on a non-text type names the field and the type", func(t *testing.T) {
+		_, err := load(t, `
+[[fields]]
+id = "score"
+name = "Score"
+type = "number"
+validation = { pattern = '[0-9]+' }
+`)
+		gt.Error(t, err).Is(config.ErrUnexpectedPattern)
+		gt.String(t, err.Error()).Contains(`field "score": validation.pattern is only valid for text fields, not number`)
+	})
+
+	t.Run("semantic and pattern together are accepted", func(t *testing.T) {
+		schema, err := load(t, `
+[[fields]]
+id = "notify_channel"
+name = "Notification channel"
+type = "text"
+semantic = "slack_channel_id"
+validation = { pattern = 'C[0-9A-Z]+' }
+`)
+		gt.NoError(t, err).Required()
+		gt.Value(t, schema.Fields[0].Semantic).Equal(types.SemanticSlackChannelID)
+		gt.Value(t, schema.Fields[0].Validation.Pattern).Equal(types.TextPattern("C[0-9A-Z]+"))
+	})
+
+	t.Run("literal string keeps the backslash", func(t *testing.T) {
+		got := patternOf(t, `
+[[fields]]
+id = "incident"
+name = "Incident"
+type = "text"
+validation = { pattern = 'INC-\d+' }
+`)
+		ok, err := got.Match("INC-42")
+		gt.NoError(t, err).Required()
+		gt.Bool(t, ok).True()
+		ok, err = got.Match("INC-x")
+		gt.NoError(t, err).Required()
+		gt.Bool(t, ok).False()
+	})
+
+	t.Run("escaped basic string reads the same as the literal string", func(t *testing.T) {
+		got := patternOf(t, `
+[[fields]]
+id = "incident"
+name = "Incident"
+type = "text"
+validation = { pattern = "INC-\\d+" }
+`)
+		gt.Value(t, got).Equal(types.TextPattern(`INC-\d+`))
+	})
+}
+
+// TestLoadWorkspaceConfigs_PatternExamples loads the examples
+// docs/configuration.md shows for validation.pattern, so the documentation
+// cannot drift from what the loader accepts.
+func TestLoadWorkspaceConfigs_PatternExamples(t *testing.T) {
+	load := func(t *testing.T, body string) ([]*config.WorkspaceConfig, error) {
+		t.Helper()
+		content := `
+[workspace]
+id = "risk"
+name = "Risk"
+` + body
+		path := filepath.Join(t.TempDir(), "risk.toml")
+		gt.NoError(t, os.WriteFile(path, []byte(content), 0644)).Required()
+		return config.LoadWorkspaceConfigs([]string{path})
+	}
+
+	t.Run("example 1: case field", func(t *testing.T) {
+		cfgs, err := load(t, `
+[[fields]]
+id = "ticket_id"
+name = "Ticket ID"
+type = "text"
+description = "Ticket ID in the external tracker, e.g. SEC-1234"
+validation = { pattern = '[A-Z]{2,5}-[0-9]+' }
+`)
+		gt.NoError(t, err).Required()
+		gt.Value(t, cfgs[0].FieldSchema.Fields[0].Validation.Pattern).Equal(types.TextPattern("[A-Z]{2,5}-[0-9]+"))
+	})
+
+	t.Run("example 2: memo field", func(t *testing.T) {
+		cfgs, err := load(t, `
+[memo]
+description = "Memo"
+
+[[memo.fields]]
+id = "cve"
+name = "CVE"
+type = "text"
+description = "CVE identifier this memo is about"
+validation = { pattern = 'CVE-[0-9]{4}-[0-9]{4,}' }
+`)
+		gt.NoError(t, err).Required()
+		fields := cfgs[0].MemoConfig.FieldSchema.Fields
+		gt.Array(t, fields).Length(1).Required()
+		gt.Value(t, fields[0].Validation.Pattern).Equal(types.TextPattern("CVE-[0-9]{4}-[0-9]{4,}"))
+	})
+
+	t.Run("example 3: semantic and pattern", func(t *testing.T) {
+		cfgs, err := load(t, `
+[[fields]]
+id = "notify_channel"
+name = "Notification channel"
+type = "text"
+semantic = "slack_channel_id"
+validation = { pattern = 'C[0-9A-Z]+' }
+`)
+		gt.NoError(t, err).Required()
+		f := cfgs[0].FieldSchema.Fields[0]
+		gt.Value(t, f.Semantic).Equal(types.SemanticSlackChannelID)
+		gt.Value(t, f.Validation.Pattern).Equal(types.TextPattern("C[0-9A-Z]+"))
+	})
+
+	t.Run("example 5: pattern on a number field", func(t *testing.T) {
+		_, err := load(t, `
+[[fields]]
+id = "score"
+name = "Score"
+type = "number"
+validation = { pattern = '[0-9]+' }
+`)
+		gt.Error(t, err).Is(config.ErrUnexpectedPattern)
+	})
+
+	t.Run("example 5: backreference is not RE2", func(t *testing.T) {
+		_, err := load(t, `
+[[fields]]
+id = "code"
+name = "Code"
+type = "text"
+validation = { pattern = '(a)\1' }
+`)
+		gt.Error(t, err).Is(config.ErrInvalidPattern)
+	})
+
+	t.Run("pattern in a memo field is validated too", func(t *testing.T) {
+		_, err := load(t, `
+[memo]
+description = "Memo"
+
+[[memo.fields]]
+id = "cve"
+name = "CVE"
+type = "text"
+validation = { pattern = '[a-' }
+`)
+		gt.Error(t, err).Is(config.ErrInvalidPattern)
+	})
 }
 
 func TestFieldDefinition_Validate_CaseRef(t *testing.T) {

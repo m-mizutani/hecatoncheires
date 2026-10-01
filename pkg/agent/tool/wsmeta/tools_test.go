@@ -298,6 +298,31 @@ func TestGetWorkspace_FieldSemantic(t *testing.T) {
 	gt.Bool(t, hasHint).False()
 }
 
+func TestGetWorkspace_FieldPattern(t *testing.T) {
+	ticket := types.TextPattern("[A-Z]{2,5}-[0-9]+")
+	r := model.NewWorkspaceRegistry()
+	r.Register(&model.WorkspaceEntry{
+		Workspace: model.Workspace{ID: "ws", Name: "WS"},
+		FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+			{ID: "ticket_id", Name: "Ticket ID", Type: types.FieldTypeText, Validation: config.FieldValidation{Pattern: ticket}},
+			{ID: "note", Name: "Note", Type: types.FieldTypeText},
+		}},
+	})
+
+	tools := wsmeta.New(wsmeta.Deps{Registry: r})
+	out, err := tools[1].Run(context.Background(), map[string]any{"workspace_id": "ws"})
+	gt.NoError(t, err).Required()
+
+	fields := out["fields"].([]map[string]any)
+	gt.Array(t, fields).Length(2).Required()
+	gt.Value(t, fields[0]["pattern"]).Equal("[A-Z]{2,5}-[0-9]+")
+	gt.Value(t, fields[0]["pattern_hint"]).Equal(ticket.PromptHint())
+	_, hasPattern := fields[1]["pattern"]
+	gt.Bool(t, hasPattern).False()
+	_, hasHint := fields[1]["pattern_hint"]
+	gt.Bool(t, hasHint).False()
+}
+
 func TestGetWorkspace_NoSourceRepoReturnsEmptySources(t *testing.T) {
 	tools := wsmeta.New(wsmeta.Deps{Registry: fixtureRegistry()})
 	out, err := tools[1].Run(context.Background(), map[string]any{"workspace_id": "ws-sec"})

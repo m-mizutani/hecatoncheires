@@ -64,7 +64,8 @@ func newMCPTestEnv(t *testing.T, policy *fakePolicy) *mcpTestEnv {
 		Workspace:       model.Workspace{ID: testWorkspaceID, Name: "Test Workspace", Description: "for MCP tests"},
 		ActionStatusSet: model.DefaultActionStatusSet(),
 		FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
-			{ID: "channel", Name: "Channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID},
+			{ID: "channel", Name: "Channel", Type: types.FieldTypeText, Semantic: types.SemanticSlackChannelID,
+				Validation: config.FieldValidation{Pattern: "C[0-9A-Z]+"}},
 			{ID: "note", Name: "Note", Type: types.FieldTypeText},
 		}},
 	})
@@ -174,6 +175,29 @@ func TestMCP_ListWorkspaces_FieldSemantic(t *testing.T) {
 	_, hasSemantic := fields[1]["semantic"]
 	gt.Bool(t, hasSemantic).False()
 	_, hasHint := fields[1]["semantic_hint"]
+	gt.Bool(t, hasHint).False()
+}
+
+func TestMCP_ListWorkspaces_FieldPattern(t *testing.T) {
+	env := newMCPTestEnv(t, allowAsMember())
+	res := env.callTool(t, "hecaton_list_workspaces", map[string]any{})
+	gt.Bool(t, res.IsError).False()
+
+	var out struct {
+		Workspaces []struct {
+			FieldSchema []map[string]any `json:"field_schema"`
+		} `json:"workspaces"`
+	}
+	decodeStructured(t, res, &out)
+	gt.Array(t, out.Workspaces).Length(1).Required()
+	fields := out.Workspaces[0].FieldSchema
+	gt.Array(t, fields).Length(2).Required()
+	gt.Value(t, fields[0]["id"]).Equal("channel")
+	gt.Value(t, fields[0]["pattern"]).Equal("C[0-9A-Z]+")
+	gt.Value(t, fields[0]["pattern_hint"]).Equal(types.TextPattern("C[0-9A-Z]+").PromptHint())
+	_, hasPattern := fields[1]["pattern"]
+	gt.Bool(t, hasPattern).False()
+	_, hasHint := fields[1]["pattern_hint"]
 	gt.Bool(t, hasHint).False()
 }
 

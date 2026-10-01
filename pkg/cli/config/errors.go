@@ -171,6 +171,12 @@ var (
 	// ErrUnknownSemantic is returned when a field names a semantic that the
 	// catalog (pkg/domain/semantic) does not define.
 	ErrUnknownSemantic = goerr.New("unknown semantic")
+	// ErrUnexpectedPattern is returned when a field sets validation.pattern on
+	// a type other than text.
+	ErrUnexpectedPattern = goerr.New("validation.pattern is only valid for text fields")
+	// ErrInvalidPattern is returned when a field's validation.pattern is not a
+	// valid Go RE2 regular expression.
+	ErrInvalidPattern = goerr.New("invalid validation.pattern")
 )
 
 // Context keys for error values
@@ -179,6 +185,7 @@ const (
 	FieldIDKey          = "field_id"
 	FieldTypeKey        = "field_type"
 	SemanticKey         = "semantic"
+	PatternKey          = "pattern"
 	OptionIDKey         = "option_id"
 	FieldIndexKey       = "field_index"
 	OptionIndexKey      = "option_index"

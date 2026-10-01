@@ -94,6 +94,21 @@ func TestBuildSystemPrompt_FieldSemantic(t *testing.T) {
 	gt.String(t, prompt).Contains("- Note (id=note, type=text)\n")
 }
 
+func TestBuildSystemPrompt_FieldPattern(t *testing.T) {
+	ticket := types.TextPattern("[A-Z]{2,5}-[0-9]+")
+	ws := newThreadWorkspace()
+	ws.FieldSchema = &config.FieldSchema{Fields: []config.FieldDefinition{
+		{ID: "ticket_id", Name: "Ticket ID", Type: types.FieldTypeText, Validation: config.FieldValidation{Pattern: ticket}},
+		{ID: "note", Name: "Note", Type: types.FieldTypeText},
+	}}
+
+	for _, mode := range []threadcase.Mode{threadcase.ModeCreate, threadcase.ModeMention} {
+		prompt := threadcase.BuildSystemPromptForTest(newThreadCase(), ws, mode, "")
+		gt.String(t, prompt).Contains("- Ticket ID (id=ticket_id, type=text) pattern=" + ticket.Label() + "\n")
+		gt.String(t, prompt).Contains("- Note (id=note, type=text)\n")
+	}
+}
+
 // A mention turn advertises the full case writer set, so the prompt must name
 // every tool the sub-agents actually get — a prompt that omits one drives the
 // model to tell the user it lacks the capability (the reported failure was a

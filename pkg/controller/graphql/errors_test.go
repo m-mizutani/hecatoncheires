@@ -44,6 +44,7 @@ func TestErrorCode(t *testing.T) {
 		{"invalid argument", goerr.Wrap(usecase.ErrInvalidArgument, "x"), gqlctrl.ErrCodeBadUserInput},
 		{"missing required (model)", goerr.Wrap(model.ErrMissingRequired, "x"), gqlctrl.ErrCodeBadUserInput},
 		{"value breaks the field semantic", goerr.Wrap(semantic.ErrInvalidValue, "x"), gqlctrl.ErrCodeBadUserInput},
+		{"value breaks the field pattern", goerr.Wrap(model.ErrTextPatternMismatch, "x"), gqlctrl.ErrCodeBadUserInput},
 		{"workspace not found", goerr.Wrap(model.ErrWorkspaceNotFound, "x"), gqlctrl.ErrCodeNotFound},
 		{"action comment not found", goerr.Wrap(usecase.ErrActionCommentNotFound, "x"), gqlctrl.ErrCodeNotFound},
 		// The knowledge write path's rejections. Classifying them is what keeps
@@ -141,6 +142,7 @@ func TestIsClientError(t *testing.T) {
 		{"activation failed → server", goerr.Wrap(usecase.ErrActivationFailed, "x"), false},
 		{"unknown tag id → client", goerr.Wrap(usecase.ErrUnknownTag, "x"), true},
 		{"tag still referenced → client", goerr.Wrap(usecase.ErrTagInUse, "x"), true},
+		{"field pattern mismatch → client", goerr.Wrap(model.ErrTextPatternMismatch, "x"), true},
 		{"random → server", goerr.New("boom"), false},
 	}
 	for _, c := range cases {

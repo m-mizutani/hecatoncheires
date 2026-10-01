@@ -26,6 +26,18 @@ type FieldDefinition struct {
 	// Semantic is how a text field's value is interpreted (e.g. as a Slack
 	// channel ID). Only meaningful for the text type; empty means free text.
 	Semantic types.Semantic
+	// Validation holds the constraints on the shape of the field's value.
+	// The zero value imposes no constraint.
+	Validation FieldValidation
+}
+
+// FieldValidation groups the constraints on the shape of a field's value,
+// mirroring the [fields.validation] table in the workspace config. Pattern
+// is its only member for now; length bounds belong here when added.
+type FieldValidation struct {
+	// Pattern is a regular expression the whole value must match. Only
+	// meaningful for the text type.
+	Pattern types.TextPattern
 }
 
 // EntityLabels holds display labels for entities

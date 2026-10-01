@@ -23,7 +23,7 @@ You CANNOT create or manage Actions and you CANNOT create drafts — this is a t
 {{ end -}}
 {{ if .Fields -}}
 # Custom field schema (for materialize / create)
-{{ range .Fields }}- {{ .Name }} (id={{ .ID }}, type={{ .Type }}){{ if .Required }} (required){{ end }}{{ if .Description }} description={{ printf "%q" .Description }}{{ end }}{{ if .Options }} options=[{{ .Options }}]{{ end }}{{ if .IsDate }} format=RFC3339 (e.g. 2026-07-14T00:00:00Z){{ end }}{{ if .SemanticHint }} semantic={{ .Semantic }} ({{ .SemanticHint }}){{ end }}
+{{ range .Fields }}- {{ .Name }} (id={{ .ID }}, type={{ .Type }}){{ if .Required }} (required){{ end }}{{ if .Description }} description={{ printf "%q" .Description }}{{ end }}{{ if .Options }} options=[{{ .Options }}]{{ end }}{{ if .IsDate }} format=RFC3339 (e.g. 2026-07-14T00:00:00Z){{ end }}{{ if .SemanticHint }} semantic={{ .Semantic }} ({{ .SemanticHint }}){{ end }}{{ if .Pattern }} pattern={{ .Pattern }}{{ end }}
 {{ end }}
 {{ end -}}
 {{ if .ClosedStatusIDs -}}

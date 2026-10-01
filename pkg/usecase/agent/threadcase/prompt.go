@@ -91,6 +91,9 @@ type systemPromptField struct {
 	// front, since the validator rejects a value that does not fit.
 	Semantic     string
 	SemanticHint string
+	// Pattern is "`<pattern>` — <hint>" for a text field that sets
+	// validation.pattern, empty otherwise.
+	Pattern string
 }
 
 // userInputTemplateInput is the data prompts/user_input.md renders.
@@ -167,6 +170,7 @@ func buildSystemPrompt(c *model.Case, ws *model.WorkspaceEntry, mode Mode, creat
 				IsDate:       f.Type == types.FieldTypeDate,
 				Semantic:     string(f.Semantic),
 				SemanticHint: semantic.PromptHint(f.Semantic),
+				Pattern:      f.Validation.Pattern.Label(),
 			})
 		}
 	}

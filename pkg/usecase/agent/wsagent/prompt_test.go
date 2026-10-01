@@ -196,6 +196,19 @@ func TestBuildSystemPrompt_Fields(t *testing.T) {
 		gt.String(t, out).Contains("- id=`note` name=\"Note\" type=text\n")
 	})
 
+	t.Run("RendersPattern", func(t *testing.T) {
+		ticket := types.TextPattern("[A-Z]{2,5}-[0-9]+")
+		ws := newWsWorkspace()
+		ws.FieldSchema = &config.FieldSchema{Fields: []config.FieldDefinition{
+			{ID: "ticket_id", Name: "Ticket ID", Type: types.FieldTypeText, Validation: config.FieldValidation{Pattern: ticket}},
+			{ID: "note", Name: "Note", Type: types.FieldTypeText},
+		}}
+		out, err := wsagent.BuildSystemPromptForTest(ws)
+		gt.NoError(t, err).Required()
+		gt.String(t, out).Contains("- id=`ticket_id` name=\"Ticket ID\" type=text pattern=" + ticket.Label() + "\n")
+		gt.String(t, out).Contains("- id=`note` name=\"Note\" type=text\n")
+	})
+
 	t.Run("NoSchemaOmitsTheSection", func(t *testing.T) {
 		ws := newWsWorkspace()
 		ws.FieldSchema = nil

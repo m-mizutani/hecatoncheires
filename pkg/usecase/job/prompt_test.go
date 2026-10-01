@@ -530,6 +530,35 @@ func TestBuildSystemPrompt_FieldSemantic(t *testing.T) {
 	mustNotContain(t, got, "  - note (text): Note\n    semantic:")
 }
 
+func TestBuildSystemPrompt_FieldPattern(t *testing.T) {
+	ticket := types.TextPattern("[A-Z]{2,5}-[0-9]+")
+	cve := types.TextPattern("CVE-[0-9]{4}-[0-9]{4,}")
+	ws := newWorkspace("ws", "WS")
+	ws.FieldSchema = &config.FieldSchema{Fields: []config.FieldDefinition{
+		{ID: "ticket_id", Name: "Ticket ID", Type: types.FieldTypeText, Validation: config.FieldValidation{Pattern: ticket}},
+		{ID: "note", Name: "Note", Type: types.FieldTypeText},
+	}}
+	ws.MemoConfig = &config.MemoConfig{
+		Description: "memo",
+		FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+			{ID: "cve", Name: "CVE", Type: types.FieldTypeText, Validation: config.FieldValidation{Pattern: cve}},
+		}},
+	}
+	j := &model.Job{ID: "j", Prompt: "do it", Events: model.JobEvents{
+		Case: &model.CaseEventConfig{On: []model.CaseLifecycle{model.CaseLifecycleCreated}},
+	}}
+	got, err := job.BuildSystemPrompt(job.PromptInputs{
+		Job: j, Workspace: ws, Case: newCase(1),
+		Event: job.Event{Domain: model.JobEventDomainCase, WorkspaceID: "ws", CaseID: 1, CaseLifecycle: model.CaseLifecycleCreated},
+	})
+	gt.NoError(t, err).Required()
+
+	mustContain(t, got, "  - ticket_id (text): Ticket ID\n    pattern: "+ticket.Label())
+	mustContain(t, got, "  - cve (text): CVE\n    pattern: "+cve.Label())
+	// A text field without a pattern renders no pattern line.
+	mustNotContain(t, got, "  - note (text): Note\n    pattern:")
+}
+
 func mustContain(t *testing.T, s, sub string) {
 	t.Helper()
 	if !strings.Contains(s, sub) {

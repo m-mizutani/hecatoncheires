@@ -1,9 +1,12 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"regexp/syntax"
 	"strings"
 	"text/template"
 
@@ -338,14 +341,22 @@ func (o *FieldOption) Validate(fieldID string) error {
 
 // FieldDefinition represents a custom field definition
 type FieldDefinition struct {
-	ID                 string        `toml:"id"`
-	Name               string        `toml:"name"`
-	Type               string        `toml:"type"`
-	Required           bool          `toml:"required"`
-	Description        string        `toml:"description"`
-	Options            []FieldOption `toml:"options"`
-	ReferenceWorkspace string        `toml:"reference_workspace"`
-	Semantic           string        `toml:"semantic"`
+	ID                 string          `toml:"id"`
+	Name               string          `toml:"name"`
+	Type               string          `toml:"type"`
+	Required           bool            `toml:"required"`
+	Description        string          `toml:"description"`
+	Options            []FieldOption   `toml:"options"`
+	ReferenceWorkspace string          `toml:"reference_workspace"`
+	Semantic           string          `toml:"semantic"`
+	Validation         FieldValidation `toml:"validation"`
+}
+
+// FieldValidation is the [fields.validation] table: constraints on the shape
+// of a field's value. Unknown keys inside it are ignored, as everywhere else
+// in the workspace config.
+type FieldValidation struct {
+	Pattern string `toml:"pattern"`
 }
 
 // Validate checks if the FieldDefinition is valid
@@ -435,6 +446,34 @@ func (f *FieldDefinition) Validate() error {
 			return goerr.Wrap(ErrUnknownSemantic, "semantic must be one of the defined semantics",
 				goerr.V(FieldIDKey, f.ID),
 				goerr.V(SemanticKey, f.Semantic))
+		}
+	}
+
+	// The field id, the pattern and the RE2 reason are written into the message
+	// rather than only attached as values: POST /api/validate/db answers with
+	// err.Error() alone, and an operator who pasted a config needs to know
+	// which pattern to fix.
+	if p := f.Validation.Pattern; p != "" {
+		if fieldType != types.FieldTypeText {
+			return goerr.Wrap(ErrUnexpectedPattern,
+				fmt.Sprintf("field %q: validation.pattern is only valid for text fields, not %s", f.ID, f.Type),
+				goerr.V(FieldIDKey, f.ID),
+				goerr.V(FieldTypeKey, f.Type),
+				goerr.V(PatternKey, p))
+		}
+		if _, err := types.TextPattern(p).Compile(); err != nil {
+			reason := err.Error()
+			var syntaxErr *syntax.Error
+			if errors.As(err, &syntaxErr) {
+				// The compiled form is anchored (^(?:p)$), so the parser's own
+				// message would quote an expression the operator never wrote.
+				reason = syntaxErr.Code.String()
+			}
+			return goerr.Wrap(ErrInvalidPattern,
+				fmt.Sprintf("field %q: validation.pattern %q must be a valid Go RE2 regular expression: %s", f.ID, p, reason),
+				goerr.V(FieldIDKey, f.ID),
+				goerr.V(PatternKey, p),
+				goerr.V("cause", err.Error()))
 		}
 	}
 
@@ -1095,6 +1134,9 @@ func toDomainFields(in []FieldDefinition) []domainConfig.FieldDefinition {
 			Options:            options,
 			ReferenceWorkspace: field.ReferenceWorkspace,
 			Semantic:           types.Semantic(field.Semantic),
+			Validation: domainConfig.FieldValidation{
+				Pattern: types.TextPattern(field.Validation.Pattern),
+			},
 		}
 	}
 	return fields

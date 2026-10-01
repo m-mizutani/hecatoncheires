@@ -261,6 +261,23 @@ func (v *FieldValidator) validateText(fieldDef config.FieldDefinition, fv FieldV
 			goerr.V(FieldIDKey, fieldDef.ID),
 			goerr.V(SemanticKey, fieldDef.Semantic))
 	}
+	if p := fieldDef.Validation.Pattern; p != "" && s != "" {
+		ok, err := p.Match(s)
+		if err != nil {
+			return goerr.Wrap(err, "field pattern does not compile",
+				goerr.V(FieldIDKey, fieldDef.ID),
+				goerr.V(PatternKey, p))
+		}
+		// The rejected value is not attached: it is case content, and on a tool
+		// call path every attached value reaches the model, the LLM provider and
+		// Sentry. The pattern and the field id are enough to repair it.
+		if !ok {
+			return goerr.Wrap(ErrTextPatternMismatch,
+				fmt.Sprintf("text value must match the pattern %s (the whole value must match; Go RE2 syntax)", p),
+				goerr.V(FieldIDKey, fieldDef.ID),
+				goerr.V(PatternKey, p))
+		}
+	}
 	return nil
 }
 

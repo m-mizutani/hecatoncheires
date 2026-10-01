@@ -58,6 +58,14 @@ func TestClassifyUserError(t *testing.T) {
 		gt.Value(t, got.What).Equal(i18n.MsgUIErrFieldValidationWhat)
 	})
 
+	t.Run("a value that breaks the field pattern is a validation error", func(t *testing.T) {
+		err := goerr.Wrap(model.ErrTextPatternMismatch, "text value must match the pattern")
+		got, ok := usecase.ClassifyUserErrorForTest(err)
+		gt.Bool(t, ok).True()
+		gt.Value(t, got.Kind).Equal(uierr.KindValidation)
+		gt.Value(t, got.What).Equal(i18n.MsgUIErrFieldValidationWhat)
+	})
+
 	t.Run("no accessible workspace", func(t *testing.T) {
 		err := goerr.Wrap(usecase.ErrNoAccessibleWorkspace, "resolve workspace")
 		got, ok := usecase.ClassifyUserErrorForTest(err)

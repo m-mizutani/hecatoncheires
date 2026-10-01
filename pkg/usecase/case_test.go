@@ -656,6 +656,78 @@ func TestCaseUseCase_UpdateCase_TextSemantic(t *testing.T) {
 	})
 }
 
+func TestCaseUseCase_UpdateCase_TextPattern(t *testing.T) {
+	setup := func(t *testing.T) (*memory.Memory, *usecase.CaseUseCase, *model.Case) {
+		t.Helper()
+		repo := memory.New()
+		registry := model.NewWorkspaceRegistry()
+		registry.Register(&model.WorkspaceEntry{
+			Workspace: model.Workspace{ID: "support"},
+			CaseMode:  model.CaseModeChannel,
+			FieldSchema: &config.FieldSchema{
+				Fields: []config.FieldDefinition{
+					{ID: "ticket_id", Name: "Ticket ID", Type: types.FieldTypeText,
+						Validation: config.FieldValidation{Pattern: "[A-Z]{2,5}-[0-9]+"}},
+					{ID: "note", Name: "Note", Type: types.FieldTypeText},
+				},
+			},
+		})
+		uc := usecase.NewCaseUseCase(repo, registry, nil, nil, "")
+		created, err := repo.Case().Create(context.Background(), "support", &model.Case{
+			Title:      "Case",
+			Status:     types.CaseStatusOpen,
+			ReporterID: "U-REP",
+			// A value stored before the pattern was configured.
+			FieldValues: map[string]model.FieldValue{
+				"ticket_id": {FieldID: "ticket_id", Type: types.FieldTypeText, Value: "legacy-1"},
+			},
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		})
+		gt.NoError(t, err).Required()
+		return repo, uc, created
+	}
+	ctx := context.Background()
+
+	t.Run("a mismatching value is rejected and nothing is written", func(t *testing.T) {
+		repo, uc, created := setup(t)
+		_, err := uc.UpdateCase(ctx, "support", created.ID, usecase.CaseUpdate{
+			Fields: map[string]model.FieldValue{"ticket_id": {FieldID: "ticket_id", Value: "sec-1234"}},
+		})
+		gt.Error(t, err).Is(model.ErrCaseFieldValidation)
+		gt.String(t, err.Error()).Contains(`field "ticket_id": text value must match the pattern [A-Z]{2,5}-[0-9]+`)
+
+		reloaded, err := repo.Case().Get(ctx, "support", created.ID)
+		gt.NoError(t, err).Required()
+		gt.Value(t, reloaded.FieldValues["ticket_id"].Value).Equal("legacy-1")
+	})
+
+	t.Run("a matching value is stored", func(t *testing.T) {
+		repo, uc, created := setup(t)
+		_, err := uc.UpdateCase(ctx, "support", created.ID, usecase.CaseUpdate{
+			Fields: map[string]model.FieldValue{"ticket_id": {FieldID: "ticket_id", Value: "SEC-1234"}},
+		})
+		gt.NoError(t, err).Required()
+
+		reloaded, err := repo.Case().Get(ctx, "support", created.ID)
+		gt.NoError(t, err).Required()
+		gt.Value(t, reloaded.FieldValues["ticket_id"].Value).Equal("SEC-1234")
+	})
+
+	t.Run("updating another field leaves a legacy value untouched", func(t *testing.T) {
+		repo, uc, created := setup(t)
+		_, err := uc.UpdateCase(ctx, "support", created.ID, usecase.CaseUpdate{
+			Fields: map[string]model.FieldValue{"note": {FieldID: "note", Value: "hello"}},
+		})
+		gt.NoError(t, err).Required()
+
+		reloaded, err := repo.Case().Get(ctx, "support", created.ID)
+		gt.NoError(t, err).Required()
+		gt.Value(t, reloaded.FieldValues["note"].Value).Equal("hello")
+		gt.Value(t, reloaded.FieldValues["ticket_id"].Value).Equal("legacy-1")
+	})
+}
+
 // TestCaseUseCase_UpdateCase_NoRenameWhenFieldValidationFails guards the update
 // ordering: the Slack channel rename is an external side effect that cannot be
 // rolled back, so it must happen only after EVERY validation has passed. When a

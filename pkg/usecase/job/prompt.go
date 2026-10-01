@@ -204,7 +204,10 @@ type systemPromptField struct {
 	// Semantic is "<semantic id> — <hint>" for a text field that sets one,
 	// empty otherwise.
 	Semantic string
-	Options  []systemPromptFieldOption
+	// Pattern is "`<pattern>` — <hint>" for a text field that sets
+	// validation.pattern, empty otherwise.
+	Pattern string
+	Options []systemPromptFieldOption
 }
 
 type systemPromptFieldOption struct {
@@ -370,6 +373,7 @@ func buildSystemPromptData(in PromptInputs) systemPromptData {
 					Required:    f.Required,
 					Description: f.Description,
 					Semantic:    semantic.Label(f.Semantic),
+					Pattern:     f.Validation.Pattern.Label(),
 				}
 				if len(f.Options) > 0 {
 					meta.options = make(map[string]config.FieldOption, len(f.Options))
@@ -418,6 +422,7 @@ func buildSystemPromptData(in PromptInputs) systemPromptData {
 					Required:    f.Required,
 					Description: f.Description,
 					Semantic:    semantic.Label(f.Semantic),
+					Pattern:     f.Validation.Pattern.Label(),
 				}
 				for _, o := range f.Options {
 					field.Options = append(field.Options, systemPromptFieldOption{

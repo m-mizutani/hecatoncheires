@@ -181,6 +181,10 @@ func fieldsToMaps(schema *config.FieldSchema) []map[string]any {
 			field["semantic"] = string(fd.Semantic)
 			field["semantic_hint"] = semantic.PromptHint(fd.Semantic)
 		}
+		if p := fd.Validation.Pattern; p != "" {
+			field["pattern"] = string(p)
+			field["pattern_hint"] = p.PromptHint()
+		}
 		if len(fd.Options) > 0 {
 			opts := make([]map[string]any, 0, len(fd.Options))
 			for _, opt := range fd.Options {

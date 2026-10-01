@@ -71,6 +71,7 @@ func ErrorCode(err error) string {
 	case errors.Is(err, model.ErrInvalidFieldType),
 		errors.Is(err, model.ErrInvalidOptionID),
 		errors.Is(err, semantic.ErrInvalidValue),
+		errors.Is(err, model.ErrTextPatternMismatch),
 		errors.Is(err, model.ErrMissingRequired),
 		errors.Is(err, model.ErrCaseFieldValidation),
 		errors.Is(err, model.ErrInvalidNotionID),

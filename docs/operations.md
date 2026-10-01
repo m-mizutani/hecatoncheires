@@ -890,7 +890,9 @@ groups, never `null`:
 [check catalog](./cli.md#what---check-db-checks). `sample` carries
 `action_id` only for `action` targets and `memo_id` only for `memo` targets.
 For a `field_value` issue on a `text` field that sets `semantic`, `expected`
-names both, e.g. `text (slack_channel_id)`.
+names both, e.g. `text (slack_channel_id)`. When the field sets
+`validation.pattern`, `expected` also names the pattern, e.g.
+`text (pattern=[A-Z]{2,5}-[0-9]+)` or `text (slack_channel_id, pattern=C[0-9A-Z]+)`.
 Finding issues is still `200` — the check ran successfully. Other statuses:
 
 | Status | Meaning |

@@ -1,5 +1,12 @@
 package types
 
+import (
+	"regexp"
+	"regexp/syntax"
+
+	"github.com/m-mizutani/goerr/v2"
+)
+
 // FieldID represents the unique identifier for a custom field
 type FieldID string
 
@@ -87,4 +94,65 @@ const (
 // String returns the string representation of the semantic
 func (s Semantic) String() string {
 	return string(s)
+}
+
+// TextPattern is a regular expression (Go RE2 syntax) that a text field's
+// whole value must match. Empty means no constraint.
+type TextPattern string
+
+// textPatternHint is the one place the matching rule is described to agents.
+const textPatternHint = "the whole value must match this regular expression (Go RE2 syntax); an empty value is always accepted"
+
+// Compile compiles the pattern anchored to the whole value: ^(?:p)$.
+// Anchoring here, rather than leaving it to whoever writes the config, means
+// a pattern written without ^…$ rejects a value it only partly matches
+// instead of silently accepting it.
+//
+// The pattern is parsed on its own before it is wrapped. Wrapping first would
+// let an unbalanced pattern close the group itself: "a)|(.*" alone is invalid,
+// but "^(?:a)|(.*)$" compiles and accepts every value.
+func (p TextPattern) Compile() (*regexp.Regexp, error) {
+	if _, err := syntax.Parse(string(p), syntax.Perl); err != nil {
+		return nil, goerr.Wrap(err, "text pattern does not compile",
+			goerr.V("pattern", string(p)))
+	}
+	re, err := regexp.Compile("^(?:" + string(p) + ")$")
+	if err != nil {
+		return nil, goerr.Wrap(err, "text pattern does not compile",
+			goerr.V("pattern", string(p)))
+	}
+	return re, nil
+}
+
+// Match reports whether value matches the whole pattern. It returns an error
+// when the pattern does not compile.
+func (p TextPattern) Match(value string) (bool, error) {
+	re, err := p.Compile()
+	if err != nil {
+		return false, err
+	}
+	return re.MatchString(value), nil
+}
+
+// String returns the pattern as written in the config.
+func (p TextPattern) String() string {
+	return string(p)
+}
+
+// PromptHint is the English sentence the JSON agent paths return next to the
+// pattern. It is "" for an empty pattern.
+func (p TextPattern) PromptHint() string {
+	if p == "" {
+		return ""
+	}
+	return textPatternHint
+}
+
+// Label is the one-line form the prompt templates render, mirroring
+// semantic.Label: "`<pattern>` — <hint>". It is "" for an empty pattern.
+func (p TextPattern) Label() string {
+	if p == "" {
+		return ""
+	}
+	return "`" + string(p) + "` — " + p.PromptHint()
 }

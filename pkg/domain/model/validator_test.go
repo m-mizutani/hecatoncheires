@@ -2,6 +2,7 @@ package model_test
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -484,6 +485,86 @@ func TestFieldValidator_TextSemantic(t *testing.T) {
 		gt.Array(t, violations).Length(1).Required()
 		gt.Value(t, violations[0].FieldID).Equal("channel")
 		gt.Error(t, violations[0].Err).Is(semantic.ErrInvalidValue)
+	})
+}
+
+func TestFieldValidator_TextPattern(t *testing.T) {
+	schema := &config.FieldSchema{
+		Fields: []config.FieldDefinition{
+			{ID: "ticket_id", Name: "Ticket ID", Type: types.FieldTypeText,
+				Validation: config.FieldValidation{Pattern: "[A-Z]{2,5}-[0-9]+"}},
+			{ID: "notify_channel", Name: "Notification channel", Type: types.FieldTypeText,
+				Semantic:   types.SemanticSlackChannelID,
+				Validation: config.FieldValidation{Pattern: "C[0-9A-Z]+"}},
+			{ID: "broken", Name: "Broken", Type: types.FieldTypeText,
+				Validation: config.FieldValidation{Pattern: "[a-"}},
+		},
+	}
+	v := model.NewFieldValidator(schema)
+	ticket := func(value string) map[string]model.FieldValue {
+		return map[string]model.FieldValue{"ticket_id": {FieldID: "ticket_id", Value: value}}
+	}
+
+	t.Run("a whole-value match and the empty string are accepted", func(t *testing.T) {
+		for _, value := range []string{"SEC-1234", ""} {
+			out, err := v.ValidateCaseFields(ticket(value))
+			gt.NoError(t, err).Required()
+			gt.Value(t, out["ticket_id"].Value).Equal(value)
+		}
+	})
+
+	t.Run("a mismatch names the field and the pattern", func(t *testing.T) {
+		for _, value := range []string{"sec-1234", "See SEC-1234"} {
+			_, err := v.ValidateCaseFields(ticket(value))
+			gt.Error(t, err).Is(model.ErrTextPatternMismatch)
+			gt.String(t, err.Error()).Contains("[A-Z]{2,5}-[0-9]+")
+		}
+	})
+
+	t.Run("accumulating variants report the field and the pattern", func(t *testing.T) {
+		for name, fn := range map[string]func(map[string]model.FieldValue) (map[string]model.FieldValue, error){
+			"ValidateCaseFieldsAll":           v.ValidateCaseFieldsAll,
+			"ValidateCaseFieldsPartialStrict": v.ValidateCaseFieldsPartialStrict,
+		} {
+			t.Run(name, func(t *testing.T) {
+				_, err := fn(ticket("sec-1234"))
+				gt.Error(t, err).Is(model.ErrCaseFieldValidation)
+				gt.String(t, err.Error()).Contains(
+					`field "ticket_id": text value must match the pattern [A-Z]{2,5}-[0-9]+ (the whole value must match; Go RE2 syntax): text value does not match the field pattern`)
+			})
+		}
+	})
+
+	t.Run("semantic is checked before the pattern", func(t *testing.T) {
+		channel := func(value string) map[string]model.FieldValue {
+			return map[string]model.FieldValue{"notify_channel": {FieldID: "notify_channel", Value: value}}
+		}
+
+		_, err := v.ValidateCaseFields(channel("C0123ABCD"))
+		gt.NoError(t, err)
+
+		_, err = v.ValidateCaseFields(channel("#general"))
+		gt.Error(t, err).Is(semantic.ErrInvalidValue)
+		gt.Bool(t, errors.Is(err, model.ErrTextPatternMismatch)).False()
+
+		_, err = v.ValidateCaseFields(channel("G0123ABCD"))
+		gt.Error(t, err).Is(model.ErrTextPatternMismatch)
+		gt.Bool(t, errors.Is(err, semantic.ErrInvalidValue)).False()
+	})
+
+	t.Run("a pattern that does not compile fails the check", func(t *testing.T) {
+		_, err := v.ValidateCaseFields(map[string]model.FieldValue{"broken": {FieldID: "broken", Value: "a"}})
+		gt.Error(t, err)
+		gt.Bool(t, errors.Is(err, model.ErrTextPatternMismatch)).False()
+	})
+
+	t.Run("ValidateStored reports a stored value that breaks the pattern", func(t *testing.T) {
+		violations := v.ValidateStored(map[string]model.FieldValue{
+			"ticket_id": {FieldID: "ticket_id", Type: types.FieldTypeText, Value: "sec-1234"},
+		})
+		gt.Array(t, violations).Length(1).Required()
+		gt.Value(t, violations[0].FieldID).Equal("ticket_id")
+		gt.Error(t, violations[0].Err).Is(model.ErrTextPatternMismatch)
 	})
 }
 

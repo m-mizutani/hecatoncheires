@@ -5907,6 +5907,94 @@ func TestGraphQLHandler_CaseRefWrite(t *testing.T) {
 	})
 }
 
+// TestGraphQLHandler_TextPatternWrite drives a text field with a
+// validation.pattern through the updateCase mutation: a mismatching value is a
+// BAD_USER_INPUT whose message names the pattern, and nothing is written.
+func TestGraphQLHandler_TextPatternWrite(t *testing.T) {
+	ctx := context.Background()
+	repo := memory.New()
+
+	baseCase, err := repo.Case().Create(ctx, testWorkspaceID, &model.Case{
+		ReporterID: "U-TEST-DEFAULT", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+		Title: "Base", AssigneeIDs: []string{},
+		FieldValues: map[string]model.FieldValue{
+			"ticket_id": {FieldID: "ticket_id", Type: types.FieldTypeText, Value: "SEC-1"},
+		},
+	})
+	gt.NoError(t, err).Required()
+
+	registry := model.NewWorkspaceRegistry()
+	registry.Register(&model.WorkspaceEntry{
+		Workspace: model.Workspace{ID: testWorkspaceID, Name: "Test Workspace"},
+		FieldSchema: &config.FieldSchema{
+			Fields: []config.FieldDefinition{
+				{ID: "ticket_id", Name: "Ticket ID", Type: types.FieldTypeText,
+					Validation: config.FieldValidation{Pattern: "[A-Z]{2,5}-[0-9]+"}},
+			},
+			Labels: config.EntityLabels{Case: "Case"},
+		},
+	})
+
+	uc := usecase.New(repo, registry)
+	resolver := gqlctrl.NewResolver(repo, uc)
+	srv := handler.NewDefaultServer(gqlctrl.NewExecutableSchema(gqlctrl.Config{Resolvers: resolver}))
+	// Mirror serve.go so extensions.code reaches the response body.
+	srv.SetErrorPresenter(func(ctx context.Context, err error) *gqlerror.Error {
+		gqlErr := graphql.DefaultErrorPresenter(ctx, err)
+		if gqlErr.Extensions == nil {
+			gqlErr.Extensions = map[string]any{}
+		}
+		maps.Copy(gqlErr.Extensions, gqlctrl.ErrorExtensions(err))
+		return gqlErr
+	})
+	gqlHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		loaders := gqlctrl.NewDataLoaders(repo, nil, nil)
+		ctx := gqlctrl.WithDataLoaders(r.Context(), loaders)
+		srv.ServeHTTP(w, r.WithContext(ctx))
+	})
+	h, err := httpctrl.New(gqlHandler)
+	gt.NoError(t, err).Required()
+
+	mutation := `
+		mutation($workspaceId: String!, $input: UpdateCaseInput!) {
+			updateCase(workspaceId: $workspaceId, input: $input) {
+				id
+				fields { fieldId value }
+			}
+		}
+	`
+	setTicket := func(value string) *graphQLResponse {
+		variables := map[string]interface{}{
+			"workspaceId": testWorkspaceID,
+			"input": map[string]interface{}{
+				"id":     baseCase.ID,
+				"fields": []map[string]interface{}{{"fieldId": "ticket_id", "value": value}},
+			},
+		}
+		return parseGraphQLResponse(t, executeGraphQLRequest(t, h, mutation, variables))
+	}
+
+	t.Run("a mismatching value is a bad user input and is not written", func(t *testing.T) {
+		resp := setTicket("sec-1234")
+		gt.Array(t, resp.Errors).Length(1).Required()
+		gt.Value(t, resp.Errors[0].Extensions["code"]).Equal(gqlctrl.ErrCodeBadUserInput)
+		gt.String(t, resp.Errors[0].Message).Contains("[A-Z]{2,5}-[0-9]+")
+
+		stored, err := repo.Case().Get(ctx, testWorkspaceID, baseCase.ID)
+		gt.NoError(t, err).Required()
+		gt.Value(t, stored.FieldValues["ticket_id"].Value).Equal("SEC-1")
+	})
+
+	t.Run("a matching value is written", func(t *testing.T) {
+		resp := setTicket("SEC-1234")
+		gt.Array(t, resp.Errors).Length(0)
+
+		stored, err := repo.Case().Get(ctx, testWorkspaceID, baseCase.ID)
+		gt.NoError(t, err).Required()
+		gt.Value(t, stored.FieldValues["ticket_id"].Value).Equal("SEC-1234")
+	})
+}
+
 // errorCodes returns the extensions.code of every error in resp.
 func errorCodes(resp *graphQLResponse) []string {
 	codes := make([]string, 0, len(resp.Errors))

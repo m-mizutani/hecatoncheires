@@ -49,6 +49,7 @@ func classifyUserError(err error) (uierr.UserFacing, bool) {
 		errors.Is(err, model.ErrMissingRequired),
 		errors.Is(err, model.ErrInvalidFieldType),
 		errors.Is(err, model.ErrInvalidOptionID),
+		errors.Is(err, model.ErrTextPatternMismatch),
 		errors.Is(err, semantic.ErrInvalidValue):
 		return uierr.UserFacing{
 			Kind:        uierr.KindValidation,

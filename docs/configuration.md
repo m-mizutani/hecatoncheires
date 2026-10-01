@@ -141,6 +141,7 @@ description = "Overall severity assessment"
 | `description` | string | No | Help text shown in the UI |
 | `reference_workspace` | string | Case-reference only | Target workspace ID whose Cases this field references. **Required** for `case_ref` / `multi_case_ref`, and rejected for every other type. Must name a configured workspace (self-reference allowed) |
 | `semantic` | string | No | How a `text` value is interpreted (see [Text field semantics](#text-field-semantics)). Rejected for every other type and for an undefined semantic |
+| `validation` | table | No | Constraints on the shape of the value. Its only key is `pattern`, a regular expression the whole `text` value must match (see [Text field pattern](#text-field-pattern)). `pattern` is rejected for every other type and when it is not a valid Go RE2 expression. Other keys inside `validation` are ignored |
 
 ### Field ID Format
 
@@ -185,7 +186,9 @@ type = "text"
 ```
 
 A `text` field may set `semantic` to say what its value refers to; see
-[Text field semantics](#text-field-semantics).
+[Text field semantics](#text-field-semantics). It may also set
+`validation.pattern` to restrict the value to a regular expression; see
+[Text field pattern](#text-field-pattern).
 
 ### `markdown`
 
@@ -383,6 +386,167 @@ to the field is validated; updating other fields of the same Case is not
 blocked. Run `hecatoncheires validate --check-db` to list stored values that do
 not fit: they are reported as `field_value` with `expected` set to
 `text (slack_channel_id)`. Removing `semantic` restores the previous behaviour.
+
+### Text field pattern
+
+`validation.pattern` restricts a `text` value to a regular expression. It is
+available for both Case fields (`[[fields]]`) and memo fields
+(`[[memo.fields]]`). Every write path checks it: the Web UI, Slack, the agents'
+tools and thread-mode case creation. A value that does not match is rejected
+and nothing is saved.
+
+```toml
+[[fields]]
+id = "ticket_id"
+name = "Ticket ID"
+type = "text"
+description = "Ticket ID in the external tracker, e.g. SEC-1234"
+validation = { pattern = '[A-Z]{2,5}-[0-9]+' }
+```
+
+| Value | Result | Why |
+|-------|--------|-----|
+| `SEC-1234` | Accepted | The whole value matches |
+| `sec-1234` | Rejected | Lowercase letters do not match `[A-Z]` |
+| `See SEC-1234` | Rejected | Only part of the value matches |
+| (empty) | Accepted | An empty value is not checked. Set `required = true` to require a value |
+
+How the pattern is applied:
+
+- **The whole value must match.** The pattern is matched as `^(?:pattern)$`,
+  as the HTML `pattern` attribute does. You do not need to write `^` and `$`;
+  writing them changes nothing. To accept a value that only contains a match,
+  say so explicitly, e.g. `.*SEC-[0-9]+.*`. Note that this differs from JSON
+  Schema's `pattern`, which accepts a partial match.
+- **Go RE2 syntax.** Matching time grows linearly with the length of the value.
+  Backreferences (`\1`) and lookaround (`(?=…)`, `(?!…)`) are not available, and
+  a pattern that uses them is rejected at config load. See the
+  [RE2 syntax reference](https://github.com/google/re2/wiki/Syntax).
+- **Multi-line values.** By default `.` does not match a newline and `$` matches
+  only at the end of the value. Add flags such as `(?s)` yourself when you need
+  otherwise.
+- **An empty value is always accepted**, so setting a pattern does not make an
+  optional field required.
+- **With `semantic`.** Both can be set on the same field, and a value must pass
+  both. The semantic is checked first, and only its error is reported when the
+  value breaks both.
+- **Only for `text`.** A `pattern` on any other type is rejected at config load.
+
+When a value is rejected, the error names the field and the pattern. For the
+example above, saving `sec-1234` returns `BAD_USER_INPUT` from GraphQL with
+this message, and an agent's tool call receives the same text:
+
+```
+field "ticket_id": text value must match the pattern [A-Z]{2,5}-[0-9]+ (the whole value must match; Go RE2 syntax): text value does not match the field pattern
+```
+
+**Writing the pattern in TOML.** Use a literal string (single quotes), because
+regular expressions often contain backslashes. In a basic string (double
+quotes) each backslash must be doubled, and `"\d"` is an invalid TOML escape
+that fails before the pattern is checked:
+
+```toml
+# These two lines are the same pattern, INC-\d+
+validation = { pattern = 'INC-\d+' }
+validation = { pattern = "INC-\\d+" }
+
+# TOML decode error
+validation = { pattern = "INC-\d+" }
+```
+
+`validation` can be written in any of these forms; they are equivalent:
+
+```toml
+# One-line inline table
+[[fields]]
+id = "ticket_id"
+name = "Ticket ID"
+type = "text"
+validation = { pattern = '[A-Z]{2,5}-[0-9]+' }
+
+# Multi-line inline table (TOML 1.1; a trailing comma is allowed)
+[[fields]]
+id = "ticket_id"
+name = "Ticket ID"
+type = "text"
+validation = {
+  pattern = '[A-Z]{2,5}-[0-9]+',
+}
+
+# Sub-table. It belongs to the [[fields]] entry just above it, so write it
+# after that entry's other keys.
+[[fields]]
+id = "ticket_id"
+name = "Ticket ID"
+type = "text"
+
+[fields.validation]
+pattern = '[A-Z]{2,5}-[0-9]+'
+```
+
+Keys other than `pattern` inside `validation` are ignored, as unknown keys are
+everywhere else in the workspace config. For example,
+`validation = { max_length = 120 }` loads without error and checks nothing.
+
+More examples:
+
+```toml
+# Memo field holding a CVE identifier.
+# Accepts CVE-2024-3094; rejects CVE-24-3094 and cve-2024-3094.
+[[memo.fields]]
+id = "cve"
+name = "CVE"
+type = "text"
+description = "CVE identifier this memo is about"
+validation = { pattern = 'CVE-[0-9]{4}-[0-9]{4,}' }
+
+# Combined with a semantic: slack_channel_id alone accepts IDs starting with
+# C or G; the pattern rejects the G ones. "#general" fails the semantic and
+# reports only the semantic error.
+[[fields]]
+id = "notify_channel"
+name = "Notification channel"
+type = "text"
+semantic = "slack_channel_id"
+validation = { pattern = 'C[0-9A-Z]+' }
+```
+
+These configurations fail to load. Startup, `hecatoncheires validate` and
+`POST /api/validate/db` report the field ID and the pattern:
+
+```toml
+# pattern on a type other than text
+[[fields]]
+id = "score"
+name = "Score"
+type = "number"
+validation = { pattern = '[0-9]+' }
+
+# not valid RE2 (backreferences are not supported)
+[[fields]]
+id = "code"
+name = "Code"
+type = "text"
+validation = { pattern = '(a)\1' }
+```
+
+Every agent that can write a field value is given the pattern and the rule
+that the whole value must match: the thread-mode case agent, the case-channel
+agent (Case and memo fields), the workspace-channel agent and the Job agent
+(Case and memo fields) in their system prompts, and the case-draft agent
+through the `pattern` and `pattern_hint` keys of `get_workspace`. The read-only
+MCP tool `hecaton_list_workspaces` returns the same two keys in its field
+schema. The Web UI does not check the pattern before saving; it shows the error
+the server returns.
+
+**Adding a pattern to an existing field.** Values stored before the pattern was
+set are left untouched. Writing a new value to the field is validated; updating
+other fields of the same Case is not blocked. Run
+`hecatoncheires validate --check-db` to list stored values that do not match:
+they are reported as `field_value` with `expected` set to
+`text (pattern=[A-Z]{2,5}-[0-9]+)`, or `text (slack_channel_id, pattern=C[0-9A-Z]+)`
+when the field also has a semantic. Removing `pattern` restores the previous
+behaviour.
 
 ---
 
@@ -1572,6 +1736,8 @@ The configuration file is validated at startup. The following rules are enforced
 | All option IDs must match the same pattern as field IDs | `ErrInvalidFieldID` |
 | All option names must be non-empty | `ErrMissingName` |
 | Option IDs must be unique within their parent field | `ErrDuplicateOptionID` |
+| `validation.pattern` is set only on `text` fields | `ErrUnexpectedPattern` |
+| `validation.pattern` is a valid Go RE2 regular expression | `ErrInvalidPattern` |
 | Slack welcome message templates must parse | `ErrInvalidWelcomeMessage` |
 | Action status IDs must match `^[A-Za-z0-9]+([_-][A-Za-z0-9]+)*$`, be at most 32 characters, and be unique within the workspace | (action status validation) |
 | `[action] initial` must reference a defined `[[action.status]] id` | (action status validation) |

@@ -24,6 +24,11 @@ var (
 	// markdown are both strings), so a type change like that would otherwise
 	// pass unnoticed.
 	ErrStoredFieldTypeMismatch = goerr.New("stored field type does not match schema type")
+	// ErrTextPatternMismatch is returned when a text value does not match the
+	// field definition's validation pattern. It is distinct from
+	// ErrInvalidFieldType because the value has the right type and only its
+	// shape is wrong.
+	ErrTextPatternMismatch = goerr.New("text value does not match the field pattern")
 )
 
 // Context keys for error values
@@ -34,4 +39,5 @@ const (
 	OptionIDKey     = "option_id"
 	FieldValueKey   = "field_value"
 	SemanticKey     = "semantic"
+	PatternKey      = "pattern"
 )

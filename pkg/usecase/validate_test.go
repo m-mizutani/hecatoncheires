@@ -202,6 +202,56 @@ func TestValidateDB_TextSemanticViolation(t *testing.T) {
 	gt.Value(t, result.Issues[0].Expected).Equal("text (slack_channel_id)")
 }
 
+func TestValidateDB_TextPatternViolation(t *testing.T) {
+	wsID := "ws-pattern"
+	schema := &config.FieldSchema{
+		Fields: []config.FieldDefinition{
+			{ID: "code", Name: "Code", Type: types.FieldTypeText,
+				Validation: config.FieldValidation{Pattern: "^C[0-9]+$"}},
+			{ID: "channel", Name: "Channel", Type: types.FieldTypeText,
+				Semantic:   types.SemanticSlackChannelID,
+				Validation: config.FieldValidation{Pattern: "^C[0-9]+$"}},
+		},
+		Labels: config.EntityLabels{Case: "Case"},
+	}
+	repo, uc := setupValidateTest(t, wsID, schema)
+	ctx := context.Background()
+
+	stored := []map[string]model.FieldValue{
+		{"code": {FieldID: "code", Type: types.FieldTypeText, Value: "X1"}},
+		{"code": {FieldID: "code", Type: types.FieldTypeText, Value: "C1"}},
+		{"code": {FieldID: "code", Type: types.FieldTypeText, Value: ""}},
+		{"channel": {FieldID: "channel", Type: types.FieldTypeText, Value: "C0123ABCD"}},
+	}
+	for i, fv := range stored {
+		_, err := repo.Case().Create(ctx, wsID, &model.Case{
+			ReporterID:  "U-TEST-DEFAULT",
+			Title:       "Case " + strconv.Itoa(i),
+			FieldValues: fv,
+		})
+		gt.NoError(t, err).Required()
+	}
+
+	result, err := uc.ValidateDB(ctx)
+	gt.NoError(t, err).Required()
+	gt.Array(t, result.Issues).Length(2).Required()
+
+	byField := map[string]usecase.ValidationIssue{}
+	for _, issue := range result.Issues {
+		byField[issue.FieldID] = issue
+	}
+
+	code := byField["code"]
+	gt.Value(t, code.Kind).Equal(usecase.IssueKindFieldValue)
+	gt.Value(t, code.Actual).Equal("X1")
+	gt.Value(t, code.Expected).Equal("text (pattern=^C[0-9]+$)")
+
+	channel := byField["channel"]
+	gt.Value(t, channel.Kind).Equal(usecase.IssueKindFieldValue)
+	gt.Value(t, channel.Actual).Equal("C0123ABCD")
+	gt.Value(t, channel.Expected).Equal("text (slack_channel_id, pattern=^C[0-9]+$)")
+}
+
 func TestValidateDB_SelectWrongType(t *testing.T) {
 	wsID := "ws-select-wrong-type"
 	repo, uc := setupValidateTest(t, wsID, buildValidateTestSchema())

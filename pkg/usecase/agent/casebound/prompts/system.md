@@ -25,14 +25,14 @@ target to read the conversation; never invent a channel id or a timestamp.
 
 ## Editable Custom Fields
 You may set these via the `case__update_case` tool's `fields` parameter. Use the field id, and for select / multi-select use the listed option ids.
-{{range .FieldSchema}}- id=`{{.ID}}` name="{{.Name}}" type={{.Type}}{{if .Required}} (required){{end}}{{if .Description}} — {{.Description}}{{end}}{{if .Semantic}} semantic={{.Semantic}}{{end}}
+{{range .FieldSchema}}- id=`{{.ID}}` name="{{.Name}}" type={{.Type}}{{if .Required}} (required){{end}}{{if .Description}} — {{.Description}}{{end}}{{if .Semantic}} semantic={{.Semantic}}{{end}}{{if .Pattern}} pattern={{.Pattern}}{{end}}
 {{range .Options}}  - option id=`{{.ID}}`{{if .Name}} name="{{.Name}}"{{end}}{{if .Description}} — {{.Description}}{{end}}
 {{end}}{{end}}{{end}}{{if .MemoFieldSchema}}
 
 ## Memo Fields
 Memos are this case's persistent memory, written with the `memo__*` tools.{{if .MemoDefinition}} {{.MemoDefinition}}{{end}}
 Set these via the `fields` parameter of `memo__apply_memo_changes`. Use the field id, and for select / multi-select use the listed option ids.
-{{range .MemoFieldSchema}}- id=`{{.ID}}` name="{{.Name}}" type={{.Type}}{{if .Required}} (required){{end}}{{if .Description}} — {{.Description}}{{end}}{{if .Semantic}} semantic={{.Semantic}}{{end}}
+{{range .MemoFieldSchema}}- id=`{{.ID}}` name="{{.Name}}" type={{.Type}}{{if .Required}} (required){{end}}{{if .Description}} — {{.Description}}{{end}}{{if .Semantic}} semantic={{.Semantic}}{{end}}{{if .Pattern}} pattern={{.Pattern}}{{end}}
 {{range .Options}}  - option id=`{{.ID}}`{{if .Name}} name="{{.Name}}"{{end}}{{if .Description}} — {{.Description}}{{end}}
 {{end}}{{end}}{{end}}{{if .BoardStatuses}}
 

@@ -45,6 +45,10 @@ type fieldDef struct {
 	// SemanticHint describes the expected value so a client can fill the
 	// field without knowing the semantic by name.
 	SemanticHint string `json:"semantic_hint,omitempty"`
+	// Pattern is the regular expression the whole value must match, and
+	// PatternHint states that matching rule.
+	Pattern     string `json:"pattern,omitempty"`
+	PatternHint string `json:"pattern_hint,omitempty"`
 }
 
 type workspaceDetail struct {
@@ -91,6 +95,8 @@ func (h *mcpHandler) runListWorkspaces(_ context.Context, _ listWorkspacesInput)
 					Type:         string(f.Type),
 					Semantic:     string(f.Semantic),
 					SemanticHint: semantic.PromptHint(f.Semantic),
+					Pattern:      string(f.Validation.Pattern),
+					PatternHint:  f.Validation.Pattern.PromptHint(),
 				})
 			}
 		}

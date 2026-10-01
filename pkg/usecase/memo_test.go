@@ -222,6 +222,63 @@ func TestMemoUseCase_UpdateMemo(t *testing.T) {
 	})
 }
 
+func TestMemoUseCase_TextPattern(t *testing.T) {
+	setup := func(t *testing.T) (*usecase.MemoUseCase, *memory.Memory, context.Context, int64) {
+		t.Helper()
+		reg := model.NewWorkspaceRegistry()
+		reg.Register(&model.WorkspaceEntry{
+			Workspace: model.Workspace{ID: memoTestWorkspaceID, Name: "Memo WS"},
+			MemoConfig: &config.MemoConfig{
+				Description: "investigation memory",
+				FieldSchema: &config.FieldSchema{
+					Fields: []config.FieldDefinition{
+						{ID: "cve", Name: "CVE", Type: types.FieldTypeText,
+							Validation: config.FieldValidation{Pattern: "CVE-[0-9]{4}-[0-9]{4,}"}},
+					},
+				},
+			},
+		})
+		repo := memory.New()
+		uc := usecase.NewMemoUseCase(repo, reg)
+		ctx := auth.ContextWithToken(context.Background(), &auth.Token{Sub: "UCREATOR"})
+		caseID := seedCase(t, repo, ctx, &model.Case{ReporterID: "UCREATOR", Title: "Case", AssigneeIDs: []string{}})
+		return uc, repo, ctx, caseID
+	}
+	cve := func(value string) map[string]model.FieldValue {
+		return map[string]model.FieldValue{"cve": {FieldID: "cve", Value: value}}
+	}
+
+	t.Run("a mismatching value is rejected and no memo is created", func(t *testing.T) {
+		uc, repo, ctx, caseID := setup(t)
+		_, err := uc.CreateMemo(ctx, memoTestWorkspaceID, usecase.CreateMemoInput{
+			CaseID: caseID, Title: "bad", FieldValues: cve("cve-2024-3094"),
+		})
+		gt.Error(t, err).Is(model.ErrCaseFieldValidation)
+		gt.String(t, err.Error()).Contains("CVE-[0-9]{4}-[0-9]{4,}")
+
+		memos, err := repo.Memo().List(ctx, memoTestWorkspaceID, caseID, interfaces.MemoListOptions{})
+		gt.NoError(t, err).Required()
+		gt.Array(t, memos).Length(0)
+	})
+
+	t.Run("a mismatching update is rejected and the memo keeps its value", func(t *testing.T) {
+		uc, repo, ctx, caseID := setup(t)
+		created, err := uc.CreateMemo(ctx, memoTestWorkspaceID, usecase.CreateMemoInput{
+			CaseID: caseID, Title: "good", FieldValues: cve("CVE-2024-3094"),
+		})
+		gt.NoError(t, err).Required()
+
+		_, err = uc.UpdateMemo(ctx, memoTestWorkspaceID, usecase.UpdateMemoInput{
+			ID: created.ID, CaseID: caseID, FieldValues: cve("CVE-24-3094"),
+		})
+		gt.Error(t, err).Is(model.ErrCaseFieldValidation)
+
+		got, err := repo.Memo().Get(ctx, memoTestWorkspaceID, caseID, created.ID)
+		gt.NoError(t, err).Required()
+		gt.Value(t, got.FieldValues["cve"].Value).Equal("CVE-2024-3094")
+	})
+}
+
 func TestMemoUseCase_ArchiveAndList(t *testing.T) {
 	uc, repo := newMemoUC(t)
 	ctx := auth.ContextWithToken(context.Background(), &auth.Token{Sub: "UCREATOR"})

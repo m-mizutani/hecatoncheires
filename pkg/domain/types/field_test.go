@@ -244,3 +244,72 @@ func TestFieldType_IsCaseRef(t *testing.T) {
 		})
 	}
 }
+
+func TestTextPattern_Match(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern types.TextPattern
+		value   string
+		want    bool
+	}{
+		{name: "whole value matches", pattern: "[A-Z]{3}-[0-9]+", value: "ABC-12", want: true},
+		{name: "partial match is rejected", pattern: "[A-Z]{3}-[0-9]+", value: "xxABC-12yy", want: false},
+		{name: "incomplete value is rejected", pattern: "[A-Z]{3}-[0-9]+", value: "ABC-", want: false},
+		{name: "first alternative", pattern: "foo|bar", value: "foo", want: true},
+		{name: "second alternative", pattern: "foo|bar", value: "bar", want: true},
+		{name: "alternation is grouped before anchoring", pattern: "foo|bar", value: "foobar", want: false},
+		{name: "alternation does not match a suffix", pattern: "foo|bar", value: "xfoo", want: false},
+		{name: "explicit anchors keep the same meaning", pattern: "^C[0-9]+$", value: "C123", want: true},
+		{name: "explicit anchors still reject a partial match", pattern: "^C[0-9]+$", value: "xC123", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.pattern.Match(tt.value)
+			gt.NoError(t, err)
+			gt.Equal(t, got, tt.want)
+		})
+	}
+}
+
+func TestTextPattern_InvalidSyntax(t *testing.T) {
+	p := types.TextPattern("[a-")
+
+	re, err := p.Compile()
+	gt.Error(t, err)
+	gt.Nil(t, re)
+
+	ok, err := p.Match("a")
+	gt.Error(t, err)
+	gt.B(t, ok).False()
+}
+
+// A pattern that is unbalanced on its own must not be able to close the
+// anchoring group and widen the match to any value.
+func TestTextPattern_UnbalancedPatternCannotEscapeTheAnchor(t *testing.T) {
+	for _, p := range []types.TextPattern{"a)|(.*", ")(", "a)"} {
+		re, err := p.Compile()
+		gt.Error(t, err)
+		gt.Nil(t, re)
+
+		ok, err := p.Match("anything")
+		gt.Error(t, err)
+		gt.B(t, ok).False()
+	}
+}
+
+func TestTextPattern_PromptHintAndLabel(t *testing.T) {
+	t.Run("empty pattern renders nothing", func(t *testing.T) {
+		p := types.TextPattern("")
+		gt.Equal(t, p.PromptHint(), "")
+		gt.Equal(t, p.Label(), "")
+	})
+
+	t.Run("pattern renders backquoted with the matching rule", func(t *testing.T) {
+		p := types.TextPattern("^C[0-9]+$")
+		gt.Equal(t, p.String(), "^C[0-9]+$")
+		gt.Equal(t, p.PromptHint(),
+			"the whole value must match this regular expression (Go RE2 syntax); an empty value is always accepted")
+		gt.Equal(t, p.Label(),
+			"`^C[0-9]+$` — the whole value must match this regular expression (Go RE2 syntax); an empty value is always accepted")
+	})
+}

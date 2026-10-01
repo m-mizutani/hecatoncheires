@@ -57,7 +57,10 @@ type promptField struct {
 	// Semantic is "<semantic id> — <hint>" for a text field that sets one,
 	// empty otherwise.
 	Semantic string
-	Options  []promptFieldOption
+	// Pattern is "`<pattern>` — <hint>" for a text field that sets
+	// validation.pattern, empty otherwise.
+	Pattern string
+	Options []promptFieldOption
 }
 
 // promptFieldOption is one selectable option of a select / multi-select field.
@@ -104,6 +107,7 @@ func buildSystemPrompt(ws *model.WorkspaceEntry) (string, error) {
 					Required:    fd.Required,
 					Description: fd.Description,
 					Semantic:    semantic.Label(fd.Semantic),
+					Pattern:     fd.Validation.Pattern.Label(),
 				}
 				for _, o := range fd.Options {
 					f.Options = append(f.Options, promptFieldOption{ID: o.ID, Name: o.Name, Description: o.Description})

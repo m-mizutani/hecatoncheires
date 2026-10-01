@@ -565,6 +565,35 @@ func TestBuildSystemPrompt_FieldSemantic(t *testing.T) {
 	gt.Bool(t, strings.Contains(prompt, "## Memo Fields")).False()
 }
 
+func TestBuildSystemPrompt_FieldPattern(t *testing.T) {
+	ticket := types.TextPattern("[A-Z]{2,5}-[0-9]+")
+	cve := types.TextPattern("CVE-[0-9]{4}-[0-9]{4,}")
+	entry := &model.WorkspaceEntry{
+		Workspace: model.Workspace{ID: "ws-test", Name: "Test"},
+		FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+			{ID: "ticket_id", Name: "Ticket ID", Type: types.FieldTypeText,
+				Description: "Ticket ID in the external tracker, e.g. SEC-1234",
+				Validation:  config.FieldValidation{Pattern: ticket}},
+			{ID: "note", Name: "Note", Type: types.FieldTypeText},
+		}},
+		MemoConfig: &config.MemoConfig{
+			Description: "A memo records one observation.",
+			FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+				{ID: "cve", Name: "CVE", Type: types.FieldTypeText, Validation: config.FieldValidation{Pattern: cve}},
+			}},
+		},
+	}
+	c := &model.Case{Title: "Test Case", Status: types.CaseStatusOpen}
+	now := time.Date(2026, 5, 4, 12, 30, 45, 0, time.UTC)
+
+	prompt := casebound.BuildSystemPromptForTest(c, entry, "C0123ABC", "", now, nil, nil, nil)
+
+	gt.String(t, prompt).Contains("- id=`ticket_id` name=\"Ticket ID\" type=text — Ticket ID in the external tracker, e.g. SEC-1234 pattern=" +
+		"`[A-Z]{2,5}-[0-9]+` — the whole value must match this regular expression (Go RE2 syntax); an empty value is always accepted\n")
+	gt.String(t, prompt).Contains("- id=`cve` name=\"CVE\" type=text pattern=" + cve.Label() + "\n")
+	gt.String(t, prompt).Contains("- id=`note` name=\"Note\" type=text\n")
+}
+
 // The memo__* tools reach this agent whenever memos are enabled, and their
 // `fields` parameter defers to the system prompt for ids and value shapes.
 func TestBuildSystemPrompt_MemoFields(t *testing.T) {

@@ -38,7 +38,7 @@ a client that aggregates several MCP servers.
 
 | Tool | Input | Returns |
 |------|-------|---------|
-| `hecaton_list_workspaces` | _(none)_ | All workspaces with details: `id`, `name`, `description`, `emoji`, `color`, `case_mode`, `action_statuses`, `case_statuses`, `field_schema` (each field: `id`, `name`, `type`, and — when the field sets one — `semantic` plus `semantic_hint`, an English description of the expected value) |
+| `hecaton_list_workspaces` | _(none)_ | All workspaces with details: `id`, `name`, `description`, `emoji`, `color`, `case_mode`, `action_statuses`, `case_statuses`, `field_schema` (each field: `id`, `name`, `type`, and — when the field sets one — `semantic` plus `semantic_hint`, an English description of the expected value; when the field sets `validation.pattern`, `pattern` plus `pattern_hint`, which states that the whole value must match the pattern) |
 | `hecaton_list_cases` | `workspace_id` (required), `status` (optional: `DRAFT`/`OPEN`/`CLOSED`) | Case summaries (`id`, `title`, `status`, `board_status`, `reporter_id`, `assignee_ids`, `created_at`, `updated_at`) |
 | `hecaton_get_cases` | `workspace_id` (required), `ids` (required, `[]int`) | Full case details (summary fields plus `description`, `slack_channel_id`, `slack_thread_ts`, `field_values`, `agent_source_ids`) |
 | `hecaton_list_actions` | `workspace_id` (required), `case_id` (optional), `include_archived` (optional `bool`) | Action details (`id`, `case_id`, `title`, `description`, `assignee_id`, `status`, `due_date`, `archived_at`, `slack_message_ts`, timestamps) |
