@@ -14,7 +14,7 @@ import (
 	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 )
 
 // TagBenign marks an error as a normal-flow occurrence: something that the

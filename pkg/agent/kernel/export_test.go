@@ -4,7 +4,7 @@ import (
 	"github.com/gollem-dev/agentkit"
 	"github.com/gollem-dev/gollem"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // ModelRoleHandlerForTest applies the model-role middleware to next and returns

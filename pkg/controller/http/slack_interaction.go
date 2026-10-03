@@ -7,11 +7,11 @@ import (
 	"net/http"
 
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
-	jobuc "github.com/secmon-lab/hecatoncheires/pkg/usecase/job"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/async"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
+	jobuc "github.com/m-mizutani/hecatoncheires/pkg/usecase/job"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/async"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 	"github.com/slack-go/slack"
 )
 

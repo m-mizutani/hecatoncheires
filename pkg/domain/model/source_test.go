@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 func TestParseGitHubRepo(t *testing.T) {
@@ -25,19 +25,19 @@ func TestParseGitHubRepo(t *testing.T) {
 		},
 		{
 			name:      "GitHub HTTPS URL",
-			input:     "https://github.com/secmon-lab/hecatoncheires",
+			input:     "https://github.com/m-mizutani/hecatoncheires",
 			wantOwner: "secmon-lab",
 			wantRepo:  "hecatoncheires",
 		},
 		{
 			name:      "GitHub URL with trailing slash",
-			input:     "https://github.com/secmon-lab/hecatoncheires/",
+			input:     "https://github.com/m-mizutani/hecatoncheires/",
 			wantOwner: "secmon-lab",
 			wantRepo:  "hecatoncheires",
 		},
 		{
 			name:      "GitHub URL with .git suffix",
-			input:     "https://github.com/secmon-lab/hecatoncheires.git",
+			input:     "https://github.com/m-mizutani/hecatoncheires.git",
 			wantOwner: "secmon-lab",
 			wantRepo:  "hecatoncheires",
 		},
@@ -76,7 +76,7 @@ func TestParseGitHubRepo(t *testing.T) {
 		},
 		{
 			name:    "URL with extra path segments",
-			input:   "https://github.com/secmon-lab/hecatoncheires/tree/main",
+			input:   "https://github.com/m-mizutani/hecatoncheires/tree/main",
 			wantErr: true,
 		},
 		{

@@ -8,8 +8,8 @@ import (
 	"github.com/gollem-dev/gollem/trace"
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/budget"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/budget"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 )
 
 // Budgets are the ceilings each class of Process runs under. Root and sub-agent

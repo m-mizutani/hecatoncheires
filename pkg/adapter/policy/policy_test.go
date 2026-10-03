@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/adapter/policy"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/authz"
+	"github.com/m-mizutani/hecatoncheires/pkg/adapter/policy"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/authz"
 )
 
 func newClient(t *testing.T) interface {

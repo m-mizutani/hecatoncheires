@@ -8,7 +8,7 @@ import (
 	"context"
 
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // ErrInvalidValue is wrapped by every Semantic.Validate failure.

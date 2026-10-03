@@ -6,7 +6,7 @@ import (
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/toolargs"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/toolargs"
 )
 
 // memoLikeTool mirrors the shape that produced the production failure: three

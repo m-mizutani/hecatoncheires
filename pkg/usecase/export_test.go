@@ -5,14 +5,14 @@ import (
 	"time"
 
 	"github.com/gollem-dev/agentkit"
-	githubsvc "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/github"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	slackmodel "github.com/secmon-lab/hecatoncheires/pkg/domain/model/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/service/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/planexec"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/proposal"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/threadcase"
+	githubsvc "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/github"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	slackmodel "github.com/m-mizutani/hecatoncheires/pkg/domain/model/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/service/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/planexec"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/proposal"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/threadcase"
 )
 
 // SetMentionProposalWorkspaceAccessForTest replaces the authorizer a directly

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // NotificationSlotRepository persists per-channel notification slots used to

@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic/definition"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 type fakeChannelNames struct {

@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // CaseProposalID is a UUID-based identifier for CaseProposal

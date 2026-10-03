@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/authz"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/authz"
 )
 
 // The JSON keys are the contract policy authors write against, so they are

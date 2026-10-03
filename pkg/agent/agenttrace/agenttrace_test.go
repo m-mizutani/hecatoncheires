@@ -8,7 +8,7 @@ import (
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/agenttrace"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/agenttrace"
 )
 
 func mustContent(t *testing.T, build func() (gollem.MessageContent, error)) gollem.MessageContent {

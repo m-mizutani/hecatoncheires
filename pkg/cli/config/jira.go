@@ -7,7 +7,7 @@ import (
 	"github.com/gollem-dev/gollem"
 	extjira "github.com/gollem-dev/tools/jira"
 	"github.com/m-mizutani/goerr/v2"
-	jiratool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/jira"
+	jiratool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/jira"
 	"github.com/urfave/cli/v3"
 )
 

@@ -7,7 +7,7 @@ import (
 
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent"
 )
 
 func TestTaskContext_RendersEveryIdentifier(t *testing.T) {

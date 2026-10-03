@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // validImportSession returns a minimally valid ImportSession used as the

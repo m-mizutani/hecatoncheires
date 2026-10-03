@@ -7,7 +7,7 @@ import (
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/github"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/github"
 )
 
 // fakeToolClient records each call and returns canned responses. Any call

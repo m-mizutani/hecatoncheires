@@ -7,10 +7,10 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/slackfmt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/slackfmt"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic"
 )
 
 //go:embed prompts/system.md

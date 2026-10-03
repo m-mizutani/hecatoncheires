@@ -3,8 +3,8 @@ package usecase
 import (
 	"context"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/core"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/core"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // actionStepToolAdapter wraps an *ActionStepUseCase so that agent / assist

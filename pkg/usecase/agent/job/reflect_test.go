@@ -10,9 +10,9 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
-	jobagent "github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/job"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
+	jobagent "github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/job"
 )
 
 // buildKnowledgeDeps constructs KnowledgeAccessor and KnowledgeMutator backed

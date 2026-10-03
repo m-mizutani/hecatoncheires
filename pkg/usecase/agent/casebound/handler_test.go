@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/casebound"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/casebound"
 )
 
 // A HostFuncs entry that was never supplied must ERROR rather than no-op:

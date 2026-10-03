@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 type SourceConfig interface {

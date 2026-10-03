@@ -11,7 +11,7 @@ package slacktool
 
 import (
 	"github.com/gollem-dev/gollem"
-	slackservice "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
+	slackservice "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 )
 
 // BotService is the Slack bot-token client interface. Re-exported as a type

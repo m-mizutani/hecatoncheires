@@ -5,9 +5,9 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	graphql1 "github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	graphql1 "github.com/m-mizutani/hecatoncheires/pkg/domain/model/graphql"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // toGraphQLJobRunLog maps the domain JobRunLog to its GraphQL form,

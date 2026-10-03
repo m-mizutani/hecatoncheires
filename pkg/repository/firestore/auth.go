@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/auth"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/auth"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

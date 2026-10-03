@@ -9,10 +9,10 @@ import (
 	"github.com/gollem-dev/gollem"
 	"github.com/gollem-dev/gollem/mock"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/driver"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/env"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/evaltype"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/scenario"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/driver"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/env"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/evaltype"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/scenario"
 )
 
 // actionCreatingJobLLM drives the (single-loop) job to call core__create_action

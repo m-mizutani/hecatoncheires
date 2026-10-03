@@ -8,8 +8,8 @@ import (
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 )
 
 // New returns the webfetch-backed agent tools. It returns nil (the tool is not

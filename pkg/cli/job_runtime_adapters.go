@@ -5,7 +5,7 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 
-	slacksvc "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
+	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 )
 
 // slackNotifierAdapter bridges the runner's job.SlackNotifier onto the

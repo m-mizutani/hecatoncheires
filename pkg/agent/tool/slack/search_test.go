@@ -15,9 +15,9 @@ import (
 	"github.com/m-mizutani/gt"
 	goslack "github.com/slack-go/slack"
 
-	slacktool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/slack"
-	slackservice "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
+	slacktool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slack"
+	slackservice "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 )
 
 // fakeSearchService is a SearchService where SearchMessages can be scripted

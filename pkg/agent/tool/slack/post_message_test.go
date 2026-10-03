@@ -9,7 +9,7 @@ import (
 	"github.com/m-mizutani/gt"
 	goslack "github.com/slack-go/slack"
 
-	slacktool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/slack"
+	slacktool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slack"
 )
 
 func TestPostMessageTool_PostMessageErrorRoutesThroughErrutilHandle(t *testing.T) {

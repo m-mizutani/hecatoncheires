@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	httpctrl "github.com/secmon-lab/hecatoncheires/pkg/controller/http"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/auth"
+	httpctrl "github.com/m-mizutani/hecatoncheires/pkg/controller/http"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/auth"
 )
 
 // fakeAuthUC is a minimal in-memory stand-in for usecase.AuthUseCaseInterface

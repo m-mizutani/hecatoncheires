@@ -9,7 +9,7 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/slack-go/slack"
 
-	slackservice "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
+	slackservice "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 )
 
 // slackHTTPTimeout caps every Slack User-token API call. The default

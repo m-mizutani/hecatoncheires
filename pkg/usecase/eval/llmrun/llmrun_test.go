@@ -7,7 +7,7 @@ import (
 	"github.com/gollem-dev/gollem"
 	"github.com/gollem-dev/gollem/mock"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/llmrun"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/llmrun"
 )
 
 // fakeLLM returns a session whose Generate yields the given texts.

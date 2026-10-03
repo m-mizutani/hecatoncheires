@@ -7,7 +7,7 @@ import (
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 
-	slackmodel "github.com/secmon-lab/hecatoncheires/pkg/domain/model/slack"
+	slackmodel "github.com/m-mizutani/hecatoncheires/pkg/domain/model/slack"
 )
 
 // MessageFromEvent builds the domain Message for a Slack Events API callback,

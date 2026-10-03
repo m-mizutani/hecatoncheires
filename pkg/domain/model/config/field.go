@@ -1,6 +1,6 @@
 package config
 
-import "github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+import "github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 
 // FieldOption represents an option for select/multi-select fields
 type FieldOption struct {

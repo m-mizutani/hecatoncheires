@@ -3,7 +3,7 @@ package http
 import (
 	"net/http"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/auth"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/auth"
 )
 
 // authMiddleware validates authentication for protected requests

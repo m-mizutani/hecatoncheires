@@ -10,8 +10,8 @@ package diagnosis
 import (
 	"context"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // ActionPoster is the narrow surface of the ActionUseCase that the

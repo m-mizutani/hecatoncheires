@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	notiontool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/notion"
+	notiontool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/notion"
 )
 
 func TestRenderPropertyValue(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/threadcase"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/threadcase"
 )
 
 // TestHandlerFuncs_TraceRouting verifies the struct-of-funcs adapter routes

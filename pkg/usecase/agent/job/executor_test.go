@@ -17,7 +17,7 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/job"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/job"
 )
 
 // scriptedLLM returns the supplied response texts one-by-one across

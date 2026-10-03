@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/core"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/core"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // actionToolAdapter wraps an *ActionUseCase so that agent / assist tools see

@@ -9,8 +9,8 @@ import (
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/gt"
-	knowledgetool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/knowledge"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	knowledgetool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/knowledge"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // fakeAccessor records calls and returns canned results.

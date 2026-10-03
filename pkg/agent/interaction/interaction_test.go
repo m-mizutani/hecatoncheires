@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/interaction"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/interaction"
 )
 
 func TestItemType_IsValid(t *testing.T) {

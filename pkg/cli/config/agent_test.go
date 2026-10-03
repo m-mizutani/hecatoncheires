@@ -8,8 +8,8 @@ import (
 	"github.com/m-mizutani/gt"
 	"github.com/urfave/cli/v3"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // runAgentFlags parses argv through the flag set so the test exercises the same

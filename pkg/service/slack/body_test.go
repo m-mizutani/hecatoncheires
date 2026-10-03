@@ -7,7 +7,7 @@ import (
 	"github.com/m-mizutani/gt"
 	goslack "github.com/slack-go/slack"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/service/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 )
 
 func TestMessageBody(t *testing.T) {

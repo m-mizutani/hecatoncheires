@@ -3,8 +3,8 @@ package usecase
 import (
 	"context"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/auth"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/auth"
 )
 
 // NoAuthnUseCase provides authentication using a specified user (for development/testing)

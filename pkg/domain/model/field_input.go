@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // FieldInput is the LLM-facing shape of one custom-field assignment: a field

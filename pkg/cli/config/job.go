@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/m-mizutani/goerr/v2"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	jobruntime "github.com/m-mizutani/hecatoncheires/pkg/usecase/job"
 	"github.com/robfig/cron/v3"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	jobruntime "github.com/secmon-lab/hecatoncheires/pkg/usecase/job"
 )
 
 // jobIDPattern matches snake_case identifiers. Job IDs are surfaced in

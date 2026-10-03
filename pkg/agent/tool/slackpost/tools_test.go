@@ -8,8 +8,8 @@ import (
 	"github.com/m-mizutani/gt"
 	slackgo "github.com/slack-go/slack"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/slackfmt"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/slackpost"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/slackfmt"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slackpost"
 )
 
 type postCall struct {

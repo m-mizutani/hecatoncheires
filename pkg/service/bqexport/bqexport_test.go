@@ -11,9 +11,9 @@ import (
 
 	bq "cloud.google.com/go/bigquery"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/service/bqexport"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/export"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/safe"
+	"github.com/m-mizutani/hecatoncheires/pkg/service/bqexport"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/export"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/safe"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 )

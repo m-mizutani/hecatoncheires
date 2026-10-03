@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/cli"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli"
 )
 
 var version = "dev"

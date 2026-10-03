@@ -3,8 +3,8 @@ package usecase
 import (
 	"context"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/casewriter"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/casewriter"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // caseToolAdapter bridges the casewriter tool package onto CaseUseCase. The

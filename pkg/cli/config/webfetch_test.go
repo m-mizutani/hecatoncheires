@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli/config"
 	"github.com/urfave/cli/v3"
 )
 

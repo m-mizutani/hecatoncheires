@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/report"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/report"
 )
 
 func TestDump_WritesBundle(t *testing.T) {

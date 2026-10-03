@@ -4,7 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/m-mizutani/goerr/v2"
-	slacktool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/slack"
+	slacktool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slack"
 	"github.com/urfave/cli/v3"
 )
 

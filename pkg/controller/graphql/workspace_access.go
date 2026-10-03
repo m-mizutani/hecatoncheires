@@ -5,7 +5,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
 )
 
 // workspaceIDArg is the argument name every workspace-scoped root field uses.

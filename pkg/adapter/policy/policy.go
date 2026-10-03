@@ -9,9 +9,9 @@ import (
 	"context"
 
 	"github.com/m-mizutani/goerr/v2"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 	"github.com/m-mizutani/opaq"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
 )
 
 // client wraps an opaq.Client behind the PolicyClient port.

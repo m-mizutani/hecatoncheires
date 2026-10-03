@@ -14,8 +14,8 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
-	notiontool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/notion"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
+	notiontool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/notion"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 )
 
 func TestNewClient(t *testing.T) {

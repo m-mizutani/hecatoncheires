@@ -3,8 +3,8 @@ package graphql
 import (
 	"context"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic/definition"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // ToGraphQLCaseForTest exposes the unexported toGraphQLCase converter so the

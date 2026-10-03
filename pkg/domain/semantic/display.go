@@ -3,9 +3,9 @@ package semantic
 import (
 	"context"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/slackchannelid"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic/definition"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic/slackchannelid"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // Deps carries the external lookups that semantic resolvers need. A nil

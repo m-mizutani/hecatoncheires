@@ -3,7 +3,7 @@ package proposal
 import (
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // TurnRequest is the input for one case-draft turn.

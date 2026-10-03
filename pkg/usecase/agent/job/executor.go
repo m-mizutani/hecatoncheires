@@ -13,9 +13,9 @@ import (
 	"github.com/gollem-dev/gollem/trace"
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/interaction"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/interaction"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // ExecuteStatus is the terminal outcome of a Job run. The runtime emits

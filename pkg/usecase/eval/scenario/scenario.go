@@ -14,9 +14,9 @@ import (
 	"strings"
 
 	"github.com/m-mizutani/goerr/v2"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/pelletier/go-toml/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
 )
 
 // Scenario is one eval case. The TOML-decoded eval tables plus the workspace

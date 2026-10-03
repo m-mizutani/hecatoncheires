@@ -11,7 +11,7 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // Metadata keys. They are unexported because Scope is the only supported way to

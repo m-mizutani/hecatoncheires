@@ -8,7 +8,7 @@ package actionwriter
 
 import (
 	"github.com/gollem-dev/gollem"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/core"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/core"
 )
 
 // Deps groups the dependencies the actionwriter tools need.

@@ -1,6 +1,6 @@
 package threadcase
 
-import "github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+import "github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 
 // Test-only seams for unit-testing the unexported prompt / decision helpers
 // without exporting them into the production API.

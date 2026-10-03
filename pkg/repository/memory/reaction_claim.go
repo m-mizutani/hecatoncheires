@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
 )
 
 type reactionClaimRepository struct {

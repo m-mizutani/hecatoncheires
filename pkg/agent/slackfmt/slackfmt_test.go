@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/slackfmt"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/slackfmt"
 )
 
 func TestSectionNamesEveryForbiddenConstruct(t *testing.T) {

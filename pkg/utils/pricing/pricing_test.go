@@ -6,7 +6,7 @@ import (
 
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 func TestNanoUSDFormat(t *testing.T) {

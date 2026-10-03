@@ -7,10 +7,10 @@ import (
 
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	jobagent "github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/job"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/job"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/async"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	jobagent "github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/job"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/job"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/async"
 )
 
 // A sweep can only summarise the runs it dispatched if Publish registers them,

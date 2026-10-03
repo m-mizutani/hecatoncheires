@@ -7,10 +7,10 @@ import (
 
 	goslack "github.com/slack-go/slack"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/interaction"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/runtrace"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/interaction"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/runtrace"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // JobInteractorForTest exposes the JobInteractor type for tests.
