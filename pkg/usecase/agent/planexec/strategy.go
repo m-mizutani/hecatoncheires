@@ -366,25 +366,14 @@ func Register[T Validatable](
 	if !cfg.TextOnly {
 		schema, err := outputSchemaOf[T]()
 		if err != nil {
-			return agentkit.Agent[Input]{}, goerr.Wrap(&outputSchemaError{cause: err},
-				"planexec: register", goerr.V("agent", name))
+			// Joined so the error matches agentkit.ErrInvalidAgentDef, like the
+			// other registration failures, and still the gollem error behind it.
+			return agentkit.Agent[Input]{}, goerr.Wrap(errors.Join(agentkit.ErrInvalidAgentDef, err),
+				"planexec: invalid final output type", goerr.V("agent", name))
 		}
 		s.outputSchema = schema
 	}
 	return agentkit.Register(reg, name, version, s, opts...)
-}
-
-// outputSchemaError reports a terminal-output type whose schema cannot be sent
-// to every provider. It matches both agentkit.ErrInvalidAgentDef, like the
-// other registration failures, and the gollem error that caused it.
-type outputSchemaError struct{ cause error }
-
-func (e *outputSchemaError) Error() string {
-	return "planexec: invalid final output type: " + e.cause.Error()
-}
-
-func (e *outputSchemaError) Unwrap() []error {
-	return []error{agentkit.ErrInvalidAgentDef, e.cause}
 }
 
 // outputSchemaOf derives the terminal output schema of T and rejects one a
