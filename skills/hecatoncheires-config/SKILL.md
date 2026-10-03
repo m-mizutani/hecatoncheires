@@ -22,7 +22,7 @@ and is usually installed into *some other* repository, where no local `docs/`
 exists — so the doc paths below are not relative paths to read blindly. Resolve
 each one this way:
 
-- When you are working inside the `secmon-lab/hecatoncheires` repository itself,
+- When you are working inside the `m-mizutani/hecatoncheires` repository itself,
   read the local copy under `docs/` — it matches your working tree (and may be
   ahead of `main`).
 - Otherwise, fetch the canonical published version from GitHub (default branch
@@ -44,28 +44,28 @@ question — don't guess which file holds a fact:
 | Turning Notion / GitHub on (the *enable* side, not the tool list) | `docs/integrations.md` |
 
 - **Configuration reference** — `docs/configuration.md` /
-  <https://github.com/secmon-lab/hecatoncheires/blob/main/docs/configuration.md>.
+  <https://github.com/m-mizutani/hecatoncheires/blob/main/docs/configuration.md>.
   The complete reference for every section, every field type, every id/pattern
   rule, and the validation list. Also owns the `[[job]]` schema, the scheduled
   execution model, and the Job guardrails. Treat it as ground truth over
   anything you remember. Read this first.
 - **Agent tools** — `docs/agent_tools.md` /
-  <https://github.com/secmon-lab/hecatoncheires/blob/main/docs/agent_tools.md>.
+  <https://github.com/m-mizutani/hecatoncheires/blob/main/docs/agent_tools.md>.
   **The single source of truth for tool names and which context exposes them.**
   Read it before you put any tool name in a Job or `[assist]` prompt. A Job's
   palette is narrower than the interactive agent's — notably Jobs get **no**
   Slack search, Notion, or GitHub tools — so a plausible-sounding name from
   another context will silently do nothing.
 - **Slack** — `docs/slack.md` /
-  <https://github.com/secmon-lab/hecatoncheires/blob/main/docs/slack.md>.
+  <https://github.com/m-mizutani/hecatoncheires/blob/main/docs/slack.md>.
   Channel mode vs thread mode, scopes, and the channel/team id formats
   referenced by `[slack]`.
 - **CLI** — `docs/cli.md` /
-  <https://github.com/secmon-lab/hecatoncheires/blob/main/docs/cli.md>.
+  <https://github.com/m-mizutani/hecatoncheires/blob/main/docs/cli.md>.
   How the file is loaded (`--config`, directory recursion) and the `validate`
   command used in the final step.
 - **Integrations** — `docs/integrations.md` /
-  <https://github.com/secmon-lab/hecatoncheires/blob/main/docs/integrations.md>.
+  <https://github.com/m-mizutani/hecatoncheires/blob/main/docs/integrations.md>.
   How to *enable* Notion and GitHub (tokens, App setup). For the tool **names**
   and their availability, use `docs/agent_tools.md` instead.
 

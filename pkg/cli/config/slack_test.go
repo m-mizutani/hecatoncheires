@@ -9,8 +9,8 @@ import (
 	"github.com/slack-go/slack"
 	"github.com/urfave/cli/v3"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
 )
 
 func TestSlackSetNoAuthUID(t *testing.T) {

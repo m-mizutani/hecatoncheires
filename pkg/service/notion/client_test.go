@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/service/notion"
+	"github.com/m-mizutani/hecatoncheires/pkg/service/notion"
 )
 
 func TestNew(t *testing.T) {

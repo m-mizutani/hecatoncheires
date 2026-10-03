@@ -16,9 +16,9 @@ import (
 	"github.com/gollem-dev/gollem/llm/openai"
 	"github.com/gollem-dev/gollem/mock"
 	"github.com/m-mizutani/gt"
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
-	eval "github.com/secmon-lab/hecatoncheires/pkg/usecase/eval"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	eval "github.com/m-mizutani/hecatoncheires/pkg/usecase/eval"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 func scenarioPath() string {

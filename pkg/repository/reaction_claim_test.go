@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
 )
 
 func runReactionClaimRepositoryTest(t *testing.T, newRepo func(t *testing.T) interfaces.Repository) {

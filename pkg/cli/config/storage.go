@@ -9,8 +9,8 @@ import (
 	"github.com/gollem-dev/gollem"
 	"github.com/gollem-dev/gollem/trace"
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/agentarchive"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 	"github.com/urfave/cli/v3"
 )
 

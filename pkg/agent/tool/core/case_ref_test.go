@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/core"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/core"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // mockCaseRefReader is a hand-written fake of core.CaseRefReader. Each

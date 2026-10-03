@@ -12,7 +12,7 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
-	slacktool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/slack"
+	slacktool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slack"
 )
 
 func TestNewSearchClient(t *testing.T) {

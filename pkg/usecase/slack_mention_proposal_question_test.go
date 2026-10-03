@@ -8,12 +8,12 @@ import (
 	"github.com/m-mizutani/gt"
 	goslack "github.com/slack-go/slack"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/proposal"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/async"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/proposal"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/async"
 )
 
 // Answering a draft question starts a new turn, and that turn is offered only

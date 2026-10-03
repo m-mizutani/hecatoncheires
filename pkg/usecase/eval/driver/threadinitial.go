@@ -6,14 +6,14 @@ import (
 	"time"
 
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	slackmodel "github.com/secmon-lab/hecatoncheires/pkg/domain/model/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/env"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/evaltype"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/scenario"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/async"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	slackmodel "github.com/m-mizutani/hecatoncheires/pkg/domain/model/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/env"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/evaltype"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/scenario"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/async"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 )
 
 const (

@@ -5,8 +5,8 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/proposal"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/proposal"
 )
 
 // proposalHost is the Slack side of a finished case-draft turn.

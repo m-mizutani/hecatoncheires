@@ -7,7 +7,7 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 )
 
 // Close safely closes an io.Closer and reports any error via errutil.Handle.

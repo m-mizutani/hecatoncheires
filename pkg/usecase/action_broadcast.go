@@ -3,7 +3,7 @@ package usecase
 import (
 	"slices"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // broadcastableActionEvents enumerates the ActionEventKind values whose

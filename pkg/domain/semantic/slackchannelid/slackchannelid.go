@@ -7,8 +7,8 @@ import (
 	"regexp"
 
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic/definition"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // Slack documents three conversation ID prefixes: C (public channels and

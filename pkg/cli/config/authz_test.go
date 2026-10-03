@@ -7,8 +7,8 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/authz"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/authz"
 )
 
 // parseAuthz parses a single workspace document whose [authz] section is the

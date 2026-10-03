@@ -4,7 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/github"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/github"
 	"github.com/urfave/cli/v3"
 )
 

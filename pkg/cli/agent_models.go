@@ -9,11 +9,11 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/urfave/cli/v3"
 
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
-	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // llmSetup is what an agent host needs to reach a model: the default client the

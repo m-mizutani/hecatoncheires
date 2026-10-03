@@ -10,14 +10,14 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/auth"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
-	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
-	slacksvc "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/auth"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 	goslack "github.com/slack-go/slack"
 )
 

@@ -8,11 +8,11 @@ import (
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	slackmodel "github.com/secmon-lab/hecatoncheires/pkg/domain/model/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/agentarchive"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	slackmodel "github.com/m-mizutani/hecatoncheires/pkg/domain/model/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 )
 
 // workspaceChannelRegistry returns a channel-mode workspace registry whose

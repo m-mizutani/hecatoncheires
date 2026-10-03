@@ -10,7 +10,7 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 )
 
 func TestIsTerminal(t *testing.T) {

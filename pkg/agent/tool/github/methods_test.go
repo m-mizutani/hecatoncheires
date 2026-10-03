@@ -14,7 +14,7 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/github"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/github"
 )
 
 // newServerClient wires an httptest.Server to a Client. The handler decides

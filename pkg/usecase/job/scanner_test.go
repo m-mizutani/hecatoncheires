@@ -10,13 +10,13 @@ import (
 	"github.com/m-mizutani/gt"
 	"github.com/robfig/cron/v3"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
-	jobagent "github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/job"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/job"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/async"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	jobagent "github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/job"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/job"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/async"
 )
 
 func TestIsDue_Every(t *testing.T) {

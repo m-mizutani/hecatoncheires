@@ -10,11 +10,11 @@ import (
 
 	"github.com/m-mizutani/gt"
 
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/agentarchive"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/job"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/job"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // A one-shot sweep must execute the runs it dispatched before it exits.

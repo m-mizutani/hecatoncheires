@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 )
 
 func TestShouldBroadcastActionEvent(t *testing.T) {

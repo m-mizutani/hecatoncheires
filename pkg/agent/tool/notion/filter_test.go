@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	notiontool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/notion"
+	notiontool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/notion"
 )
 
 // testSchema is a data source whose columns cover the type groups the operator

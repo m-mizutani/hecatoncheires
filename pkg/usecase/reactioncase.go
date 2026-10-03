@@ -10,9 +10,9 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/slack-go/slack/slackevents"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/threadcase"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/threadcase"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 )
 
 // reactionContextWindow / reactionContextLimit bound how much surrounding

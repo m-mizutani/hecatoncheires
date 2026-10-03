@@ -11,7 +11,7 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/urfave/cli/v3"
 
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
 )
 
 // LLM holds the CLI configuration for the agent's LLM access: which defined

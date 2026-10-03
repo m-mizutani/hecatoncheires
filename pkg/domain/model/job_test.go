@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/m-mizutani/gt"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 	"github.com/robfig/cron/v3"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
 )
 
 func TestCaseLifecycle_IsValid(t *testing.T) {

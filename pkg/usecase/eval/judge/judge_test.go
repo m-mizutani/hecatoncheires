@@ -6,10 +6,10 @@ import (
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/evaltype"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/judge"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/scenario"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/evaltype"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/judge"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/scenario"
 )
 
 type fakeCompleter struct{ out string }

@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/m-mizutani/goerr/v2"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
 )
 
 // registerTools wires the read-only MCP tool surface. All tools enforce the

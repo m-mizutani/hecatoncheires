@@ -17,12 +17,12 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/masq"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/agenttrace"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/runtrace"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/auth"
-	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/agenttrace"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/runtrace"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/auth"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 )
 
 type traceHandlerKey struct{}

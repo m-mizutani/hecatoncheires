@@ -11,15 +11,15 @@ import (
 
 	urfavecli "github.com/urfave/cli/v3"
 
-	notiontool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/notion"
-	slacktool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/cli"
-	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
-	slacksvc "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/job"
+	notiontool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/notion"
+	slacktool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/job"
 )
 
 // The fakes below stub their interfaces by embedding them (nil), so any method

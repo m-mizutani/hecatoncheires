@@ -18,8 +18,8 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/service/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
+	"github.com/m-mizutani/hecatoncheires/pkg/service/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 	goslack "github.com/slack-go/slack"
 )
 

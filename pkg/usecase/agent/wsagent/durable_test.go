@@ -16,15 +16,15 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/budget"
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/react"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/agentarchive"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/planexec"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/wsagent"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/budget"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/react"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/planexec"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/wsagent"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // testModelPolicy is the one-model policy these turns are priced at: $1 / $5 per

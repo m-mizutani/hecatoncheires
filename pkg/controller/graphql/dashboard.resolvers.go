@@ -9,7 +9,7 @@ import (
 	"context"
 	"time"
 
-	graphql1 "github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql"
+	graphql1 "github.com/m-mizutani/hecatoncheires/pkg/domain/model/graphql"
 )
 
 // SetFavoriteWorkspaces is the resolver for the setFavoriteWorkspaces field.

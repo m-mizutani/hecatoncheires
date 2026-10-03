@@ -12,7 +12,7 @@ import (
 	"os"
 
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/evaltype"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/evaltype"
 )
 
 // ComputeScore counts passed checks over total.

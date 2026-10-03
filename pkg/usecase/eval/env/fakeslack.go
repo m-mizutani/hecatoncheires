@@ -8,7 +8,7 @@ import (
 
 	goslack "github.com/slack-go/slack"
 
-	slacksvc "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
+	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 )
 
 // botUserID is the fixed bot identity the fake reports. Synthesized inputs use

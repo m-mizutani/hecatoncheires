@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 func TestNewKnowledgeID(t *testing.T) {

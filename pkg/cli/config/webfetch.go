@@ -4,14 +4,14 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/webfetch"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/webfetch"
 	"github.com/urfave/cli/v3"
 )
 
 // webFetchUserAgent is the User-Agent sent on every webfetch request. It is a
 // caller-level default (the CLI owns it) rather than a hidden default inside
 // the webfetch package.
-const webFetchUserAgent = "hecatoncheires-webfetch/1.0 (+https://github.com/secmon-lab/hecatoncheires)"
+const webFetchUserAgent = "hecatoncheires-webfetch/1.0 (+https://github.com/m-mizutani/hecatoncheires)"
 
 // WebFetch holds configuration for the agent webfetch tool. The shared LLM
 // client (used for injection screening + Markdown formatting) is NOT held here:

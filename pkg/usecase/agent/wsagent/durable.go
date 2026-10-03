@@ -8,12 +8,12 @@ import (
 	"github.com/gollem-dev/agentkit"
 	"github.com/m-mizutani/goerr/v2"
 
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/react"
-	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/planexec"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/react"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/planexec"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 )
 
 // wsAgentVersion is the strategy state version stamped on every Process this

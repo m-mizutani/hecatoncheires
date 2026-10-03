@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/gollem-dev/gollem"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // Completer is the minimal LLM surface the eval components (judge, usersim,

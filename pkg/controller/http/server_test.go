@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/adapter/policy"
-	controllerhttp "github.com/secmon-lab/hecatoncheires/pkg/controller/http"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
+	"github.com/m-mizutani/hecatoncheires/pkg/adapter/policy"
+	controllerhttp "github.com/m-mizutani/hecatoncheires/pkg/controller/http"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 )
 
 // TestServer_DBCheckRouteRegistered drives the router itself, not the handler:

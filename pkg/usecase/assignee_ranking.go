@@ -7,8 +7,8 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/async"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/async"
 )
 
 // The ranking exists only to order a picker, so both values are product

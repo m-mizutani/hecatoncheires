@@ -10,7 +10,7 @@ import (
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
-	notiontool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/notion"
+	notiontool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/notion"
 )
 
 // fakeNotionClient records what each tool asked for and answers with canned

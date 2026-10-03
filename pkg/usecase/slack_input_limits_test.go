@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 )
 
 func TestClampPlainText_EmptyString(t *testing.T) {

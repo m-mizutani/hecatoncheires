@@ -7,11 +7,11 @@ import (
 
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/agentarchive"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/threadcase"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/threadcase"
 )
 
 // A durable run's question must be PERSISTED, not just posted.

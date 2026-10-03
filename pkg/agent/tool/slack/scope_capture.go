@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/safe"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/safe"
 )
 
 // scopeCaptureCtxKey identifies a *scopeCapture stashed in a request context

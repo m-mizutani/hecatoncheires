@@ -7,8 +7,8 @@ import (
 
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/uierr"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/uierr"
 )
 
 func TestSlackError(t *testing.T) {

@@ -16,10 +16,10 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/budget"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/react"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/agentarchive"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/budget"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/react"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // recordingTool records every call so a test can assert what the model actually

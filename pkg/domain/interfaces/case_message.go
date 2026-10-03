@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/slack"
 )
 
 // CaseMessageRepository defines the interface for case-scoped Slack message persistence

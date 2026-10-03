@@ -4,7 +4,7 @@ import (
 	"github.com/gollem-dev/agentkit"
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/react"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/react"
 )
 
 // Agent names. These values are persisted on every Process row, so a running

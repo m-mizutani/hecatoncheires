@@ -73,7 +73,7 @@ import (
 	"github.com/gollem-dev/agentkit"
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // Config is one agent kind's ceiling.

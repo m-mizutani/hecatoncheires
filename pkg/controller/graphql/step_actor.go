@@ -3,8 +3,8 @@ package graphql
 import (
 	"context"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/auth"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/auth"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 )
 
 // resolveStepActor extracts an ActorRef from the request context. When a Slack

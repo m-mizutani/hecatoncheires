@@ -5,7 +5,7 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic/definition"
 )
 
 func TestErrInvalidValueSurvivesWrapping(t *testing.T) {

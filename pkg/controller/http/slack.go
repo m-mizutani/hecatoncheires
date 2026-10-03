@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/async"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/async"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 	"github.com/slack-go/slack/slackevents"
 )
 

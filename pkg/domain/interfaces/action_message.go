@@ -3,7 +3,7 @@ package interfaces
 import (
 	"context"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/slack"
 )
 
 // ActionMessageRepository defines the interface for action-scoped Slack message persistence.

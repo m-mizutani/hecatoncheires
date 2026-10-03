@@ -8,11 +8,11 @@ import (
 	"github.com/gollem-dev/gollem"
 	"github.com/gollem-dev/gollem/mock"
 	"github.com/m-mizutani/gt"
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/env"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/scenario"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/env"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/scenario"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 type fakeCompleter struct{}

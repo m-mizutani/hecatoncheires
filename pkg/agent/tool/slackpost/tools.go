@@ -12,8 +12,8 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	slackgo "github.com/slack-go/slack"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/slackfmt"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/slackfmt"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool"
 )
 
 // Poster is the narrow surface of slack.Service the slackpost tool depends

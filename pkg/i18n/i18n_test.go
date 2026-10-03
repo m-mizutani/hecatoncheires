@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 )
 
 func TestT(t *testing.T) {

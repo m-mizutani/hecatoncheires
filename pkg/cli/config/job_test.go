@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/m-mizutani/gt"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 	"github.com/pelletier/go-toml/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
 )
 
 func TestJobSection_Validate_RoundTrip(t *testing.T) {

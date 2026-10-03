@@ -1,4 +1,4 @@
-module github.com/secmon-lab/hecatoncheires
+module github.com/m-mizutani/hecatoncheires
 
 go 1.26.4
 

@@ -10,7 +10,7 @@ import (
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/evaltype"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/evaltype"
 )
 
 // Completer drives a single gollem completion against one LLM client.

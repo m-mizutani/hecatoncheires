@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/jomei/notionapi"
-	"github.com/secmon-lab/hecatoncheires/pkg/service/notion"
+	"github.com/m-mizutani/hecatoncheires/pkg/service/notion"
 )
 
 func TestBlocks_ToMarkdown(t *testing.T) {

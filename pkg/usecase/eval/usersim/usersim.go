@@ -14,8 +14,8 @@ import (
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/evaltype"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/scenario"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/evaltype"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/scenario"
 )
 
 // Simulator answers agent questions as the configured persona.

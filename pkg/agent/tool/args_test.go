@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool"
 )
 
 func TestExtractInt64(t *testing.T) {

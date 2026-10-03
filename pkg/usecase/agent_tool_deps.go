@@ -5,9 +5,9 @@ import (
 
 	slackgo "github.com/slack-go/slack" //nolint:depguard
 
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/slackpost"
-	"github.com/secmon-lab/hecatoncheires/pkg/service/slack"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slackpost"
+	"github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 )
 
 // AgentToolDeps assembles the tool dependencies the agent Kernel is built from.

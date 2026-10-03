@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // runOutcome labels how one JobRunner.Run / Resume attempt ended. Every attempt

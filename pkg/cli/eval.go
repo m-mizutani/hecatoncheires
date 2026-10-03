@@ -8,12 +8,12 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/urfave/cli/v3"
 
-	notiontool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/notion"
-	slacktool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
-	eval "github.com/secmon-lab/hecatoncheires/pkg/usecase/eval"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
+	notiontool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/notion"
+	slacktool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
+	eval "github.com/m-mizutani/hecatoncheires/pkg/usecase/eval"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 )
 
 // evalDefaultBudgetUSD is what one scenario run may spend when the global config

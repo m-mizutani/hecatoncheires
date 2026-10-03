@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/webfetch"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/webfetch"
 )
 
 func TestIsBlockedIP(t *testing.T) {

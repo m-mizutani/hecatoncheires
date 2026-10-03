@@ -1,6 +1,6 @@
 package interfaces
 
-import "github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+import "github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 
 // ListCaseOption is a functional option for filtering cases in List
 type ListCaseOption func(*listCaseConfig)

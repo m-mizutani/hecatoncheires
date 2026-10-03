@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // homeMessageRepository stores generated home messages append-only per user.

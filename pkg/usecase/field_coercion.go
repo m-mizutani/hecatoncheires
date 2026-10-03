@@ -1,6 +1,6 @@
 package usecase
 
-import "github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+import "github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 
 // coerceFieldValue normalizes a JSON-decoded any value to the canonical Go
 // representation expected for the given FieldType. Returns ok=false on any

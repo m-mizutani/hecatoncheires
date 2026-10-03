@@ -3,8 +3,8 @@ package usecase
 import (
 	"context"
 
-	memotool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/memo"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	memotool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/memo"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // memoToolAdapter wraps a *MemoUseCase so the memo agent tools see it through

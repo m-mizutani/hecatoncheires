@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // ErrActionValidation is returned when an Action fails its persistence-boundary invariants.

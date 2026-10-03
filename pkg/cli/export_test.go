@@ -6,14 +6,14 @@ import (
 	"github.com/gollem-dev/gollem"
 	"github.com/urfave/cli/v3"
 
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
-	notiontool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/notion"
-	slacktool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
-	httpctrl "github.com/secmon-lab/hecatoncheires/pkg/controller/http"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	slacksvc "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	notiontool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/notion"
+	slacktool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli/config"
+	httpctrl "github.com/m-mizutani/hecatoncheires/pkg/controller/http"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 )
 
 // RegistryHasInteractiveJobForTest exposes registryHasInteractiveJob.

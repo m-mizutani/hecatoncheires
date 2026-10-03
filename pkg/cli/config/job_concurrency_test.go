@@ -7,7 +7,7 @@ import (
 	"github.com/m-mizutani/gt"
 	"github.com/urfave/cli/v3"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/cli/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli/config"
 )
 
 // runJobConcurrency parses args through a throwaway command so the flag's

@@ -7,8 +7,8 @@ import (
 	"github.com/gollem-dev/agentkit"
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/budget"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/budget"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 func validConfig() budget.Config {

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/service/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 	goslack "github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 )

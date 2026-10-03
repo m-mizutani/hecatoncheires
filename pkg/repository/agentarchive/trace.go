@@ -7,7 +7,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/gollem-dev/gollem/trace"
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/safe"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/safe"
 )
 
 // CloudStorageTraceRepository persists gollem trace.Trace blobs as JSON

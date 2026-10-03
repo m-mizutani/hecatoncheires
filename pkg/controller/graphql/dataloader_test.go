@@ -8,14 +8,14 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	graphqlctrl "github.com/secmon-lab/hecatoncheires/pkg/controller/graphql"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
-	gqlmodel "github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
+	graphqlctrl "github.com/m-mizutani/hecatoncheires/pkg/controller/graphql"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
+	gqlmodel "github.com/m-mizutani/hecatoncheires/pkg/domain/model/graphql"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic/definition"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
 )
 
 // TestSlackUser_NormalizesCompositeSubClaim pins the rescue path for

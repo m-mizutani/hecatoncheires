@@ -1,7 +1,7 @@
 {
   "name": "hecatoncheires",
   "owner": {
-    "name": "secmon-lab"
+    "name": "m-mizutani"
   },
   "description": "Plugins for the Hecatoncheires project",
   "plugins": [

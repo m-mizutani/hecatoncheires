@@ -3,7 +3,7 @@ package graphql
 import (
 	"time"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // FieldValue is a custom GraphQL model so the Case / Memo fields resolvers can

@@ -17,12 +17,12 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/budget"
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/react"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/agentarchive"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/planexec"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/budget"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/react"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/planexec"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // caseDraft is a structured terminal output, standing in for a host that ends its

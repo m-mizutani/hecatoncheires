@@ -11,11 +11,11 @@ import (
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/goerr/v2"
 
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/react"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/toolargs"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/react"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/toolargs"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // Phases. A transition reads the phase, does one thing, and writes the phase it

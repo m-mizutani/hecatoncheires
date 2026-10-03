@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 func TestValidate(t *testing.T) {

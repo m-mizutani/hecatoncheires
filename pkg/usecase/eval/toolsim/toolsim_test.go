@@ -6,9 +6,9 @@ import (
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/gt"
-	notiontool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/notion"
-	slacktool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/toolsim"
+	notiontool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/notion"
+	slacktool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/toolsim"
 )
 
 type fakeCompleter struct {

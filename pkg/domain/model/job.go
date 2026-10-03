@@ -7,7 +7,7 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/robfig/cron/v3"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/pricing"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
 
 // CaseLifecycle enumerates the case lifecycle events that a Job can listen

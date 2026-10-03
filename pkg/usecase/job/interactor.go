@@ -10,13 +10,13 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	goslack "github.com/slack-go/slack"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/interaction"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/runtrace"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	slacksvc "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/uierr"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/interaction"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/runtrace"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/uierr"
 )
 
 // Slack identifiers for the interactive-Job question form. They are the

@@ -9,7 +9,7 @@ import (
 	agentprocmemory "github.com/gollem-dev/agentkit/repository/memory"
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
 )
 
 func TestThreadSubject(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/planexec"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/planexec"
 )
 
 // The host's persona prompt is the spine of the direct prompt: without it the

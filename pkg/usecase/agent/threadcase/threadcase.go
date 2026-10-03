@@ -11,7 +11,7 @@ package threadcase
 import (
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // TurnRequest collects the inputs resolved by the host before handing control

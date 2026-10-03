@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/cli"
+	"github.com/m-mizutani/hecatoncheires/pkg/cli"
 )
 
 func TestCmdDiagnosis(t *testing.T) {

@@ -6,9 +6,9 @@ import (
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/evaltype"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/scenario"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/eval/usersim"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/evaltype"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/scenario"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/eval/usersim"
 )
 
 type fakeCompleter struct {

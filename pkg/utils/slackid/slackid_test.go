@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/slackid"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/slackid"
 )
 
 func TestNormalize(t *testing.T) {

@@ -3,8 +3,8 @@ package usecase
 import (
 	"context"
 
-	knowledgetool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/knowledge"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	knowledgetool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/knowledge"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // knowledgeToolAdapter wraps the knowledge + tag use cases so the knowledge

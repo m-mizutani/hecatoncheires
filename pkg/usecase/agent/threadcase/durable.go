@@ -9,15 +9,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/m-mizutani/goerr/v2"
 
-	agentkernel "github.com/secmon-lab/hecatoncheires/pkg/agent/kernel"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/react"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/runtrace"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/i18n"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase/agent/planexec"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
+	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/react"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/runtrace"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/planexec"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 )
 
 // Strategy state versions. Bump one only alongside a DecodeState that still

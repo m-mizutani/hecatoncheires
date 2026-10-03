@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	graphqlctrl "github.com/secmon-lab/hecatoncheires/pkg/controller/graphql"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	graphql1 "github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
+	graphqlctrl "github.com/m-mizutani/hecatoncheires/pkg/controller/graphql"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	graphql1 "github.com/m-mizutani/hecatoncheires/pkg/domain/model/graphql"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 )
 
 // TestCaseResolver_Reporter pins the reporter resolution contract: the

@@ -10,17 +10,17 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
+	httpctrl "github.com/m-mizutani/hecatoncheires/pkg/controller/http"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/auth"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/authz"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	httpctrl "github.com/secmon-lab/hecatoncheires/pkg/controller/http"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/auth"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/authz"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
 )
 
 // fakePolicy is a hand-written PolicyClient that returns a fixed Result and

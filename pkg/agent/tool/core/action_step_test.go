@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool/core"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/core"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // mockActionStepMutator records every call so we can verify (a) the tool

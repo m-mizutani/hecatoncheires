@@ -1,6 +1,6 @@
 package model
 
-import "github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+import "github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 
 // FieldValue represents a single custom field value embedded in a Case document.
 // Each value carries its own Type for self-describing data.

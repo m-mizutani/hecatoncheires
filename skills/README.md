@@ -19,7 +19,7 @@ These skills are published through this repo's plugin marketplace
 Claude Code's plugin system. From inside Claude Code:
 
 ```text
-/plugin marketplace add secmon-lab/hecatoncheires
+/plugin marketplace add m-mizutani/hecatoncheires
 /plugin install hecatoncheires-build-scenario@hecatoncheires
 ```
 

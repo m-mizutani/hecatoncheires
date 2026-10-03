@@ -3,7 +3,7 @@ package interfaces
 import (
 	"context"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // ActionArchiveScope selects which slice of an action list to return.

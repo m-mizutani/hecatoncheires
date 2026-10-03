@@ -5,14 +5,14 @@ import (
 
 	"github.com/graph-gophers/dataloader/v7"
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	graphql1 "github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic/definition"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
-	slacksvc "github.com/secmon-lab/hecatoncheires/pkg/service/slack"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/slackid"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	graphql1 "github.com/m-mizutani/hecatoncheires/pkg/domain/model/graphql"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic/definition"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/slackid"
 )
 
 // ErrSlackUserNotInRepo is reported when the SlackUser loader is asked

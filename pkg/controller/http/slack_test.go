@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	httpctrl "github.com/secmon-lab/hecatoncheires/pkg/controller/http"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
+	httpctrl "github.com/m-mizutani/hecatoncheires/pkg/controller/http"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 )
 
 // Export the private function for testing

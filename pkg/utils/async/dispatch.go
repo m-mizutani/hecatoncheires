@@ -6,7 +6,7 @@ import (
 
 	"github.com/m-mizutani/goerr/v2"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 )
 
 var inflight sync.WaitGroup

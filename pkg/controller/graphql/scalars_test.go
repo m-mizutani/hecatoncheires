@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/controller/graphql"
+	"github.com/m-mizutani/hecatoncheires/pkg/controller/graphql"
 )
 
 func TestUnmarshalAny_PromotesJSONNumber(t *testing.T) {

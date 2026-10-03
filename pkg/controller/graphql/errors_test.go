@@ -7,10 +7,10 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 
-	gqlctrl "github.com/secmon-lab/hecatoncheires/pkg/controller/graphql"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/semantic"
-	"github.com/secmon-lab/hecatoncheires/pkg/usecase"
+	gqlctrl "github.com/m-mizutani/hecatoncheires/pkg/controller/graphql"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic"
+	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 )
 
 func TestErrorCode(t *testing.T) {

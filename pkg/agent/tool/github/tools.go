@@ -7,7 +7,7 @@ import (
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/agent/tool"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool"
 )
 
 // New returns the GitHub-backed agent tools when client != nil; nil

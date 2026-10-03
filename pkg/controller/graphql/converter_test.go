@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/m-mizutani/gt"
-	graphqlctrl "github.com/secmon-lab/hecatoncheires/pkg/controller/graphql"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	graphql1 "github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+	graphqlctrl "github.com/m-mizutani/hecatoncheires/pkg/controller/graphql"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	graphql1 "github.com/m-mizutani/hecatoncheires/pkg/domain/model/graphql"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 )
 
 // TestToGraphQLCase_Reporter pins the reporter mapping at the converter layer:

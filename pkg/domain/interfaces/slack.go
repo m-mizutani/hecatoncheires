@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/slack"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/slack"
 )
 
 // SlackRepository defines the interface for Slack message persistence

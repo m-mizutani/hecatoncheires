@@ -1,7 +1,7 @@
 package memory
 
 import (
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
 )
 
 // Repository is an alias for Memory to match the pattern

@@ -7,7 +7,7 @@ import (
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
-	jiratool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/jira"
+	jiratool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/jira"
 )
 
 // fakeToolSet records every Run call and returns canned specs/responses.

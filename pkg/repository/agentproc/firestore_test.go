@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/m-mizutani/gt"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/agentproc"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentproc"
 )
 
 // newRepository builds a fresh, empty Repository for one repotest factory call.

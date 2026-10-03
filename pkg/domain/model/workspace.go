@@ -2,7 +2,7 @@ package model
 
 import (
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
 )
 
 // Workspace represents a workspace's identity

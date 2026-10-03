@@ -1,6 +1,6 @@
 package model
 
-import "github.com/secmon-lab/hecatoncheires/pkg/domain/types"
+import "github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 
 // CaseRef is the summary projection of a Case used by case_ref fields:
 // the picker, the agent search tool, and value-label resolution. It carries

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/m-mizutani/gt"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/agentarchive"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
 )
 
 func TestHistoryObjectPath(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"github.com/gollem-dev/gollem/trace"
 	"github.com/m-mizutani/goerr/v2"
 
-	knowledgetool "github.com/secmon-lab/hecatoncheires/pkg/agent/tool/knowledge"
+	knowledgetool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/knowledge"
 )
 
 // reflectionSystemPrompt is the system prompt that drives the reflection agent.

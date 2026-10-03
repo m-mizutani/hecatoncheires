@@ -7,12 +7,12 @@ import (
 	"github.com/gollem-dev/agentkit"
 	agentprocmemory "github.com/gollem-dev/agentkit/repository/memory"
 	"github.com/m-mizutani/goerr/v2"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/interfaces"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/agentproc"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/firestore"
-	"github.com/secmon-lab/hecatoncheires/pkg/repository/memory"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/errutil"
-	"github.com/secmon-lab/hecatoncheires/pkg/utils/logging"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentproc"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/firestore"
+	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 	"github.com/urfave/cli/v3"
 )
 

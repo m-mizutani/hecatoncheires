@@ -10,7 +10,7 @@
 package wsagent
 
 import (
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // TurnRequest carries everything one workspace-agent turn needs. The host

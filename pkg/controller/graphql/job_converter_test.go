@@ -6,9 +6,9 @@ import (
 	"github.com/m-mizutani/gt"
 	"github.com/robfig/cron/v3"
 
-	graphqlctrl "github.com/secmon-lab/hecatoncheires/pkg/controller/graphql"
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
-	graphql1 "github.com/secmon-lab/hecatoncheires/pkg/domain/model/graphql"
+	graphqlctrl "github.com/m-mizutani/hecatoncheires/pkg/controller/graphql"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	graphql1 "github.com/m-mizutani/hecatoncheires/pkg/domain/model/graphql"
 )
 
 // TestToGraphQLCaseJob pins the Job definition → GraphQL mapping: strategy

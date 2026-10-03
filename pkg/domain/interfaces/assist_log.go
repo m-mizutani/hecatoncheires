@@ -3,7 +3,7 @@ package interfaces
 import (
 	"context"
 
-	"github.com/secmon-lab/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 )
 
 // AssistLogRepository defines the interface for AssistLog data persistence
