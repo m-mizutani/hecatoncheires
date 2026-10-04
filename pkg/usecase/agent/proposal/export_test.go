@@ -9,4 +9,5 @@ var (
 	WorkspacePromptEntriesForTest = workspacePromptEntries
 	PlannerLanguageLabelForTest   = plannerLanguageLabel
 	ValidateTurnRequestForTest    = validateTurnRequest
+	ValidateDraftFieldsForTest    = validateDraftFields
 )

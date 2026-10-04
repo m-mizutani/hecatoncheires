@@ -452,7 +452,13 @@ with workspace selector + Submit / Edit / Cancel buttons.
    produces the draft: `Title`, `Description`, an optional `is_test` flag
    (set only for explicit test/drill requests), and a `fields` list (one
    `field_id` with a `value` or `values` per entry) for the
-   **planner-selected** workspace's `FieldSchema`. Loop budgets (planner / sub-agent / sub-agent inner)
+   **planner-selected** workspace's `FieldSchema`. The draft is checked
+   against that schema before it is delivered: a field id the workspace does
+   not define, a value that does not parse as its field's type, or an option
+   id the field does not offer is sent back to the model, which re-emits the
+   draft (up to two retries). A draft still invalid after that is not posted;
+   the turn ends with the fallback message below. A required field the draft
+   leaves out is not an error — the review modal asks for it. Loop budgets (planner / sub-agent / sub-agent inner)
    bound runaway turns; when exhausted, the runtime returns
    `StatusFallback` and the host posts a system fallback message.
 

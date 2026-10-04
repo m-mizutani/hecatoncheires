@@ -43,10 +43,8 @@ type draftField struct {
 // title-less proposal is rejected inside planexec's regeneration loop rather than
 // reaching the human as a broken preview. It satisfies planexec.Validatable.
 //
-// The field VALUES are not checked against the workspace's schema, here or in
-// the host's finalizer: the host coerces each to its field's type when it stores
-// the preview and drops what it cannot place, and the human fixes the rest in
-// the review modal.
+// The field VALUES are checked against the workspace's schema by the host's
+// finalizer (validateDraftFields), since Validate cannot see that schema.
 func (d Draft) Validate() error {
 	if strings.TrimSpace(d.WorkspaceID) == "" {
 		return goerr.New("the draft must name the workspace it belongs to")

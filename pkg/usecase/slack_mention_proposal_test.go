@@ -56,10 +56,11 @@ func stubDraftScriptTitled(workspaceID, title, description, fieldsJSON string) [
 }
 
 // stubDraftScript is stubDraftScriptTitled with placeholder content, for tests
-// that assert on the flow rather than on what was drafted.
+// that assert on the flow rather than on what was drafted. It proposes no field
+// values, so it fits any workspace's schema.
 func stubDraftScript(workspaceID string) []string {
 	return stubDraftScriptTitled(workspaceID,
-		"AI suggested title", "AI suggested description", `[{"field_id":"severity","value":"high"}]`)
+		"AI suggested title", "AI suggested description", `[]`)
 }
 
 // bindDraftRuntime registers the durable case-draft agent, builds the Kernel it
@@ -1406,12 +1407,19 @@ func TestLifecycle_DraftFlow_FieldValuesAreStoredInTheirFieldTypes(t *testing.T)
 			Options: []config.FieldOption{{ID: "a", Name: "A"}, {ID: "b", Name: "B"}}},
 	}})
 
-	llm := newScriptedClient(stubDraftScriptTitled("ws-1", "Case G", "Typed fields.",
+	// The first terminal output holds a non-finite number and a field the schema
+	// does not define; it is fed back, and the corrected one is what gets stored.
+	script := stubDraftScriptTitled("ws-1", "Case G", "Typed fields.",
 		`[{"field_id":"severity","value":"high"},`+
 			`{"field_id":"score","value":"3"},`+
 			`{"field_id":"impact","value":"NaN"},`+
 			`{"field_id":"tags","values":["a","b"]},`+
-			`{"field_id":"ghost","value":"x"}]`))
+			`{"field_id":"ghost","value":"x"}]`)
+	script = append(script, draftFinal("ws-1", "Case G", "Typed fields.",
+		`[{"field_id":"severity","value":"high"},`+
+			`{"field_id":"score","value":"3"},`+
+			`{"field_id":"tags","values":["a","b"]}]`))
+	llm := newScriptedClient(script)
 
 	h := newLifecycleHarness(t, registry, llm)
 	gt.NoError(t, h.slackUC.HandleSlackEvent(context.Background(),

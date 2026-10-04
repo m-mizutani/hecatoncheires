@@ -145,6 +145,10 @@ func (h *slackDraftHandler) Materialize(ctx context.Context, ssn *model.Session,
 		IsTest:            m.IsTest,
 		CustomFieldValues: map[string]model.FieldValue{},
 	}
+	// The agent's finalizer already rejected values that do not fit this schema,
+	// so this pass converts them to their field types. The drops below are reached
+	// only when the workspace configuration changed between that check and this
+	// call.
 	if entry.FieldSchema != nil {
 		coerced, violations := model.CoerceFieldInputs(entry.FieldSchema, m.Fields)
 		for _, v := range violations {
