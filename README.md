@@ -1,37 +1,129 @@
-# Hecatoncheires
+<p align="center">
+  <img src="docs/images/logo.png" alt="Hecatoncheires logo" width="120">
+</p>
 
-An AI-native, customizable project/case management platform with Slack integration.
+<h1 align="center">Hecatoncheires</h1>
 
-## Overview
+<p align="center">
+  An AI-native case management platform that lives in Slack.
+</p>
 
-Hecatoncheires is a flexible project and case management system that adapts to your workflow through configuration files. Define custom fields, integrate with Slack, and leverage AI for knowledge extraction and analysis.
+<p align="center">
+  <a href="https://github.com/m-mizutani/hecatoncheires/actions/workflows/test.yml"><img src="https://github.com/m-mizutani/hecatoncheires/actions/workflows/test.yml/badge.svg" alt="Test"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+</p>
 
-## Key Features
+![Case list in the Web UI](docs/images/case-list.jpg)
 
-- **Customizable Fields**: Define project-specific fields via TOML configuration
-- **AI-Powered**: Automatic knowledge extraction from various sources (Notion, Slack, etc.)
-- **Slack Integration**: Native Slack channel and message integration
-- **GraphQL API**: Type-safe, flexible API for frontend and integrations
-- **Field Types**: Support for text, numbers, dates, URLs, user references, and select fields with metadata
+## What is Hecatoncheires
+
+Hecatoncheires tracks **Cases** — risk reviews, security assessments, hiring
+pipelines, or any other work item your team runs — inside **Workspaces** whose
+fields you define in a TOML file. Every Case is tied to Slack, either as its own
+channel or as a thread in a monitored channel, so the discussion stays where
+your team already works. An AI agent answers mentions in those conversations:
+it drafts new Cases, updates existing ones, and investigates using Slack,
+Notion, GitHub, Jira, and the web. The same data is available through a Web UI
+and a GraphQL API.
+
+## Features
+
+- **Configurable workspaces and fields** — define each workspace's custom fields
+  (text, Markdown, number, select, user, date, URL, Case references), statuses,
+  and Slack behavior in
+  TOML. See [Configuration](docs/configuration.md).
+- **Slack-native workflow** — create Cases with a slash command, ask the bot to
+  draft one by mentioning it, and run each Case in its own channel or in a
+  thread. See the [User Guide](docs/user_guide.md) and
+  [Slack Integration](docs/slack.md).
+
+  ![The bot asking a teammate in a Slack thread](docs/images/slack-thread.png)
+
+- **AI agent with tools** — the agent reads Slack, Notion, GitHub, Jira, the
+  web, and the workspace's Knowledge while it works on a Case. See
+  [Agent Tools](docs/agent_tools.md).
+- **Integrations** — connect [Notion](docs/integrations/notion.md),
+  [GitHub](docs/integrations/github.md), and [Jira](docs/integrations/jira.md);
+  each one is optional.
+- **Agent Jobs** — run an agent on a schedule or when a Case is created or
+  closed. See
+  [Configuration → Job Definitions](docs/configuration.md#job-definitions-job)
+  and [User Guide → Automation](docs/user_guide.md#automation-tied-to-the-case-lifecycle).
+- **Knowledge** — record organization-specific knowledge (operating rules, past
+  judgements, …) once, and let people and the agent find it again by semantic
+  search.
+  See [User Guide → Knowledge](docs/user_guide.md#knowledge).
+- **Access control** — private Cases visible only to their Slack channel
+  members, and a per-workspace Rego policy that decides who may use a
+  workspace. See
+  [Configuration → Authorization](docs/configuration.md#authorization-section-authz).
+- **MCP endpoint** — a read-only Model Context Protocol server for AI clients,
+  authorized by Rego. See [MCP Server](docs/mcp.md).
+- **BigQuery export** — full-refresh each workspace's data into BigQuery for
+  analysis. See [BigQuery Export](docs/export.md).
+- **Eval harness** — run scenario files through the agent workflows offline and
+  grade the results. See [Eval Harness](docs/eval.md).
+
+## Requirements
+
+To try it locally, nothing outside your machine is needed:
+
+| Tool | Version |
+|---|---|
+| Go | 1.26.4+ (the `go` directive in `go.mod`) |
+| Node.js | 22.22+ |
+| pnpm | through Corepack (`corepack enable`) |
+
+A production deployment runs on Google Cloud:
+
+| Service | Purpose |
+|---|---|
+| Firestore | Primary data store |
+| Cloud Storage | Agent session history and traces |
+| LLM provider | OpenAI, Anthropic Claude (direct or on Vertex AI), or Google Gemini on Vertex AI |
+| Gemini embeddings on Vertex AI | Required whenever the AI features are enabled, whichever LLM provider you use |
+| Slack App | Sign-in, Case channels and threads, and the agent's conversations |
+
+See [Deployment](docs/deployment.md) for the full setup.
 
 ## Quick Start
 
-The fastest way to try Hecatoncheires locally (in-memory backend, no auth) is in
-[docs/getting_started.md](docs/getting_started.md). In short:
+Run it locally with the in-memory backend and no Slack App:
 
-1. Create a `config.toml` file with your field definitions (see [Configuration](docs/configuration.md) and [examples/config.toml](examples/config.toml))
-2. Run the server with the memory backend:
-   ```bash
-   go run . serve --repository-backend=memory --config=config.toml --no-auth=U000000000 --addr=:8080
-   ```
-3. Access the web UI at `http://localhost:8080`
+```bash
+git clone https://github.com/m-mizutani/hecatoncheires.git
+cd hecatoncheires
+corepack enable
 
-For a production deployment (Firestore, Cloud Storage, LLM provider, Slack
-credentials), see [docs/deployment.md](docs/deployment.md).
+# Build the Web UI, which is embedded into the Go binary
+cd frontend
+pnpm install --frozen-lockfile
+pnpm run build
+cd ..
+
+go run . serve \
+  --repository-backend=memory \
+  --config=examples/config.toml \
+  --no-auth=U000000000
+```
+
+Then open <http://localhost:8080>. Data is kept in memory and lost on restart.
+[Getting Started](docs/getting_started.md) explains each step and how to run the
+test suite.
+
+## Deployment
+
+Container images are published to the GitHub Container Registry for every
+pushed commit, tagged with the full commit SHA. For example:
+
+```bash
+docker pull ghcr.io/m-mizutani/hecatoncheires:d57137a1a75c8bc5e3cae18354089fcb450f476a
+```
+
+[Deployment](docs/deployment.md) covers choosing an image, building your own,
+and configuring Firestore, Cloud Storage, the LLM, and Slack.
 
 ## Documentation
-
-Full documentation lives in [docs/](docs/README.md), organized by audience.
 
 | Document | Description |
 |----------|-------------|
@@ -41,113 +133,21 @@ Full documentation lives in [docs/](docs/README.md), organized by audience.
 | [Deployment](docs/deployment.md) | Production deployment overview |
 | [Configuration](docs/configuration.md) | `config.toml` complete reference |
 | [CLI Reference](docs/cli.md) | Subcommands, flags, and environment variables |
-| [Eval Harness](docs/eval.md) | Offline scenario-based evaluation of LLM workflows |
 | [Slack Integration](docs/slack.md) | Slack App setup (OAuth, Events, Interactivity, Slash) |
-| [Integrations](docs/integrations.md) | Notion and GitHub |
-| [User Guide](docs/user_guide.md) | End-user Slack workflows |
+| [Integrations](docs/integrations/README.md) | Notion, GitHub, and Jira |
+| [Agent Tools](docs/agent_tools.md) | Tools the AI agent can call, and where each is available |
+| [User Guide](docs/user_guide.md) | End-user workflows in Slack and the Web UI |
 | [Operations](docs/operations.md) | Observability, runbook, backup |
+| [MCP Server](docs/mcp.md) | Read-only MCP endpoint and its Rego authorization |
+| [BigQuery Export](docs/export.md) | Exporting workspace data to BigQuery |
+| [Eval Harness](docs/eval.md) | Offline scenario-based evaluation of LLM workflows |
 | [Developing](docs/develop/README.md) | Architecture and contributor guide |
 
-## Development
+## Contributing
 
-### Prerequisites
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development environment, tests,
+and the checks a pull request must pass.
 
-- Go 1.21+
-- Node.js 22.22+ (for frontend; required by react-router v8)
-- Corepack-managed pnpm (see below; the version is pinned via the `packageManager` field in `frontend/package.json`)
-- Google Cloud Firestore
+## License
 
-#### pnpm via Corepack
-
-This repo pins the pnpm version in `frontend/package.json` (`packageManager` field).
-Enable Corepack once on your machine and it will automatically install the right pnpm:
-
-```bash
-corepack enable
-```
-
-Do NOT install pnpm globally with `npm install -g pnpm` — that bypasses the pin
-and is the most common cause of the lockfile being unexpectedly rewritten when
-you run e2e or build commands.
-
-If you intentionally want to update dependencies, run `pnpm install` inside
-`frontend/` on its own and commit the resulting `pnpm-lock.yaml` change.
-Day-to-day commands (build, e2e, etc.) use `--frozen-lockfile` and will fail
-fast if the lockfile is out of sync rather than silently rewriting it.
-
-### Building
-
-```bash
-task build           # Build complete application (frontend + backend)
-task graphql         # Generate GraphQL code from schema
-task dev:frontend    # Run frontend development server
-```
-
-### Testing
-
-#### Unit Tests
-
-Run Go unit tests:
-```bash
-go test ./...
-```
-
-#### E2E Tests
-
-Hecatoncheires includes end-to-end tests using Playwright to verify the complete application workflow.
-
-**Prerequisites:**
-- Node.js 22.22+ and pnpm
-- The backend server must be running with `--repository-backend=memory` for testing
-
-**Run E2E tests:**
-
-```bash
-# Install dependencies (only when you want to update them)
-cd frontend
-pnpm install
-pnpm run test:e2e
-
-# Or use the task command from the project root. This runner installs with
-# --frozen-lockfile and will refuse to silently rewrite pnpm-lock.yaml.
-task test:e2e
-```
-
-**Other E2E test commands:**
-
-```bash
-# Run tests with UI mode (interactive)
-task test:e2e:ui
-
-# Run tests in headed mode (show browser)
-task test:e2e:headed
-
-# Run tests in debug mode
-task test:e2e:debug
-
-# Show test report
-task test:e2e:report
-```
-
-**Manual E2E test setup:**
-
-If you want to run tests manually with a running server:
-
-1. Start the backend server in memory mode:
-   ```bash
-   go run . serve \
-     --repository-backend=memory \
-     --config=frontend/e2e/fixtures/config.test.toml \
-     --no-auth=U000000000 \
-     --addr=:8080
-   ```
-
-2. In another terminal, run the E2E tests:
-   ```bash
-   cd frontend
-   BASE_URL=http://localhost:8080 pnpm run test:e2e
-   ```
-
-**CI/CD Integration:**
-
-E2E tests run automatically on pull requests via GitHub Actions. Test results and screenshots are uploaded as artifacts when tests fail.
+Hecatoncheires is licensed under the [Apache License 2.0](LICENSE).

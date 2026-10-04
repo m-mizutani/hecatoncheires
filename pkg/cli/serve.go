@@ -237,7 +237,7 @@ func cmdServe() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:        "no-auth",
-			Usage:       "Skip authentication and run as specified Slack user ID (development only). Requires --slack-bot-token. Example: --no-auth=U1234567890",
+			Usage:       "Skip authentication and run as specified Slack user ID (development only). With --slack-bot-token the ID is validated against Slack; without it a placeholder test user is used. Example: --no-auth=U1234567890",
 			Category:    "Authentication",
 			Sources:     cli.EnvVars("HECATONCHEIRES_NO_AUTH"),
 			Destination: &noAuthUID,

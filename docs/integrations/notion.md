@@ -1,18 +1,4 @@
-# Integrations
-
-Hecatoncheires can wire up external services to surface their content to the AI agent and to feed the Source ingestion pipeline. This document covers the integrations you can enable: Notion, GitHub, and Jira.
-
-> **Scope note.** This page is about *enabling* the Notion, GitHub, and Jira
-> services. It is **not** the complete agent-tool list — that lives in
-> [Agent Tools](agent_tools.md). The **Notion** and **Jira** tools are wired
-> into the interactive mention / investigation agents **and into unattended
-> [Jobs](configuration.md#job-definitions-job)** (both modes). The **GitHub**
-> tools remain interactive / investigation only — they are **not** available to
-> Jobs. If you are writing a Job prompt, check
-> [Agent Tools → Tools available by context](agent_tools.md#tools-available-by-context)
-> for what a Job can actually call.
-
-## Notion
+# Notion
 
 Hecatoncheires integrates with Notion to surface Notion content to the AI agent through tools registered in `pkg/agent/tool/notion/`:
 
@@ -23,7 +9,7 @@ Hecatoncheires integrates with Notion to surface Notion content to the AI agent 
 
 This document covers the Notion setup needed for those tools.
 
-### 1. Create a Notion Internal Integration
+## 1. Create a Notion Internal Integration
 
 1. Open <https://www.notion.so/profile/integrations> (or **Settings → Integrations → Develop your own integrations**).
 2. Click **New integration**.
@@ -39,7 +25,7 @@ This document covers the Notion setup needed for those tools.
 
 > Notion's official Markdown Content API works with both *public* and *internal* integrations as long as the integration has the **Read content** capability and the page is shared with it. Internal integrations are the recommended choice for self-hosted deployments because they do not require publishing the integration.
 
-### 2. Share Pages / Databases with the Integration
+## 2. Share Pages / Databases with the Integration
 
 Notion's permission model is opt-in: a page or database is invisible to the integration until it is explicitly shared.
 
@@ -51,7 +37,7 @@ For each top-level page or database you want the agent to see:
 
 Pages or child blocks that are **not** shared with the connection will appear as `<unknown>` placeholders in the Markdown output (a documented Notion API limitation).
 
-### 3. Configure the Server
+## 3. Configure the Server
 
 Set the API token via flag or environment variable:
 
@@ -76,7 +62,7 @@ If the token is omitted, the Notion-backed agent tools are silently skipped and 
 Notion API token not configured, Source features will be limited
 ```
 
-### 4. API Surface Used by the Agent Tools
+## 4. API Surface Used by the Agent Tools
 
 | Tool | Endpoint | Notes |
 |------|----------|-------|
@@ -85,13 +71,13 @@ Notion API token not configured, Source features will be limited
 | `notion__get_database` | `GET /v1/databases/{database_id}`, `GET /v1/data_sources/{data_source_id}`, then `POST /v1/data_sources/{data_source_id}/query` | Three calls, because Notion's 2025-09-03 API split moved a database's rows into data sources: the first reports the data sources, the second reports the column schema, the third lists one data source's rows. The schema call is skipped when paging through a listing (`start_cursor` set) unless `describe_properties` asks for choices. All send `Notion-Version: 2026-03-11`. |
 | `notion__search_database` | The same three, with `filter` / `sorts` in the query body and `filter_properties` in its query string | Notion has no parent-scoped search endpoint — its own documentation says to use the data source query for that — so searching one database means filtering its rows here. The schema is read on every call, because the conditions are written against property names and types. |
 
-#### About databases and data sources
+### About databases and data sources
 
 `notion__search` reports databases alongside pages, but `notion__get_page` reads pages only — Notion answers a database id there with `400 validation_error: … is a database, not a page`. `notion__get_database` is what closes that gap: it returns the database's rows as `id` / `title` / `url` entries, and the agent then opens whichever row it needs with `notion__get_page`. Each search hit also carries `read_tool` naming the tool that reads it, so the routing is data the agent can follow rather than only prose in the tool descriptions.
 
 Since Notion's 2025-09-03 API version, a database does not hold its rows directly; it holds one or more **data sources** that do. Almost every database has exactly one, and the tool queries it without being asked. When a database has several, the tool returns no rows and reports the `data_sources` list instead, so the agent can call again with `data_source_id` set to the one it wants.
 
-#### Searching one database's rows
+### Searching one database's rows
 
 `notion__search_database` narrows the rows of a single database. It takes the same `database_id` / `data_source_id` pair as `notion__get_database`, plus:
 
@@ -105,7 +91,7 @@ Since Notion's 2025-09-03 API version, a database does not hold its rows directl
 
 **Notion cannot search page bodies.** `POST /v1/search` matches titles only, and a data source query matches property values only, so a term that appears only in a page's body is not findable through the API at all. Naming the columns that carry such terms — a summary, a keyword list — in `search_properties` is how that gap is covered.
 
-#### Reading a database's column schema
+### Reading a database's column schema
 
 A database object reports only the id and name of each data source, never the columns. `notion__get_database` therefore also reads `GET /v1/data_sources/{id}` and returns:
 
@@ -115,7 +101,7 @@ A database object reports only the id and name of each data source, never the co
 
 A `formula` or `rollup` column is reported with the union of the operators its possible result types accept: Notion's schema carries a formula's expression and a rollup's aggregation but never their result type, so which operators apply is not knowable until the caller declares it.
 
-#### Telling "nothing matched" apart from "the call did not happen"
+### Telling "nothing matched" apart from "the call did not happen"
 
 Every read tool's result carries `status` and `matched`:
 
@@ -129,7 +115,7 @@ Three situations are deliberately kept apart here, because they call for three d
 
 A failure to reach Notion at all — no permission, page not shared, rate limited, Notion down — is **not** one of these. It is returned as an error, so the agent sees a failed tool call. That distinction is what lets a workflow with the rule "if there is no evidence in this database, hand the request to a person" behave correctly: an empty result and an unreachable database must not look the same.
 
-#### About the Markdown Content API
+### About the Markdown Content API
 
 The `GET /v1/pages/{page_id}/markdown` endpoint was introduced by Notion in early 2026 and is the supported way to retrieve a page's full content as a Markdown document in a single call. Hecatoncheires uses it because:
 
@@ -139,13 +125,13 @@ The `GET /v1/pages/{page_id}/markdown` endpoint was introduced by Notion in earl
 
 > The third-party `jomei/notionapi` Go client used elsewhere in the codebase does not expose this endpoint, so `pkg/agent/tool/notion/client.go` calls it directly with `net/http` while reusing the same API token. The Markdown endpoint and the Search endpoint live in the agent tool package because they are exclusively used by the agent — `pkg/service/notion` keeps only the Source-facing surface.
 
-### 5. Operational Notes
+## 5. Operational Notes
 
 - **Rate limits**: Notion enforces ~3 req/s averaged. The Notion service uses the `notionapi` library's built-in retry-on-429 (3 retries) for `Search` and `QueryUpdatedPages`. The Markdown endpoint does not use the library, but Notion returns standard 429 responses, which surface to the agent as an error string (the agent typically retries with a delay).
 - **Token rotation**: rotating the Internal Integration Token requires re-deploying the server with the new token. There is no graceful refresh — the previous token is invalidated immediately.
 - **Multi-instance safety**: the Notion client is stateless and safe to instantiate per process; no shared in-memory state is held across instances.
 
-### 6. Troubleshooting
+## 6. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
@@ -157,104 +143,7 @@ The `GET /v1/pages/{page_id}/markdown` endpoint was introduced by Notion in earl
 | Markdown response has `truncated: true` and ends with `<unknown>` blocks | Page exceeds Notion's render limits, or blocks reference unshared child pages | Split the page, or share the referenced child pages with the integration. |
 | Agent gets a "validation_error: invalid Notion-Version" | Running against a Notion enterprise tenant that pins a lower API version | This is unlikely under default Notion plans; contact Notion support if the response references a different `notion-version` constraint. |
 
-## GitHub
-
-Hecatoncheires uses a single GitHub App to power both the Source pipeline (PR/Issue ingestion) and the agent's GitHub tools (search, get_issue, get_pull_request, get_file, list_commits). Wiring up the App enables both at once — there is no separate flag for the agent tools.
-
-### GitHub App Setup
-
-1. Create a GitHub App at `https://github.com/settings/apps/new`
-2. Grant the following permissions:
-   - **Repository permissions**: Issues (Read), Pull Requests (Read), Contents (Read)
-3. Install the App on the target organization or repositories
-4. Note the App ID, Installation ID, and download the private key
-
-### Configuration
-
-All three flags (`--github-app-id`, `--github-app-installation-id`, `--github-app-private-key`) must be set to enable GitHub features (Source pipeline + agent tools). If any flag is missing, GitHub features are gracefully disabled and the application continues to run normally with other source types.
-
-```bash
-hecatoncheires serve \
-  --github-app-id=12345 \
-  --github-app-installation-id=67890 \
-  --github-app-private-key=/path/to/private-key.pem \
-  ...
-```
-
-The `--github-app-private-key` accepts either a file path to a PEM file or the PEM content directly as a string.
-
-### Source Management
-
-GitHub Sources are managed via the GraphQL API:
-
-- `createGitHubSource` - Create a new GitHub source with repository list
-- `updateGitHubSource` - Update an existing GitHub source
-- `validateGitHubRepo` - Validate access to a repository before adding it
-
-Repositories can be specified in `owner/repo` format or as full GitHub URLs (e.g., `https://github.com/owner/repo`).
-
-### Agent Tools
-
-When the GitHub App is configured, the Slack mention agent and the assist flow gain the following gollem tools:
-
-| Tool | Purpose |
-| --- | --- |
-| `github__search` | Search issues and pull requests using GitHub search syntax (`repo:`, `is:open`, `author:`, `label:`, etc.). Up to 50 hits per call. |
-| `github__get_issue` | Fetch a single issue (not PR) with its body, labels, and full comment thread. |
-| `github__get_pull_request` | Fetch a single PR with body, labels, comments, and reviews. Optional `include_files=true` adds the diff (per-file patches truncated at 20 KB). |
-| `github__get_file` | Fetch a file's content at any branch/tag/SHA. UTF-8 text only; binaries return `is_binary=true` with empty content. Capped at 1 MB. |
-| `github__list_commits` | List commits with optional `path`, `author`, `since`, `until` filters. Up to 50 commits per call. |
-
-The tools operate within whatever scope the GitHub App's installation grants — there is no per-repository allowlist on the application side.
-
-## Jira
-
-Hecatoncheires uses [`github.com/gollem-dev/tools/jira`](https://github.com/gollem-dev/tools) — a read-only Jira Cloud integration — for the agent's Jira tools (list projects, search issues, fetch issues). Unlike Notion and GitHub, Jira does not currently feed the Source ingestion pipeline; it is agent-tools only.
-
-### 1. Generate a Jira API Token
-
-1. Sign in to Jira Cloud with the account whose access you want the agent to use.
-2. Open <https://id.atlassian.com/manage-profile/security/api-tokens>.
-3. Click **Create API token**, name it (e.g. `hecatoncheires`), and copy the generated token. It is shown only once.
-
-The agent's permissions are exactly the permissions of this account within your Jira site — there is no separate app-level scope to grant.
-
-### 2. Configure the Server
-
-All three flags are required together; if any is missing, Jira features are gracefully disabled and the server continues to run normally with other integrations.
-
-```bash
-hecatoncheires serve \
-  --jira-base-url=https://your-domain.atlassian.net \
-  --jira-email=you@example.com \
-  --jira-api-token=your-api-token \
-  ...
-```
-
-Or via environment variables:
-
-```bash
-export HECATONCHEIRES_JIRA_BASE_URL="https://your-domain.atlassian.net"
-export HECATONCHEIRES_JIRA_EMAIL="you@example.com"
-export HECATONCHEIRES_JIRA_API_TOKEN="your-api-token"
-```
-
-When all three are configured, you should see `Jira service enabled` in the server logs at startup. If any is omitted, the server logs `Jira not configured, Jira agent tools will be disabled` and the Jira-backed agent tools are silently skipped.
-
-### 3. Agent Tools
-
-When Jira is configured, every agent context (interactive mention agent, assist, investigation sub-agents, and Jobs — see [Agent Tools → Tools available by context](agent_tools.md#tools-available-by-context)) gains the following gollem tools:
-
-| Tool | Purpose |
-| --- | --- |
-| `jira_list_projects` | List projects accessible to the account (id, key, name, type, lead), with pagination. |
-| `jira_search_issues` | Search issues with JQL syntax; a `project` argument is spliced into the JQL via AND for convenience. Returns key, summary, status, type, assignee, priority, and updated time. |
-| `jira_get_issues` | Fetch one or more issues by key/id in a single batch (up to 100); descriptions and optional comments are rendered from Jira's Atlassian Document Format to Markdown. |
-
-Investigation sub-agents (proposal case-draft, thread-mode investigation) only receive these tools when the planner explicitly selects the `jira` ToolSet for a task — see [Agent Tools](agent_tools.md) for the ToolSet-selection mechanism.
-
 ## See Also
 
-- [Agent Tools](agent_tools.md) — the full agent-tool catalogue and the per-context availability matrix (which tools Jobs get vs. the interactive agent).
-- [Configuration](configuration.md) — CLI flags and environment variables, including `--notion-api-token`, the `--github-app-*` flags, and the `--jira-*` flags.
-- [Slack](slack.md) — Slack app setup and authentication, which power the mention agent and assist flow that consume these integration tools.
+- [Integrations](README.md) — every integration, the credentials each needs, and whether Jobs can use its tools.
+- [Agent Tools](../agent_tools.md) — the full agent-tool catalogue and the per-context availability matrix.

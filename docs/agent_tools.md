@@ -10,7 +10,7 @@ naming a tool the context does not expose silently does nothing.
 > Quick map for prompt authors:
 > - **Naming a tool in a Job prompt?** Read [Tools available by context](#tools-available-by-context) — Jobs get the Slack read tools (`slack__search_messages` / `slack__get_messages`), Notion (`notion__*`), and Jira (`jira_*`), but a *narrower* write palette than the interactive mention agent and still **no GitHub** read tools.
 > - **Wondering whether a Job may close / delete / post anywhere?** Read [Guardrails](#guardrails).
-> - **Wiring an external integration (Notion / GitHub / Jira) on / off?** See [Integrations](integrations.md); the tools light up automatically when the service is configured.
+> - **Wiring an external integration (Notion / GitHub / Jira) on / off?** See [Integrations](integrations/README.md); the tools light up automatically when the service is configured.
 
 The names below are exactly what the LLM sees (e.g. `case__update_case`). They
 are grouped by the package that defines them under `pkg/agent/tool/`.
@@ -193,7 +193,7 @@ schema's `Required` flag, which is what keeps the first row per-entry: a nested
 
 ### Notion tools (`notion`)
 
-Wired when `HECATONCHEIRES_NOTION_API_TOKEN` is set. See [integrations.md](integrations.md).
+Wired when `HECATONCHEIRES_NOTION_API_TOKEN` is set. See [Integrations → Notion](integrations/notion.md).
 Available in the investigation / interactive contexts **and in Jobs** (both modes).
 
 | Tool | R/W | Purpose |
@@ -205,7 +205,7 @@ Available in the investigation / interactive contexts **and in Jobs** (both mode
 
 ### GitHub tools (`github`)
 
-Wired when the GitHub App flags are set. See [integrations.md](integrations.md).
+Wired when the GitHub App flags are set. See [Integrations → GitHub](integrations/github.md).
 Investigation / interactive contexts only — **not** wired into Jobs.
 
 The repositories these tools can read are exactly those the GitHub App
@@ -230,7 +230,7 @@ repository is unreachable.
 Read-only Jira Cloud integration (`gollem-dev/tools/jira`, wrapped by
 `pkg/agent/tool/jira`). Wired when `--jira-base-url` / `--jira-email` /
 `--jira-api-token` (or the matching `HECATONCHEIRES_JIRA_*` env vars) are all
-set. See [integrations.md](integrations.md#jira).
+set. See [Integrations → Jira](integrations/jira.md).
 Available in every context, including Jobs — unlike GitHub, which is
 interactive/investigation only.
 
@@ -372,5 +372,5 @@ restricted action, that is a change to the binary, not to a prompt.
 
 - [Configuration → Job Definitions](configuration.md#job-definitions-job) — the `[[job]]` schema, scheduling, and execution strategy.
 - [Operations → Agent Jobs operations](operations.md#agent-jobs-operations) — the runtime behaviour (triggers, concurrency, run log).
-- [Integrations](integrations.md) — turning the Notion and GitHub tools on.
+- [Integrations](integrations/README.md) — turning the Notion, GitHub, and Jira tools on.
 - [Concepts](concepts.md) — the vocabulary (Case, Action, Workspace, Job).

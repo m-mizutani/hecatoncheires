@@ -66,7 +66,7 @@ configured per Workspace under `[[action.status]]`. See
 ### Source
 An external origin of information (e.g. a Notion page, a GitHub resource, a
 Slack message) that the agent tools can read while investigating a Case. See
-[Integrations](integrations.md).
+[Integrations](integrations/README.md).
 
 ### Knowledge
 A **workspace-wide shared knowledge entry**: organization-specific information

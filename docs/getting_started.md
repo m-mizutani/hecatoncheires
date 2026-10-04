@@ -7,7 +7,7 @@ production deployment (Firestore, Cloud Storage, Slack App, secrets), see
 
 ## Prerequisites
 
-- Go 1.21+
+- Go 1.26.4+ (the version in the `go` directive of `go.mod`)
 - Node.js 22.22+ and Corepack-managed pnpm (for building the frontend; the
   version is pinned via the `packageManager` field in `frontend/package.json`.
   react-router v8 requires Node 22.22+)
@@ -20,7 +20,22 @@ corepack enable
 
 Do NOT install pnpm globally with `npm install -g pnpm` — that bypasses the pin.
 
-## 1. Write a minimal `config.toml`
+## 1. Build the frontend
+
+The Web UI is embedded into the Go binary from `frontend/dist`, which the
+repository ships empty. Build it once before starting the server; without this
+step the server starts but serves no Web UI.
+
+```bash
+cd frontend
+pnpm install --frozen-lockfile
+pnpm run build
+cd ..
+```
+
+Rebuild after pulling frontend changes.
+
+## 2. Write a minimal `config.toml`
 
 The configuration file defines your Workspace and its custom Fields. A complete,
 annotated example lives at [`examples/config.toml`](../examples/config.toml);
@@ -38,7 +53,7 @@ name = "Summary"
 type = "text"
 ```
 
-## 2. Run the server (memory backend, no auth)
+## 3. Run the server (memory backend, no auth)
 
 ```bash
 go run . serve \
@@ -51,18 +66,21 @@ go run . serve \
 - `--repository-backend=memory` keeps everything in process — no Firestore
   required. Data is lost on restart.
 - `--no-auth=<slack-user-id>` runs without OAuth and treats every request as the
-  given user. **Development only.** See
+  given user. Without a Slack bot token the user is a placeholder named
+  `Test User`, so no Slack App is needed to try the Web UI; with
+  `--slack-bot-token` the ID is validated against Slack and must exist.
+  **Development only.** See
   [CLI → Authentication Modes](cli.md#authentication-modes).
 - AI features stay disabled unless you declare a model in a global config file
   and name it with `--llm-model`; see
   [Deployment → LLM models](deployment.md#3-llm-models).
 
-## 3. Open the web UI
+## 4. Open the web UI
 
 Visit <http://localhost:8080>. The GraphiQL playground (when enabled) is at
 `/graphiql`.
 
-## 4. Run the test suite (optional)
+## 5. Run the test suite (optional)
 
 ```bash
 go test ./...
@@ -119,8 +137,8 @@ run on every push.
 > manages indexes via the Firestore Admin API (the emulator does not implement
 > the Admin API, so `migrate` cannot and does not run against it).
 
-Frontend end-to-end tests use Playwright against a memory-backed server; see the
-root [README](../README.md) for the e2e workflow.
+Frontend end-to-end tests use Playwright against a memory-backed server; see
+[Contributing → End-to-end tests](../CONTRIBUTING.md#end-to-end-tests).
 
 ## Where to go next
 

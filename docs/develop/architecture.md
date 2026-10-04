@@ -587,6 +587,6 @@ display-name order rather than blocking the picker.
 - [User Guide](../user_guide.md) — the user-facing agent thread lifecycle and available agent tools
 - [Configuration](../configuration.md) — TOML field definitions and the agent tool registry
 - [CLI](../cli.md) — CLI flags and environment variables
-- [Integrations](../integrations.md) — GitHub and Notion integration setup
+- [Integrations](../integrations/README.md) — Notion, GitHub, and Jira integration setup
 - [Operations](../operations.md) — Sentry and observability
 - [`CLAUDE.md`](../../CLAUDE.md) and [`.claude/rules/`](../../.claude/rules/) — enforced project rules

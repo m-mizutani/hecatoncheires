@@ -17,6 +17,8 @@ Private Cases you are not a channel member of never appear here, even if you hap
 
 Inside a workspace, `/ws/{workspace}/cases` lists its Cases as a table with the **Open / Closed / Drafts / Archived / All** tabs, a title search box, and a column picker.
 
+![Case list in the Web UI](images/case-list.jpg)
+
 - **Rows per page** — the footer control switches between **20 / 50 / 100 / 200** rows. The choice is remembered in your browser (per browser, not per workspace) and applies the next time you open any Case list.
 - **Status column** — in a **thread-mode** workspace the column shows the Case's board status from the workspace's `[case.status]` configuration (e.g. *Triage*, *In Review*, *Done*), with the colour configured for that status. In a **channel-mode** workspace it shows the lifecycle badge (Open / Closed / Draft), which is also the fallback for a thread-mode Case that has no board status set yet. The **Open / Closed** tabs always filter on the lifecycle status, which the board status keeps in sync (a Case in a closed board status counts as Closed).
 - **Slack column** — the link opens the Case in Slack. For a **thread-mode** Case that is the thread the Case is bound to, not the monitored channel it was raised in; for a **channel-mode** Case it is the Case's own channel. The cell is a dash when the Case has no Slack channel yet (for example a draft, or when Slack is not configured).
@@ -959,7 +961,7 @@ Slack tool set including `slack__post_message`.
 
 GitHub tools (`github__search`, `github__get_issue`, `github__get_pull_request`,
 `github__get_file`, `github__list_commits`) are described in detail in
-[integrations.md](integrations.md). They share the same GitHub App
+[Integrations → GitHub](integrations/github.md). They share the same GitHub App
 installation as the Source pipeline.
 
 ### Reading the artifacts
