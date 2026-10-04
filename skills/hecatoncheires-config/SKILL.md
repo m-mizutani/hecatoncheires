@@ -41,7 +41,7 @@ question — don't guess which file holds a fact:
 | How a scheduled Job fires (per-case, UTC cron, open-cases-only) and the Job guardrails | `docs/configuration.md` § *Job Definitions* (Events and scheduling / Guardrails) |
 | Slack channel vs thread mode, scopes, id formats | `docs/slack.md` |
 | How the config file is loaded + the `validate` command | `docs/cli.md` |
-| Turning Notion / GitHub on (the *enable* side, not the tool list) | `docs/integrations.md` |
+| Turning Notion / GitHub / Jira on (the *enable* side, not the tool list) | `docs/integrations/` |
 
 - **Configuration reference** — `docs/configuration.md` /
   <https://github.com/m-mizutani/hecatoncheires/blob/main/docs/configuration.md>.
@@ -64,9 +64,10 @@ question — don't guess which file holds a fact:
   <https://github.com/m-mizutani/hecatoncheires/blob/main/docs/cli.md>.
   How the file is loaded (`--config`, directory recursion) and the `validate`
   command used in the final step.
-- **Integrations** — `docs/integrations.md` /
-  <https://github.com/m-mizutani/hecatoncheires/blob/main/docs/integrations.md>.
-  How to *enable* Notion and GitHub (tokens, App setup). For the tool **names**
+- **Integrations** — `docs/integrations/README.md` /
+  <https://github.com/m-mizutani/hecatoncheires/blob/main/docs/integrations/README.md>.
+  How to *enable* Notion, GitHub, and Jira (tokens, App setup), one page per
+  service under `docs/integrations/`. For the tool **names**
   and their availability, use `docs/agent_tools.md` instead.
 
 ## How to work

@@ -15,6 +15,34 @@ in [Configuration](configuration.md), and Slack App setup is in
 | LLM provider | AI assist, agent sessions, agent Jobs | OpenAI, Anthropic Claude, or Google Gemini. See below. |
 | Slack App | Slack integration (OAuth, Events, Interactivity, Slash) | See [Slack Integration](slack.md). |
 
+## Container image
+
+Every push to a branch of this repository builds a `linux/amd64` image and
+publishes it to the GitHub Container Registry, tagged with the full 40-character
+commit SHA (`.github/workflows/publish.yml`). Images carry no release-number or
+`latest` tag, so pick the commit you want to run — for example the commit a
+release points to — and use its SHA:
+
+```bash
+docker pull ghcr.io/m-mizutani/hecatoncheires:d57137a1a75c8bc5e3cae18354089fcb450f476a
+```
+
+The image's entrypoint is the `hecatoncheires` binary, so pass the subcommand
+and flags as the container's arguments:
+
+```bash
+docker run --rm -p 8080:8080 \
+  ghcr.io/m-mizutani/hecatoncheires:<commit-sha> \
+  serve --addr=:8080 ...
+```
+
+To build the image yourself instead, run this from the repository root (the
+Dockerfile builds the frontend too):
+
+```bash
+docker build --build-arg BUILD_VERSION=<version> -t hecatoncheires .
+```
+
 ## 1. Firestore
 
 Create (or choose) a Google Cloud project and provision a Firestore database.

@@ -23,7 +23,7 @@ flowchart TD
 1. [Getting Started](getting_started.md)
 2. [Deployment](deployment.md) — Firestore, Cloud Storage, LLM provider, secrets
 3. [Slack Integration](slack.md) — Slack App setup (OAuth, Events, Interactivity, Slash, Enterprise Grid)
-4. [Integrations](integrations.md) — Notion and GitHub
+4. [Integrations](integrations/README.md) — Notion, GitHub, and Jira
 
 ### Configuring — "how do I customize it?"
 1. [Configuration](configuration.md) — the complete `config.toml` reference
@@ -35,6 +35,7 @@ flowchart TD
 
 ### Operating — "how do I monitor and maintain it?"
 - [Operations](operations.md) — observability (Sentry), `tick`/`migrate`/`diagnosis`, backup & data migration
+- [BigQuery Export](export.md) — exporting each workspace's data to BigQuery for analysis
 
 ### Developing — "how does it work inside, and how do I extend it?"
 - [develop/](develop/README.md) — contributor entry point, rule-placement map, and [Architecture (internals)](develop/architecture.md)
@@ -50,8 +51,9 @@ flowchart TD
 | [cli.md](cli.md) | CLI subcommands, flags, environment variables |
 | [agent_tools.md](agent_tools.md) | Agent tool catalogue, per-context availability matrix, and guardrails |
 | [eval.md](eval.md) | Offline scenario-based evaluation of LLM workflows |
+| [export.md](export.md) | BigQuery export of workspace data |
 | [slack.md](slack.md) | Slack App setup and integration |
-| [integrations.md](integrations.md) | Notion and GitHub integrations |
+| [integrations/](integrations/README.md) | Notion, GitHub, and Jira integrations (one page per service) |
 | [mcp.md](mcp.md) | MCP server (read-only Workspace/Case/Action tools, Rego authorization) |
 | [user_guide.md](user_guide.md) | End-user guide (Slack workflows) |
 | [operations.md](operations.md) | Operations and runbook |

@@ -294,9 +294,9 @@ into `[[llm_model]]` and is what enables the AI features at all. A deployment
 that used a provider's default model must now name that model explicitly, so its
 price is known.
 
-\* Required for OAuth mode. Alternatively, use `--no-auth` with `--slack-bot-token` for development.
+\* Required for OAuth mode. Alternatively, use `--no-auth` for development.
 
-\*\* Required when using `--no-auth`. Also enables user avatar display and Slack user refresh worker.
+\*\* When used with `--no-auth`, the given user ID is validated against Slack; without it, `--no-auth` runs as a placeholder test user. Also enables user avatar display and Slack user refresh worker.
 
 \*\*\* Required only to enable Slack webhook integration. Without this, webhook endpoints are not registered.
 
@@ -626,7 +626,7 @@ hecatoncheires serve \
   --firestore-project-id=YOUR_PROJECT_ID
 ```
 
-`--no-auth` and `--slack-client-id`/`--slack-client-secret` are mutually exclusive. If both are provided, `--no-auth` takes precedence.
+`--slack-bot-token` is optional here: with it, `--no-auth` validates the user ID against Slack; without it, a placeholder test user is used. If `--slack-client-id`/`--slack-client-secret` are also provided, `--no-auth` takes precedence and they are ignored.
 
 ---
 
@@ -655,5 +655,5 @@ hecatoncheires export \
 - [export.md](./export.md) — BigQuery export: `[export]` config, exported schema, full-refresh semantics, IAM.
 - [deployment.md](./deployment.md) — deployment topology and runtime requirements.
 - [operations.md](./operations.md) — operational runbooks for `migrate`, `diagnosis`, and `tick`, plus Sentry / observability.
-- [integrations.md](./integrations.md) — GitHub and Notion source integrations.
+- [integrations/](./integrations/README.md) — Notion, GitHub, and Jira integrations.
 - [slack.md](./slack.md) — Slack app setup and OAuth scopes.

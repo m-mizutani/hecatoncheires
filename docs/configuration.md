@@ -993,9 +993,9 @@ The AI agent will:
 | `core__*` (actions) + `case__*` (case edits) | Always (a case context exists). |
 | `slack__search_messages` | `HECATONCHEIRES_SLACK_USER_OAUTH_TOKEN` with the `search:read` scope. See [docs/slack.md](slack.md#user-token-scopes). |
 | `slack__get_messages`, `slack__post_message` | `HECATONCHEIRES_SLACK_BOT_TOKEN`. |
-| `notion__search`, `notion__get_page`, `notion__get_database`, `notion__search_database` | `HECATONCHEIRES_NOTION_API_TOKEN`. See [docs/integrations.md](integrations.md). |
-| `github__*` | The `--github-app-*` flags. See [docs/integrations.md](integrations.md). |
-| `jira_*` | The `--jira-*` flags (`HECATONCHEIRES_JIRA_BASE_URL` / `_EMAIL` / `_API_TOKEN`). See [docs/integrations.md](integrations.md#jira). |
+| `notion__search`, `notion__get_page`, `notion__get_database`, `notion__search_database` | `HECATONCHEIRES_NOTION_API_TOKEN`. See [Integrations → Notion](integrations/notion.md). |
+| `github__*` | The `--github-app-*` flags. See [Integrations → GitHub](integrations/github.md). |
+| `jira_*` | The `--jira-*` flags (`HECATONCHEIRES_JIRA_BASE_URL` / `_EMAIL` / `_API_TOKEN`). See [Integrations → Jira](integrations/jira.md). |
 | `webfetch` | A configured web-fetch client. |
 | `knowledge__*` | Always (write is withheld on private cases). |
 | `memo__*` | A `[memo]` section with at least one memo field defined. |
@@ -1973,7 +1973,7 @@ four it came from.
 ## See Also
 
 - [CLI Flags & Environment Variables](cli.md) — server flags, environment variables, and the diagnosis command
-- [Integrations](integrations.md) — GitHub source integration and Notion tools
+- [Integrations](integrations/README.md) — Notion, GitHub, and Jira
 - [Operations](operations.md) — observability (Sentry) and operational guidance
 - [Slack](slack.md) — Slack app setup, scopes, and authentication
 - [User Guide](user_guide.md) — drafts, import, action steps, case-draft, and agent Jobs usage

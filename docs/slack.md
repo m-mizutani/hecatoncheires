@@ -218,7 +218,7 @@ In no-auth mode the OAuth roundtrip is skipped, so there is no callback to read 
 For local development and testing, you can use the `--no-auth` flag to skip OAuth flow while still operating as a real Slack user:
 
 ```bash
-# Requires bot token for user validation
+# Optional: with a bot token, the user ID is validated against Slack
 export HECATONCHEIRES_SLACK_BOT_TOKEN="xoxb-your-bot-token"
 export HECATONCHEIRES_NO_AUTH="U1234567890"  # Your Slack user ID
 
@@ -233,13 +233,12 @@ Or use CLI flags:
 ```
 
 **Requirements:**
-- `--slack-bot-token` is required for user validation
-- The specified user ID must exist in your Slack workspace
-- `--no-auth` cannot be used with `--slack-client-id` or `--slack-client-secret`
+- `--slack-bot-token` is optional. When it is set, the specified user ID must exist in your Slack workspace, or the server fails to start. When it is omitted, the server starts as a placeholder user (`Test User` / `test@example.com`) with the given ID, which is enough to try the Web UI without a Slack App
+- `--no-auth` takes precedence over `--slack-client-id` / `--slack-client-secret`; the OAuth settings are ignored while it is set
 
 **How it works:**
-- On startup, the server validates the user ID via Slack API (`users.info`)
-- If valid, all requests are automatically authenticated as that user
+- On startup, when `--slack-bot-token` is set, the server validates the user ID via Slack API (`users.info`)
+- All requests are then automatically authenticated as that user
 - No OAuth flow or cookies are required
 
 This is useful for:
@@ -538,7 +537,7 @@ When an action is created in Hecatoncheires, a notification message is automatic
 
 1. When an action is created, if the associated case has a Slack channel, an Action card is posted
 2. The Action card has the shape of "top-level text + one attachment carrying Block Kit content" rather than top-level Block Kit. This is required so that `reply_broadcast=true` thread replies (status / assignee / step events — see below) render the parent Action card excerpt in the channel view; top-level Block Kit collapses Slack's preview to a generic "a thread" link
-3. The top-level text is the title line: a fixed prefix emoji (📌) signals "this row is an Action card", followed by the bold linked title (e.g. `📌 *<webui-url|Investigate ubie-oss>*`). The "Action:" literal was dropped and the per-status emoji was removed from the title — status is communicated via the attachment side-bar color and the Status select element
+3. The top-level text is the title line: a fixed prefix emoji (📌) signals "this row is an Action card", followed by the bold linked title (e.g. `📌 *<webui-url|Investigate login failures>*`). The "Action:" literal was dropped and the per-status emoji was removed from the title — status is communicated via the attachment side-bar color and the Status select element
 4. The attachment carries: an optional description Section block (only when the Action has a description), and an Actions block with Status and Assignee selects. The attachment `color` tracks the current status (`ActionStatusDefinition.SlackColor`, which maps preset names like `active` / `blocked` / `success` to hex), so the side-bar gives status a glance-level read
 5. Slack auto-appends "Added by {bot name}" as the attachment footer. This is Slack-side attribution and cannot be suppressed via API; treat it as part of the card layout
 6. Status / assignee changes from the web UI or Slack interactivity refresh the same message, so the title link, description, attachment color, and select state stay in sync
@@ -1226,7 +1225,7 @@ All webhook endpoints require valid Slack signature verification.
 
 \** Required only if you want to enable Slack webhook integration. Without this, webhook endpoints will not be enabled.
 
-\*** Required when using `HECATONCHEIRES_NO_AUTH`.
+\*** Optional with `HECATONCHEIRES_NO_AUTH`: when it is set, the no-auth user ID is validated against Slack; when it is not, no-auth mode runs as a placeholder test user.
 
 For local development with ngrok:
 1. Start ngrok: `ngrok http 8080`
@@ -1262,9 +1261,9 @@ For local development with ngrok:
 - Verify `BASE_URL` doesn't have a trailing slash
 
 #### No-auth mode fails to start
-- Verify `HECATONCHEIRES_SLACK_BOT_TOKEN` is set
-- Ensure the user ID exists in your Slack workspace
-- Check that `--slack-client-id` and `--slack-client-secret` are not set (they are mutually exclusive with `--no-auth`)
+- When `HECATONCHEIRES_SLACK_BOT_TOKEN` is set, the server looks the no-auth user ID up in Slack and stops with `failed to validate Slack user` if it cannot. Ensure the token is valid and the user ID exists in your Slack workspace
+- To start without any Slack lookup, unset `HECATONCHEIRES_SLACK_BOT_TOKEN`; no-auth mode then runs as a placeholder test user
+- `--slack-client-id` / `--slack-client-secret` do not prevent startup: `--no-auth` takes precedence and they are ignored
 
 ### Webhook Issues
 
@@ -1323,5 +1322,5 @@ ref: `<8-hex id>`
 
 - [Configuration Guide](./configuration.md) - TOML config file and field definitions
 - [CLI Reference](./cli.md) - CLI flags
-- [Integrations Guide](./integrations.md) - GitHub, Notion, and other external integrations
+- [Integrations Guide](./integrations/README.md) - Notion, GitHub, and Jira integrations
 - [User Guide](./user_guide.md) - Action steps, drafts, case import, and Slack-driven workflows
