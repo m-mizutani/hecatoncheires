@@ -216,8 +216,8 @@ github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek
 github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
 github.com/gollem-dev/agentkit v0.3.1 h1:96DGbdYj+vvpjZLvMjxeA+FdJefIjdBZ5uvlE8tv6MQ=
 github.com/gollem-dev/agentkit v0.3.1/go.mod h1:eTQjNToldzP80Xl4b9L0Ls/JKfjvpk6S1N+94GHX+L0=
-github.com/gollem-dev/gollem v0.29.1-0.20261003024322-1398448d7999 h1:zB29eu8a77j0uQQ/b7VSUNDBY/P5DNerEnuY6momNNE=
-github.com/gollem-dev/gollem v0.29.1-0.20261003024322-1398448d7999/go.mod h1:5j4HasoXtmW7iXaxWtQemkxpPXChKz1uD/1154Y7q04=
+github.com/gollem-dev/gollem v0.30.0 h1:eQmI/AOoBsfHHYz0sZwepmve4h7uso6gcO1aR00KE+g=
+github.com/gollem-dev/gollem v0.30.0/go.mod h1:5j4HasoXtmW7iXaxWtQemkxpPXChKz1uD/1154Y7q04=
 github.com/gollem-dev/tools/jira v0.2.0 h1:sqh7K9HFs3N8TTZsWYmOlVx5RS6GJMVEXuDSx7oDdBM=
 github.com/gollem-dev/tools/jira v0.2.0/go.mod h1:eh/gxO8c7QHS5Fo1tGdWSda9+xP8RsD9N7FR13il5Bw=
 github.com/google/flatbuffers v25.2.10+incompatible h1:F3vclr7C3HpB1k9mxCGRMXq6FdUalZ6H/pNX4FP1v0Q=
