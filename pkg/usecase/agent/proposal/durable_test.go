@@ -418,7 +418,7 @@ func TestDurableTellsThePlannerAndItsSubAgentsOneTime(t *testing.T) {
 		draftPlan,
 		"the deploy failed at 14:00",
 		draftFinalize,
-		`{"workspace_id":"risk","title":"Failed deploy","description":"The 14:00 deploy failed.","custom_field_values":{"severity":"high"}}`,
+		`{"workspace_id":"risk","title":"Failed deploy","description":"The 14:00 deploy failed.","fields":[{"field_id":"severity","value":"high"}]}`,
 	)
 
 	h := newDurableHarness(t, llm)
@@ -457,7 +457,7 @@ func TestDurableDeliversTheDraft(t *testing.T) {
 		draftPlan,
 		"the deploy failed at 14:00",
 		draftFinalize,
-		`{"workspace_id":"risk","title":"Failed deploy","description":"The 14:00 deploy failed.","custom_field_values":{"severity":"high"}}`,
+		`{"workspace_id":"risk","title":"Failed deploy","description":"The 14:00 deploy failed.","fields":[{"field_id":"severity","value":"high"}]}`,
 	))
 	ssn := h.session(t, ctx)
 
@@ -470,7 +470,7 @@ func TestDurableDeliversTheDraft(t *testing.T) {
 	gt.String(t, calls[0].Draft.WorkspaceID).Equal("risk")
 	gt.String(t, calls[0].Draft.Title).Equal("Failed deploy")
 	gt.String(t, calls[0].Draft.Description).Equal("The 14:00 deploy failed.")
-	gt.Value(t, calls[0].Draft.CustomFieldValues["severity"]).Equal("high")
+	gt.Value(t, calls[0].Draft.Fields).Equal([]model.FieldInput{{FieldID: "severity", Value: "high"}})
 	gt.Value(t, calls[0].Draft.IsTest).Equal(false)
 	// The placeholder the result replaces survived the durable boundary.
 	gt.Value(t, calls[0].Target.ProcessingTS).Equal("1700000000.000900")
@@ -504,25 +504,141 @@ func TestDurableRegeneratesAnUnknownWorkspace(t *testing.T) {
 	gt.String(t, calls[0].Draft.WorkspaceID).Equal("risk")
 }
 
-// A field value outside the schema is NOT regenerated: the host already drops it
-// and lets the human fill it in the review modal, and that tolerance is what this
-// path preserves.
-func TestDurableLeavesUnknownFieldValuesToTheHost(t *testing.T) {
+// A field value the workspace's schema does not accept is fed back to the model,
+// which re-picks it: the human never sees a preview holding an option the field
+// does not offer.
+func TestDurableRegeneratesAFieldValueOutsideTheSchema(t *testing.T) {
 	ctx := context.Background()
+	llm, calls := recordingLLM(
+		draftPlan,
+		"the deploy failed",
+		draftFinalize,
+		`{"workspace_id":"risk","title":"Failed deploy","description":"It failed.","fields":[{"field_id":"severity","value":"critical"},{"field_id":"impact","value":"big"}]}`,
+		`{"workspace_id":"risk","title":"Failed deploy","description":"It failed.","fields":[{"field_id":"severity","value":"high"}]}`,
+	)
+	h := newDurableHarness(t, llm)
+	ssn := h.session(t, ctx)
+
+	proc := h.run(t, h.request(ssn, "1700000001.000003"))
+	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+
+	got := h.host.Calls()
+	gt.Array(t, got).Length(1).Required()
+	gt.Value(t, got[0].Kind).Equal("propose")
+	gt.Value(t, got[0].Draft.Fields).Equal([]model.FieldInput{{FieldID: "severity", Value: "high"}})
+
+	// The regeneration call names both rejected values, so one re-emit can fix
+	// them all.
+	seen := calls()
+	gt.Array(t, seen).Length(5).Required()
+	gt.String(t, seen[4].Input).Contains(`field "severity": option ID not found`)
+	gt.String(t, seen[4].Input).Contains(`field "impact": not defined in the workspace schema`)
+}
+
+// A value the model cannot repair within the retry bound produces no draft: the
+// turn ends in a fallback instead of a preview that cannot be submitted.
+func TestDurableFallsBackWhenAFieldValueIsNeverRepaired(t *testing.T) {
+	ctx := context.Background()
+	bad := `{"workspace_id":"risk","title":"Failed deploy","description":"It failed.","fields":[{"field_id":"severity","value":"critical"}]}`
 	h := newDurableHarness(t, durableLLM(
 		draftPlan,
 		"the deploy failed",
 		draftFinalize,
-		`{"workspace_id":"risk","title":"Failed deploy","description":"It failed.","custom_field_values":{"severity":"critical"}}`,
+		bad, bad, bad,
 	))
 	ssn := h.session(t, ctx)
 
-	h.run(t, h.request(ssn, "1700000001.000003"))
+	h.run(t, h.request(ssn, "1700000001.000006"))
 
 	calls := h.host.Calls()
 	gt.Array(t, calls).Length(1).Required()
-	gt.Value(t, calls[0].Kind).Equal("propose")
-	gt.Value(t, calls[0].Draft.CustomFieldValues["severity"]).Equal("critical")
+	gt.Value(t, calls[0].Kind).Equal("fallback")
+	gt.String(t, calls[0].Reason).NotEqual("")
+}
+
+func TestValidateDraftFields(t *testing.T) {
+	ws := &model.WorkspaceEntry{
+		Workspace: model.Workspace{ID: "risk"},
+		FieldSchema: &config.FieldSchema{
+			Fields: []config.FieldDefinition{
+				{ID: "severity", Name: "Severity", Type: types.FieldTypeSelect, Required: true,
+					Options: []config.FieldOption{{ID: "high", Name: "High"}, {ID: "low", Name: "Low"}}},
+				{ID: "tags", Name: "Tags", Type: types.FieldTypeMultiSelect,
+					Options: []config.FieldOption{{ID: "db", Name: "DB"}, {ID: "net", Name: "Network"}}},
+				{ID: "score", Name: "Score", Type: types.FieldTypeNumber},
+			},
+		},
+	}
+	draft := func(fields ...proposal.DraftFieldForTest) *proposal.Draft {
+		return &proposal.Draft{WorkspaceID: "risk", Title: "t", Description: "d", Fields: fields}
+	}
+
+	t.Run("values that fit the schema pass", func(t *testing.T) {
+		err := proposal.ValidateDraftFieldsForTest(ws, draft(
+			proposal.DraftFieldForTest{FieldID: "severity", Value: "low"},
+			proposal.DraftFieldForTest{FieldID: "tags", Values: []string{"db", "net"}},
+			proposal.DraftFieldForTest{FieldID: "score", Value: "4.5"},
+		))
+		gt.NoError(t, err)
+	})
+
+	t.Run("a draft without fields passes", func(t *testing.T) {
+		gt.NoError(t, proposal.ValidateDraftFieldsForTest(ws, draft()))
+	})
+
+	t.Run("a required field left out is not a violation", func(t *testing.T) {
+		gt.NoError(t, proposal.ValidateDraftFieldsForTest(ws, draft(
+			proposal.DraftFieldForTest{FieldID: "score", Value: "1"},
+		)))
+	})
+
+	t.Run("an unknown field id is rejected", func(t *testing.T) {
+		err := proposal.ValidateDraftFieldsForTest(ws, draft(
+			proposal.DraftFieldForTest{FieldID: "owner", Value: "alice"},
+		))
+		gt.Value(t, err).NotNil().Required()
+		gt.String(t, err.Error()).Contains(`field "owner": not defined in the workspace schema`)
+	})
+
+	t.Run("an option the field does not offer is rejected", func(t *testing.T) {
+		err := proposal.ValidateDraftFieldsForTest(ws, draft(
+			proposal.DraftFieldForTest{FieldID: "tags", Values: []string{"db", "disk"}},
+		))
+		gt.Value(t, err).NotNil().Required()
+		gt.String(t, err.Error()).Contains(`field "tags": option ID not found`)
+	})
+
+	t.Run("a non-number for a number field is rejected", func(t *testing.T) {
+		err := proposal.ValidateDraftFieldsForTest(ws, draft(
+			proposal.DraftFieldForTest{FieldID: "score", Value: "high"},
+		))
+		gt.Value(t, err).NotNil().Required()
+		gt.String(t, err.Error()).Contains("score")
+	})
+
+	t.Run("every violation is reported at once", func(t *testing.T) {
+		err := proposal.ValidateDraftFieldsForTest(ws, draft(
+			proposal.DraftFieldForTest{FieldID: "severity", Value: "critical"},
+			proposal.DraftFieldForTest{FieldID: "score", Value: "NaN"},
+			proposal.DraftFieldForTest{FieldID: "owner", Value: "alice"},
+		))
+		gt.Value(t, err).NotNil().Required()
+		gt.String(t, err.Error()).Contains(`field "severity"`)
+		gt.String(t, err.Error()).Contains("score")
+		gt.String(t, err.Error()).Contains(`field "owner"`)
+		// One flat list: the validator's own heading is not nested inside it.
+		gt.Bool(t, strings.Contains(err.Error(), "case field validation failed")).False()
+	})
+
+	t.Run("a workspace with no schema accepts no field", func(t *testing.T) {
+		plain := &model.WorkspaceEntry{Workspace: model.Workspace{ID: "plain"}}
+		gt.NoError(t, proposal.ValidateDraftFieldsForTest(plain, draft()))
+		err := proposal.ValidateDraftFieldsForTest(plain, draft(
+			proposal.DraftFieldForTest{FieldID: "severity", Value: "high"},
+		))
+		gt.Value(t, err).NotNil().Required()
+		gt.String(t, err.Error()).Contains(`field "severity": not defined in the workspace schema`)
+	})
 }
 
 // A planner question ends the turn: the host posts the form, and the session
@@ -860,21 +976,4 @@ func TestDurableStartTurnRefusesWhenUnbound(t *testing.T) {
 		UserInput: "draft a case",
 	})
 	gt.Error(t, err).Required()
-}
-
-// Draft.Validate is what stops a shapeless proposal reaching the human.
-func TestDraftValidate(t *testing.T) {
-	ok := proposal.Draft{WorkspaceID: "risk", Title: "T", Description: "D"}
-	gt.NoError(t, ok.Validate())
-
-	for name, d := range map[string]proposal.Draft{
-		"no workspace":   {Title: "T", Description: "D"},
-		"no title":       {WorkspaceID: "risk", Description: "D"},
-		"blank title":    {WorkspaceID: "risk", Title: "   ", Description: "D"},
-		"no description": {WorkspaceID: "risk", Title: "T"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			gt.Error(t, d.Validate())
-		})
-	}
 }

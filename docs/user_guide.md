@@ -447,12 +447,18 @@ with workspace selector + Submit / Edit / Cancel buttons.
    the planner pulls the field schema and source list per turn via the
    `pkg/agent/tool/wsmeta` tools (`list_workspaces`, `get_workspace`).
    Each round, the planner emits a JSON plan with one of three actions:
-   `investigate` (parallel sub-agent fan-out under read-only tool sets),
-   `question`, or `materialize`. The terminal action for a normal mention
-   is `materialize`, which produces `Title`, `Description`, an optional
-   `is_test` flag (set only for explicit test/drill requests), and a
-   `custom_field_values` map for the **planner-selected** workspace's
-   `FieldSchema`. Loop budgets (planner / sub-agent / sub-agent inner)
+   `tasks` (parallel sub-agent fan-out under read-only tool sets),
+   `question`, or `finalize`. After `finalize`, a separate terminal call
+   produces the draft: `Title`, `Description`, an optional `is_test` flag
+   (set only for explicit test/drill requests), and a `fields` list (one
+   `field_id` with a `value` or `values` per entry) for the
+   **planner-selected** workspace's `FieldSchema`. The draft is checked
+   against that schema before it is delivered: a field id the workspace does
+   not define, a value that does not parse as its field's type, or an option
+   id the field does not offer is sent back to the model, which re-emits the
+   draft (up to two retries). A draft still invalid after that is not posted;
+   the turn ends with the fallback message below. A required field the draft
+   leaves out is not an error — the review modal asks for it. Loop budgets (planner / sub-agent / sub-agent inner)
    bound runaway turns; when exhausted, the runtime returns
    `StatusFallback` and the host posts a system fallback message.
 

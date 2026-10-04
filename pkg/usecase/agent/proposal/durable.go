@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"errors"
+	"strings"
 	"sync"
 	"text/template"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/slackfmt"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
 	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/planexec"
@@ -173,9 +175,11 @@ func (d *Durable) Register(
 	handle, err := planexec.Register(reg, agentkernel.AgentProposal, proposalAgentVersion,
 		taskAgent, progress, limiter,
 		planexec.Config[Draft]{
-			// The workspace and its field values are checked against the registry
-			// inside the regeneration loop, so a bad option id is fed back and the
-			// draft re-emitted rather than reaching the human as a broken preview.
+			// The workspace (registry and the requester's access) and the field
+			// values (that workspace's schema) are checked inside the regeneration
+			// loop, so a draft naming an unknown workspace or an invalid value is
+			// fed back and re-emitted rather than reaching the human as a preview
+			// that cannot be submitted.
 			Finalizers: []planexec.Finalizer[Draft]{d.validateAgainstRegistry},
 			Remaining:  d.models.RemainingFunc(),
 		},
@@ -346,20 +350,16 @@ func (d *Durable) inheritOpts(ctx context.Context, prevID string) []agentkit.Spa
 }
 
 // validateAgainstRegistry is the draft's finalizer: it checks that the proposed
-// workspace is one this deployment actually has. Registration happens once at
-// startup, so it reads the registry rather than closing over one workspace.
-//
-// The FIELD VALUES are deliberately not checked here. The host already drops a
-// field id outside the schema and a value it cannot coerce, leaving the human to
-// fill it in the review modal — and that tolerance is the behaviour being
-// preserved. Rejecting here instead would spend regeneration rounds on a draft
-// the human could have fixed with one click. A workspace that does not exist is
-// different: there is no preview to render at all.
+// workspace is one this deployment actually has and the requester may use, and
+// that the proposed field values fit that workspace's schema. Registration
+// happens once at startup, so it reads the registry rather than closing over one
+// workspace.
 func (d *Durable) validateAgainstRegistry(ctx context.Context, meta map[string]string, out *Draft) error {
 	if out == nil {
 		return goerr.New("the draft is empty")
 	}
-	if _, err := d.registry.Get(out.WorkspaceID); err != nil {
+	entry, err := d.registry.Get(out.WorkspaceID)
+	if err != nil {
 		return goerr.Wrap(err, "the proposed workspace is not registered",
 			goerr.V("workspace_id", out.WorkspaceID))
 	}
@@ -368,6 +368,46 @@ func (d *Durable) validateAgainstRegistry(ctx context.Context, meta map[string]s
 	if err := d.access.Authorize(ctx, out.WorkspaceID, agentkernel.ScopeFrom(meta).ActorUserID); err != nil {
 		return goerr.Wrap(err, "the proposed workspace is not accessible to the requester; choose one of the listed workspaces",
 			goerr.V("workspace_id", out.WorkspaceID))
+	}
+	return validateDraftFields(entry, out)
+}
+
+// validateDraftFields checks the draft's field values against the workspace's
+// schema: a field id the workspace does not define, a value that cannot be read
+// as its field's type, and an option id the field does not offer are all
+// reported together, so the model can repair every one in a single re-emit.
+//
+// Leaving such a value to the human instead was rejected: the preview shows an
+// unknown option as a raw id, the edit modal opens with that select empty, and a
+// direct submit fails with a message that points at required fields rather than
+// at the value. A value the model cannot repair within the retry bound ends the
+// turn in a fallback, which the requester can answer by mentioning again.
+//
+// A required field left out is NOT a violation: the draft omits what the agent
+// could not determine, and the review modal asks the human for it.
+func validateDraftFields(ws *model.WorkspaceEntry, d *Draft) error {
+	if len(d.Fields) == 0 {
+		return nil
+	}
+	// A workspace with no schema defines no field, so every id is unknown.
+	schema := ws.FieldSchema
+	if schema == nil {
+		schema = &config.FieldSchema{}
+	}
+	raw, violations := model.CoerceFieldInputs(schema, d.fieldInputs())
+	if _, err := model.NewFieldValidator(schema).ValidateCaseFieldsPartialStrict(raw); err != nil {
+		// The validator lists its violations under a heading of its own; taking
+		// the list keeps the feedback one flat list of field problems.
+		if list, ok := goerr.Values(err)["violations"].([]string); ok && len(list) > 0 {
+			violations = append(violations, list...)
+		} else {
+			violations = append(violations, err.Error())
+		}
+	}
+	if len(violations) > 0 {
+		return goerr.New("the draft's fields do not fit the workspace's field schema; correct each value, or omit a field you cannot determine:\n- "+
+			strings.Join(violations, "\n- "),
+			goerr.V("workspace_id", ws.Workspace.ID))
 	}
 	return nil
 }
@@ -444,11 +484,11 @@ func (d *Durable) deliver(ctx context.Context, target Target, draft *Draft) {
 		return
 	}
 	if err := d.host.Propose(ctx, target, MaterializePayload{
-		WorkspaceID:       draft.WorkspaceID,
-		Title:             draft.Title,
-		Description:       draft.Description,
-		CustomFieldValues: draft.CustomFieldValues,
-		IsTest:            draft.IsTest,
+		WorkspaceID: draft.WorkspaceID,
+		Title:       draft.Title,
+		Description: draft.Description,
+		Fields:      draft.fieldInputs(),
+		IsTest:      draft.IsTest,
 	}); err != nil {
 		errutil.Handle(ctx, goerr.Wrap(err, "render the case draft"), "render the case draft")
 		d.reportFallback(ctx, target, err.Error())
