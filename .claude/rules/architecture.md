@@ -898,6 +898,18 @@ both repeat on every retry, so a run that hits either produces nothing.
    of every planning and terminal call. Do not also prepend it to a user prompt —
    that says it twice on the calls that send one, and silently drops it on the
    calls that do not.
+   A notice that says "call no more tools" (planexec's tool-allowance notice, and
+   the reserve's second move in both strategies) is not carried by the prompt
+   alone: the same call is sent with tool calls disabled (`tool_choice: none`),
+   decided by the same function that picks the notice. The call answering the
+   tool round is usually the call this applies to, so such a request ends on the
+   tool results with `tool_choice: none`. gollem's live test
+   `TestSchemaCallAfterToolUseWithRealLLM` covers tool_use / tool_result history
+   plus disabled tool calls plus a response schema on Claude, Claude on Vertex AI,
+   OpenAI and Gemini, but there the request ends on a fresh user turn, not on the
+   tool results. Pinned by
+   `TestPlannerToolCallsAreAlwaysAnswered` and
+   `TestTerminalCallIsToldWhenItsToolAllowanceIsSpent` (planexec).
 2. **A call must never send an empty input UNLESS the conversation already answers
    the model's last turn.** gollem appends no user content for an empty input
    (`llm/gemini/client.go`, `len(parts) > 0`), so with nothing behind it the request
@@ -990,8 +1002,9 @@ STRATEGY reading that notice and making its two reserve moves.
 what the run is charged.** Three things are spent on top of it: the overshoot
 already committed when the notice was first observed (the fold makes that
 routinely large — the run this was written for saw $2.31 of $2.00), the reserve's
-two calls, and — if the model does not do what the reserve asks, which is a prompt
-and not a gate — everything up to the step or token ceiling.
+two calls, and — if the model keeps calling tools after the reserve's one tool
+round, which takes a provider returning a call despite `tool_choice: none` —
+everything up to the step or token ceiling.
 
 Two things follow:
 
@@ -1058,14 +1071,24 @@ Five consequences to keep in mind:
     something is outstanding call it, otherwise answer now") let a model skip
     straight to the answer with the side effect the task was for unperformed,
     which is what the reserve exists to prevent.
-  - **Neither instruction is a gate.** A model that writes its result instead of
-    calling a tool ends the run there and must NOT be re-prompted: nothing can
-    make a model call a tool (agentkit's `WithTools` only appends, so the tools
-    cannot be withheld), and a run with nothing left to call would spend the whole
-    reserve being asked again. A call made past the one reserve round is still run
-    and answered, for the reason § "a parallel tool-call turn is answered in ONE
-    call" gives. Pinned by `TestTheReserveFirstMoveIsANudgeNotAGate` and
-    `TestTheReserveBoundIsANudgeNotAGate` (react).
+  - **The first move cannot force a call; the second move forbids one.** A model
+    that writes its result instead of calling a tool on the first move ends the
+    run there and must NOT be re-prompted: nothing can make a model call a tool,
+    and a run with nothing left to call would spend the whole reserve being asked
+    again. The second move is sent with tool calls disabled
+    (`agentkit.WithLLMOptions(gollem.WithToolCallsDisabled())`, i.e.
+    `tool_choice: none`) as well as told to stop. Telling alone was not enough: a
+    model told to make no more calls went on calling tools, a side-effecting Slack
+    post among them, and the post ran. The tools stay declared on the request —
+    withholding them would change the tool list and invalidate the provider's
+    cached prefix — and the instruction and the option are decided together
+    (planexec `toolDirectiveFor`, react `reserveDirectiveFor`). A call a provider
+    returns anyway is still run and answered, for the reason § "a parallel
+    tool-call turn is answered in ONE call" gives. Pinned by
+    `TestTheReserveFirstMoveIsANudgeNotAGate`,
+    `TestTheReserveAllowsOneFinalToolCall` and
+    `TestACallPastTheReserveBoundIsStillAnswered` (react), and
+    `TestTheReserveAllowsATerminalToolCall` (planexec).
 - **The notice reaches the model through the SYSTEM prompt, never as an input** —
   see § "a parallel tool-call turn is answered in ONE call" for why the call
   answering a tool round sends no user turn to carry it. In planexec that route is

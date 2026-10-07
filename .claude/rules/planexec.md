@@ -36,10 +36,21 @@ Differences worth knowing before changing it:
   instead of a decision, the run diverts to `planner_tool`, runs ONE of them per
   transition, and comes back. It is bounded by `plannerToolRoundsMax` per planning
   phase, because those calls are free of the round budget — nothing else would stop
-  a model that only ever looks things up. The bound is a NUDGE, not a gate: past it
-  the calls are still run and answered (dropping them breaks the conversation), and
-  what changes is that the planner is told to stop — through the SYSTEM prompt
-  (`plannerPrompt`), because the call that has to hear it sends no user turn at all.
+  a model that only ever looks things up. Past the bound a call is told to stop —
+  through the SYSTEM prompt (`plannerPrompt`), because the call that has to hear it
+  sends no user turn at all — AND sent with tool calls disabled
+  (`gollem.WithToolCallsDisabled()` via `agentkit.WithLLMOptions`, i.e.
+  `tool_choice: none`). The instruction alone was a nudge, and it failed: a model
+  told to stop went on calling tools, including a Slack post whose text was a
+  one-character placeholder, which ran and was posted to the case thread twice in
+  one run. Both halves are decided by ONE function, `toolDirectiveFor`; do not
+  add a condition to the prompt without the option or the option without the
+  prompt. The tools stay declared on the request (withholding them changes the
+  tool list and invalidates the whole cached prefix). A call a provider returns
+  anyway is still run and answered (dropping it breaks the conversation).
+  The reserve follows the same rule: its first move (`reserveInstruction`) keeps
+  its tools, since it asks for one call; its second move
+  (`reserveSpentInstruction`) is sent with tool calls disabled.
   Each call is answered in the conversation by `Session().CallTool`, and the
   planning call that follows sends NOTHING — no restated request, no instruction.
   See `.claude/rules/architecture.md` § "a parallel tool-call turn is answered in
