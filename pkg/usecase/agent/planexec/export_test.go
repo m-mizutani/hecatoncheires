@@ -120,6 +120,14 @@ func PlannerSystemPromptWithBudgetForTest(rounds int, allocates bool) (string, e
 	})
 }
 
+// PlannerToolCallsDisabledForTest reports whether a planning or terminal call
+// made from a state whose planning phase has spent `rounds` tool rounds is sent
+// with tool calls disabled. It reads the same state PlannerSystemPromptForTest
+// renders, so a test can pin that the notice and the setting move together.
+func PlannerToolCallsDisabledForTest(rounds int) bool {
+	return len(toolCallOptions(state{PlannerToolRounds: rounds})) > 0
+}
+
 // BudgetPrefixForTest exposes the allowance line's exact wording, which is part
 // of the planner's contract: prompts/planner.md tells the planner to read it.
 var BudgetPrefixForTest = budgetPrefix

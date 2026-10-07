@@ -188,13 +188,18 @@ func (s *strategy) stepGenerate(ctx context.Context, sys agentkit.Syscalls, st s
 	notice := sys.LimitStatus()
 	inReserve := notice.Kind() == agentkit.LimitKindNotice
 	systemPrompt := st.SystemPrompt
+	var directive reserveDirective
 	if inReserve {
-		systemPrompt += "\n\n" + noticeInstruction(notice.Message(), st.ReserveToolRounds)
+		directive = reserveDirectiveFor(notice.Message(), st.ReserveToolRounds)
+		systemPrompt += "\n\n" + directive.instruction
 	}
 
 	opts := []agentkit.GenerateOption{agentkit.WithSystemPrompt(systemPrompt)}
 	if s.role != nil {
 		opts = append(opts, agentkit.WithRole(s.role))
+	}
+	if directive.disableToolCalls {
+		opts = append(opts, agentkit.WithLLMOptions(gollem.WithToolCallsDisabled()))
 	}
 
 	res, err := sys.Session().Generate(ctx, input, opts...)
@@ -227,8 +232,15 @@ func (s *strategy) stepGenerate(ctx context.Context, sys agentkit.Syscalls, st s
 const continueInstruction = "Continue from what you have so far."
 
 // reserveToolRoundsMax is how many tool rounds the reserve pays for: one. Past
-// it the model is told to stop asking, which is a NUDGE and not a gate — see
-// stepTool for why an over-budget call is still run and answered.
+// it the model is told to stop asking AND the call is sent with tool calls
+// disabled (tool_choice "none"): the instruction alone did not stop a model,
+// which went on calling tools — a side-effecting post among them — after it had
+// been told not to. The tools stay declared on the request; only calling them is
+// forbidden, so the cached tool and system prefix stays valid.
+//
+// A call made anyway is still run and answered — see stepTool — because a
+// provider is not bound to honour the setting and an unanswered function call
+// breaks the conversation for every later request.
 const reserveToolRoundsMax = 1
 
 // reserveInstruction is what the model is told on the first call after the run
@@ -238,8 +250,8 @@ const reserveToolRoundsMax = 1
 // ("if something is outstanding call it, otherwise answer now") handed the model
 // a way to skip straight to the answer with the side effect the task was for
 // still unperformed — which is the exact outcome the reserve exists to prevent.
-// Nothing here can force the call; withholding the tools is the only thing that
-// could, and agentkit's WithTools only ever appends.
+// Nothing here can force the call: a model that answers with text instead ends
+// the run, and re-asking it would spend the reserve on asking.
 const reserveInstruction = "This run has spent its working budget; only a small reserve is left. " +
 	"Do not start any new investigation. THIS turn is your final tool call: make the one call this " +
 	"task still needs in order to take effect. Do not write your result on this turn — the call's " +
@@ -252,19 +264,29 @@ const reserveSpentInstruction = "The budget reserve is spent: you have already m
 	"tool call. Do not call any tool again and do not look anything else up. Write your result now " +
 	"from what you already have, as briefly as it can be understood."
 
-// noticeInstruction turns a budget notice into an instruction the model can act
-// on. The limiter's message says what is nearly spent; this says what to do
-// about it. toolRoundsUsed is how many tool rounds this run has already spent
-// inside the reserve, which decides whether the final one is still available.
-func noticeInstruction(msg string, toolRoundsUsed int) string {
-	instruction := reserveInstruction
+// reserveDirective is what one call inside the reserve is told, and whether it
+// may call tools at all. The two are decided together so that the call told
+// "do not call any tool again" is the call that cannot, and no other.
+type reserveDirective struct {
+	instruction      string
+	disableToolCalls bool
+}
+
+// reserveDirectiveFor turns a budget notice into a directive the model can act
+// on. The limiter's message says what is nearly spent; the instruction says what
+// to do about it. toolRoundsUsed is how many tool rounds this run has already
+// spent inside the reserve, which decides whether the final one is still
+// available: the first move must keep its tools, since its whole point is the
+// call the task still needs.
+func reserveDirectiveFor(msg string, toolRoundsUsed int) reserveDirective {
+	d := reserveDirective{instruction: reserveInstruction}
 	if toolRoundsUsed >= reserveToolRoundsMax {
-		instruction = reserveSpentInstruction
+		d = reserveDirective{instruction: reserveSpentInstruction, disableToolCalls: true}
 	}
-	if msg == "" {
-		return instruction
+	if msg != "" {
+		d.instruction = msg + "\n" + d.instruction
 	}
-	return msg + "\n" + instruction
+	return d
 }
 
 // stepTool runs exactly one pending tool call and answers it in the conversation.

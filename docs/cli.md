@@ -207,10 +207,12 @@ call that carries that tool's result back tells it the opposite: call nothing mo
 and write its result now, briefly. So the reserve has to cover two generates and
 one tool call.
 
-Neither instruction is enforced. An agent that writes its result instead of
-calling a tool simply ends the run there, and a tool call made past the reserve's
-one round is still run and answered — dropping it would leave the model's call
-unanswered, which a provider rejects outright.
+The first instruction cannot force the agent to call a tool: an agent that writes
+its result instead simply ends the run there. The second is enforced as well as
+stated: that call is sent to the LLM provider with tool calls disabled. If the
+provider returns a tool call anyway, the call is still run and answered, because
+leaving it unanswered would make the provider reject every later request in the
+run.
 
 **Spending the budget does not stop the run.** Past the ceiling the agent is told
 that its budget is gone and makes the same two moves; the run then ends itself.
@@ -228,8 +230,10 @@ bound what you are charged.** Three things land on top of it:
   already be well past the figure — the run this behaviour was written for
   reported `$2.31` against a `$2.00` budget.
 - the reserve's two calls.
-- everything up to the step or token ceiling, if the model does not do what the
-  reserve asks. The instruction is a prompt, not a gate.
+- everything up to the step or token ceiling, if the model keeps calling tools
+  after the reserve's final tool call. The call after that tool call is sent with
+  tool calls disabled (`tool_choice: none`), so this happens only if the LLM
+  provider returns a tool call despite that setting.
 
 **Each sub-agent's share is decided by the planner.** When it plans a round, the
 planner is told what the run has left and states an amount for every task; the

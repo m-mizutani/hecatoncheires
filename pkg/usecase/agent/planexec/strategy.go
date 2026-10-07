@@ -515,11 +515,11 @@ func (s *strategy[T]) stepPlan(ctx context.Context, sys agentkit.Syscalls, st st
 		withBudget:   budgeted,
 	})
 
-	res, err := sys.Session().Generate(ctx, plannerInput(st, budgetLine(remaining, total, budgeted)),
+	res, err := sys.Session().Generate(ctx, plannerInput(st, budgetLine(remaining, total, budgeted)), append([]agentkit.GenerateOption{
 		agentkit.WithSystemPrompt(prompt),
 		agentkit.WithSchema(schema),
 		agentkit.WithRole(RolePlanner),
-	)
+	}, toolCallOptions(st)...)...)
 	if err != nil {
 		return st, agentkit.Decision[Output[T]]{}, goerr.Wrap(err, "planexec: planner generate")
 	}
@@ -593,24 +593,29 @@ func withBudgetLine(budgetLine string, text gollem.Text) []gollem.Input {
 const plannerContinue = "Continue from what you have so far, and give your next decision."
 
 // plannerToolRoundsMax is the number of tool rounds a planning phase may take
-// before the planner is told, in words, to decide with what it has.
+// before the planner has to decide with what it has.
 //
 // It exists because the planner's tool calls are free of the round budget — they
 // are not sub-agent work — so a model that answers every prompt with another
 // lookup would otherwise only be stopped by the step ceiling, having produced
 // nothing.
 //
-// It is a NUDGE, not a gate, and deliberately so: the only way to stop a model
-// asking is to withhold the tools, and there is no option to do that — agentkit's
-// WithTools appends to the session's tools and nothing removes them. The hard stop
-// is MaxSteps, which every one of these calls charges.
+// Past it a call is both told to stop (plannerToolBudgetNotice) and sent with tool
+// calls disabled (tool_choice "none"; see toolDirectiveFor). The instruction alone
+// was not enough: a model told to stop went on calling tools, among them a Slack
+// post whose only text was a placeholder, which ran and reached the case thread —
+// twice in one run, once per planning phase that carried the notice.
+//
+// A call returned anyway is still run and answered (see divertToTools), since a
+// provider is not bound to honour the setting. MaxSteps, which every one of these
+// calls charges, remains the hard stop.
 const plannerToolRoundsMax = 4
 
 // plannerToolBudgetNotice is what the model is told once it has spent its tool
-// rounds, on a planning call or on the terminal one. It is a user-turn instruction
-// rather than a system prompt change because it applies to the current phase only,
-// and it is worded for both: a planning call has to decide, a terminal call has to
-// write the answer, and neither may keep looking things up.
+// rounds, on a planning call or on the terminal one. It rides in the SYSTEM prompt
+// (see plannerPrompt), and the call carrying it is sent with tool calls disabled.
+// It is worded for both kinds of call: a planning call has to decide, a terminal
+// call has to write the answer, and neither may keep looking things up.
 const plannerToolBudgetNotice = "You have used your tool allowance for this step. " +
 	"Do not call any more tools; continue now with what you already have."
 
@@ -619,9 +624,10 @@ const plannerToolBudgetNotice = "You have used your tool allowance for this step
 // tool it makes and the terminal output that follows, so a second round would
 // leave nothing to write with.
 //
-// Like plannerToolRoundsMax it is a NUDGE, not a gate: divertToTools answers a
-// call made past it, because an unanswered function call breaks the conversation
-// for every later request.
+// Past it the terminal call is told to stop (reserveSpentInstruction) and sent
+// with tool calls disabled, for the reason plannerToolRoundsMax gives. A call made
+// anyway is still answered by divertToTools, because an unanswered function call
+// breaks the conversation for every later request.
 const reserveToolRoundsMax = 1
 
 // reserveInstruction is what the terminal call is told on the first transition
@@ -671,8 +677,9 @@ func reserveMovesSpent(st state) bool {
 // and a provider rejects the next request unless every call in it has a matching
 // response ("the number of function response parts is equal to the number of
 // function call parts"). Dropping the calls produced exactly that error, retried
-// until the run failed. Past the bound the calls are still answered; what changes
-// is that the planner is then told to stop asking.
+// until the run failed. Past the bound the next call is told to stop asking and
+// sent with tool calls disabled, but a provider may still return a call, and that
+// call is answered like any other.
 func (s *strategy[T]) divertToTools(st state, res *agentkit.GenerateResult, from string) (state, bool) {
 	if len(res.FunctionCalls) == 0 {
 		return st, false
@@ -828,11 +835,11 @@ func (s *strategy[T]) stepReplan(ctx context.Context, sys agentkit.Syscalls, st 
 		withBudget:    budgeted,
 	})
 
-	res, err := sys.Session().Generate(ctx, plannerInput(st, budgetLine(remaining, total, budgeted)),
+	res, err := sys.Session().Generate(ctx, plannerInput(st, budgetLine(remaining, total, budgeted)), append([]agentkit.GenerateOption{
 		agentkit.WithSystemPrompt(prompt),
 		agentkit.WithSchema(schema),
 		agentkit.WithRole(RolePlanner),
-	)
+	}, toolCallOptions(st)...)...)
 	if err != nil {
 		return st, agentkit.Decision[Output[T]]{}, goerr.Wrap(err, "planexec: replanner generate")
 	}
@@ -1020,6 +1027,7 @@ func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st s
 	if !s.cfg.TextOnly {
 		opts = append(opts, agentkit.WithSchema(s.outputSchema))
 	}
+	opts = append(opts, toolCallOptions(st)...)
 
 	res, err := sys.Session().Generate(ctx, input, opts...)
 	if err != nil {
@@ -1466,20 +1474,55 @@ func (s *strategy[T]) plannerPrompt(st state) (string, error) {
 	// The tool allowance is spent: say so here rather than as a user turn. The call
 	// that has to hear it is the one following the tool phase, and that call sends
 	// no user turn at all — it continues from the answered calls, see plannerInput.
-	//
-	// Inside the reserve the reserve's own instruction REPLACES the allowance
-	// notice rather than joining it: the two would otherwise arrive together
-	// saying opposite things, one asking for the final call and the other
-	// forbidding any.
-	switch {
-	case st.Reserve && reserveMovesSpent(st):
-		prompt += "\n\n" + reserveSpentInstruction
-	case st.Reserve:
-		prompt += "\n\n" + reserveInstruction
-	case st.PlannerToolRounds >= plannerToolRoundsMax:
-		prompt += "\n\n" + plannerToolBudgetNotice
+	if d := toolDirectiveFor(st); d.instruction != "" {
+		prompt += "\n\n" + d.instruction
 	}
 	return prompt, nil
+}
+
+// toolDirective is what a planning or terminal call is told about calling tools,
+// and whether it may call any.
+type toolDirective struct {
+	instruction      string
+	disableToolCalls bool
+}
+
+// toolDirectiveFor decides both halves of a call's toolDirective from the state,
+// in ONE place, so the call told "do not call any more tools" is exactly the call
+// sent with tool calls disabled. plannerPrompt reads the instruction and
+// toolCallOptions the switch; neither restates the conditions.
+//
+// Inside the reserve the reserve's own instruction REPLACES the allowance notice
+// rather than joining it: the two would otherwise arrive together saying opposite
+// things, one asking for the final call and the other forbidding any. For the
+// same reason the reserve's first move keeps its tools even when the allowance is
+// spent: it is asked for the one call the turn still needs.
+func toolDirectiveFor(st state) toolDirective {
+	switch {
+	case st.Reserve && reserveMovesSpent(st):
+		return toolDirective{instruction: reserveSpentInstruction, disableToolCalls: true}
+	case st.Reserve:
+		return toolDirective{instruction: reserveInstruction}
+	case st.PlannerToolRounds >= plannerToolRoundsMax:
+		return toolDirective{instruction: plannerToolBudgetNotice, disableToolCalls: true}
+	default:
+		return toolDirective{}
+	}
+}
+
+// toolCallOptions is the generate option a planning or terminal call adds for
+// its toolDirective: tool calls disabled (tool_choice "none") when the call has
+// been told to make none, nothing otherwise.
+//
+// The tools stay declared on the request. Withholding them would change the tool
+// list, which invalidates the provider's cached prefix for the whole request (and
+// Claude rejects a history carrying thinking blocks under a different tool list);
+// changing tool_choice invalidates only the cached messages.
+func toolCallOptions(st state) []agentkit.GenerateOption {
+	if !toolDirectiveFor(st).disableToolCalls {
+		return nil
+	}
+	return []agentkit.GenerateOption{agentkit.WithLLMOptions(gollem.WithToolCallsDisabled())}
 }
 
 // note draws a milestone as the whole of the run's progress message, replacing

@@ -45,8 +45,10 @@
 //     verdict a parent ever gets about its money can already be far past the
 //     budget — the run this behaviour was written for observed $2.31 of $2.00.
 //   - the reserve's two calls.
-//   - everything up to the step or token ceiling, when the model does not do
-//     what the reserve asks. The instruction is a prompt, not a gate.
+//   - everything up to the step or token ceiling, when the model keeps calling
+//     tools after the reserve's one tool round. The calls after that round are
+//     sent with tool calls disabled, so this takes a provider that returns a
+//     call despite the setting; the step and token ceilings bound that case.
 //
 // # What still stops a run
 //
