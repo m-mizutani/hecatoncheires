@@ -12,7 +12,7 @@ require (
 	github.com/getsentry/sentry-go v0.48.0
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/goccy/go-yaml v1.19.2
-	github.com/gollem-dev/agentkit v0.3.1
+	github.com/gollem-dev/agentkit v0.4.1
 	github.com/gollem-dev/tools/jira v0.2.0
 	github.com/google/go-github/v88 v88.0.0
 	github.com/google/uuid v1.6.0
@@ -134,7 +134,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
-	github.com/gollem-dev/gollem v0.30.0
+	github.com/gollem-dev/gollem v0.30.1-0.20261006011343-cf18a0ed211f
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
@@ -162,7 +162,7 @@ require (
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/puzpuzpuz/xsync/v4 v4.2.0 // indirect
 	github.com/sajari/fuzzy v1.0.0 // indirect
-	github.com/sashabaranov/go-openai v1.41.2 // indirect
+	github.com/sashabaranov/go-openai v1.43.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/shurcooL/graphql v0.0.0-20240915155400-7ee5256398cf // indirect
 	github.com/sosodev/duration v1.4.0 // indirect

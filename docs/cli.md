@@ -154,6 +154,13 @@ and are what the money budget below is measured against. The full field
 reference, the reference-name rules and the per-provider credentials are in
 [configuration.md](./configuration.md#model-definitions-llm_model).
 
+Requests to an `openai` model set neither `reasoning_effort` nor `verbosity`, so
+the model's own defaults apply — both for `--llm-model` / a Job's `llm_model` and
+for the home greeting LLM. Earlier releases sent `reasoning_effort="minimal"` and
+`verbosity="low"` on every request; on a reasoning model the defaults can spend
+more reasoning tokens and produce longer output, so a run on such a model may
+reach its money budget (below) sooner than before.
+
 ### Agent runtime budgets
 
 An agent run is a durable process: each transition (one LLM call, or one tool

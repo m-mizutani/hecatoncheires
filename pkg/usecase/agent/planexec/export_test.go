@@ -1,6 +1,13 @@
 package planexec
 
-import "context"
+import (
+	"context"
+
+	"github.com/gollem-dev/agentkit"
+	"github.com/gollem-dev/gollem"
+
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
+)
 
 // Test-only exports. The compiler enforces these never reach the
 // production binary because the file ends in _test.go.
@@ -93,19 +100,24 @@ var RenderObservationsForFinalForTest = renderObservationsForFinal
 // turn because the turn that would carry it reports tool results, and such a turn
 // may carry nothing else.
 func PlannerSystemPromptForTest(rounds int) (string, error) {
-	return PlannerSystemPromptWithBudgetForTest(rounds, "")
+	return PlannerSystemPromptWithBudgetForTest(rounds, false)
 }
 
-// PlannerSystemPromptWithBudgetForTest is PlannerSystemPromptForTest with the
-// allowance line the host would have supplied, so a test can assert both what the
-// planner is told about its money and that the guidance and the line travel
-// together.
-func PlannerSystemPromptWithBudgetForTest(rounds int, budgetLine string) (string, error) {
-	s := &strategy[TextResult]{cfg: Config[TextResult]{TextOnly: true}}
+// PlannerSystemPromptWithBudgetForTest is PlannerSystemPromptForTest for a host
+// that wired Config.Remaining when allocates is true, so a test can assert what
+// the system prompt says about the planner's money.
+func PlannerSystemPromptWithBudgetForTest(rounds int, allocates bool) (string, error) {
+	cfg := Config[TextResult]{TextOnly: true}
+	if allocates {
+		cfg.Remaining = func(map[string]string, agentkit.Metrics) (pricing.NanoUSD, pricing.NanoUSD) {
+			return pricing.FromUSD(1), pricing.FromUSD(2)
+		}
+	}
+	s := &strategy[TextResult]{cfg: cfg}
 	return s.plannerPrompt(state{
 		Input:             Input{SystemPrompt: "host prompt", KnownToolIDs: []string{"core_ro"}},
 		PlannerToolRounds: rounds,
-	}, budgetLine)
+	})
 }
 
 // PlannerToolCallsDisabledForTest reports whether a planning or terminal call
@@ -134,5 +146,18 @@ const PlannerToolRoundsMaxForTest = plannerToolRoundsMax
 // would END on the previous model turn ("Requests ending with a model turn are not
 // supported").
 func PlannerInputsForTest(nextInput string, toolsAnswered bool) int {
-	return len(plannerInput(state{NextInput: nextInput, ToolsAnswered: toolsAnswered}))
+	return len(PlannerInputTextsForTest(nextInput, toolsAnswered, ""))
+}
+
+// PlannerInputTextsForTest is the text of each input a planning call would send
+// for a state carrying nextInput, opened with budgetLine when it is not "".
+func PlannerInputTextsForTest(nextInput string, toolsAnswered bool, budgetLine string) []string {
+	inputs := plannerInput(state{NextInput: nextInput, ToolsAnswered: toolsAnswered}, budgetLine)
+	out := make([]string, 0, len(inputs))
+	for _, in := range inputs {
+		if txt, ok := in.(gollem.Text); ok {
+			out = append(out, string(txt))
+		}
+	}
+	return out
 }

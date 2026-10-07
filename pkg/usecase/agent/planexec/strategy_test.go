@@ -1658,30 +1658,192 @@ func TestTheToolAllowanceIsToldInTheSystemPrompt(t *testing.T) {
 	gt.String(t, spent).Contains("host prompt")
 }
 
-// TestTheAllowanceIsToldInTheSystemPrompt pins where the planner learns what it
-// may divide, and that the guidance asking it to divide arrives with the figure.
+// TestTheAllowanceIsToldInTheUserTurn pins where the planner learns what it may
+// divide: the figure opens the user turn, and the guidance asking it to divide is
+// in the system prompt.
 //
-// It is the SYSTEM prompt for the reason the tool-allowance notice is: a planning
-// call following a tool round sends no user turn, so a figure the planner has to
-// have cannot ride on one.
-func TestTheAllowanceIsToldInTheSystemPrompt(t *testing.T) {
+// The figure must not be in the system prompt. It changes on nearly every call,
+// and a provider's prompt cache matches an exact prefix running tools → system →
+// messages, so a figure there made every planner call rewrite its whole
+// conversation into the cache instead of reading it back.
+func TestTheAllowanceIsToldInTheUserTurn(t *testing.T) {
 	line := planexec.BudgetPrefixForTest(pricing.FromUSD(0.217), pricing.FromUSD(2))
 	gt.String(t, line).Equal("[budget] remaining $0.22 of $2.00")
 
-	with, err := planexec.PlannerSystemPromptWithBudgetForTest(0, line)
+	// The line opens the turn, ahead of the text the turn exists to carry.
+	gt.Array(t, planexec.PlannerInputTextsForTest("here are the observations", false, line)).
+		Equal([]string{line, "here are the observations"})
+	// A call continuing from answered tool calls still sends nothing at all.
+	gt.Array(t, planexec.PlannerInputTextsForTest("", true, line)).Length(0)
+	// A host that wired no figure sends the text alone.
+	gt.Array(t, planexec.PlannerInputTextsForTest("here are the observations", false, "")).
+		Equal([]string{"here are the observations"})
+
+	with, err := planexec.PlannerSystemPromptWithBudgetForTest(0, true)
 	gt.NoError(t, err).Required()
-	gt.String(t, with).Contains(line)
-	// The instruction that makes the figure actionable is there too. A figure with
-	// no instruction leaves the planner nothing to do with it; an instruction with
-	// no figure asks it to divide an amount it was never told.
+	// The host's Remaining reports $1.00 of $2.00; no figure of it is in here.
+	gt.Bool(t, contains(with, "of $2.00")).False()
+	// The instruction that makes the figure actionable is there. A figure with no
+	// instruction leaves the planner nothing to do with it; an instruction with no
+	// figure asks it to divide an amount it was never told.
 	gt.String(t, with).Contains("Every task you emit carries a `budget_usd`")
+	gt.String(t, with).Contains("A user message may open with a line reading `[budget] remaining $X of $Y`")
+	// A planner deciding after tool results is told it was shown no new figure.
+	gt.String(t, with).Contains("When you decide after tool results instead, no new line arrives")
 	gt.String(t, with).Contains("host prompt")
 
-	// A host that wired no remaining figure gets neither.
-	without, err := planexec.PlannerSystemPromptWithBudgetForTest(0, "")
+	// A host that wired no remaining figure gets no instruction either.
+	without, err := planexec.PlannerSystemPromptWithBudgetForTest(0, false)
 	gt.NoError(t, err).Required()
 	gt.Bool(t, contains(without, "[budget]")).False()
 	gt.Bool(t, contains(without, "budget_usd")).False()
+}
+
+// sequencedRemaining reports figs[i] on its i-th read and the last entry after
+// that, so a test can make the run's remaining allowance fall between two reads
+// the way a run's own spend does.
+func sequencedRemaining(figs ...float64) func(map[string]string, agentkit.Metrics) (pricing.NanoUSD, pricing.NanoUSD) {
+	var n atomic.Int32
+	return func(map[string]string, agentkit.Metrics) (pricing.NanoUSD, pricing.NanoUSD) {
+		i := min(int(n.Add(1))-1, len(figs)-1)
+		return pricing.FromUSD(figs[i]), pricing.FromUSD(2)
+	}
+}
+
+// Consecutive planner calls of one planning phase are made under the SAME system
+// prompt, byte for byte, even though the remaining allowance falls between them.
+// That is what lets each call read the previous one's prefix back from the
+// provider's prompt cache; a system prompt that differed per call made every call
+// rewrite the whole conversation instead.
+func TestConsecutivePlannerCallsShareOneSystemPrompt(t *testing.T) {
+	lookup := &recordingTool{name: "get_workspace"}
+	planner := &toolCallingPlanner{replies: []any{
+		&gollem.FunctionCall{ID: "c1", Name: "get_workspace", Arguments: map[string]any{"id": "ws-1"}},
+		&gollem.FunctionCall{ID: "c2", Name: "get_workspace", Arguments: map[string]any{"id": "ws-2"}},
+		`{"tasks":[{"id":"t1","title":"Read","description":"read it","acceptance_criteria":"done","tools":["slack_ro"],"budget_usd":0.05}]}`,
+		`read it`,
+		`{"finalize":{"reason":"done"}}`,
+		`Answered.`,
+	}}
+	rt := newRuntime(t, planner.client(), generousBudget(), nil,
+		func(context.Context, *agentkit.Process) ([]gollem.Tool, error) {
+			return []gollem.Tool{lookup}, nil
+		},
+		planexec.Config[planexec.TextResult]{TextOnly: true, Remaining: sequencedRemaining(0.90, 0.80, 0.70, 0.60)})
+
+	proc := rt.run(t, textInput(), runBudgetMeta)
+	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+
+	// Calls 0-2 are the planning phase: the opening call, and the two that
+	// continue from a lookup. Call 4 is the replan of the next phase.
+	sys := planner.systemSeen()
+	gt.Array(t, sys).Length(6).Required()
+	gt.String(t, sys[1]).Equal(sys[0])
+	gt.String(t, sys[2]).Equal(sys[0])
+	gt.String(t, sys[4]).Equal(sys[0])
+	// The terminal call that sends a turn is made under the same one as well.
+	gt.String(t, sys[5]).Equal(sys[0])
+	gt.Bool(t, contains(sys[0], "of $2.00")).False()
+
+	// The figure rides on the turns that send one — the terminal call's included,
+	// since it may still spend on a tool — and the calls that continue from
+	// answered tool calls send nothing.
+	seen := planner.seen()
+	gt.String(t, seen[0]).Equal("[budget] remaining $0.90 of $2.00" + "what happened here?")
+	gt.String(t, seen[1]).Equal("")
+	gt.String(t, seen[2]).Equal("")
+	gt.String(t, seen[4]).Contains("[budget] remaining $0.60 of $2.00")
+	gt.String(t, seen[5]).Contains("[budget] remaining $0.60 of $2.00")
+	gt.String(t, seen[5]).Contains("Produce the final response for the user")
+}
+
+// A terminal output that is rejected is asked for again on a turn that opens
+// with the current figure, under the same system prompt as the call it retries.
+func TestATerminalRetryCarriesTheFigureInItsTurn(t *testing.T) {
+	planner := &scriptedPlanner{replies: []string{
+		`{"tasks":[{"id":"t1","title":"Read","description":"read it","acceptance_criteria":"a","tools":["slack_ro"],"budget_usd":0.05}]}`,
+		`read it`,
+		`{"finalize":{"reason":"done"}}`,
+		`{"title":""}`,
+		`{"title":"A draft"}`,
+	}}
+	rt := newRuntime(t, planner.client(), generousBudget(), nil, nil,
+		planexec.Config[caseDraft]{Remaining: sequencedRemaining(0.90, 0.80, 0.70, 0.60, 0.50)})
+
+	proc := rt.run(t, textInput(), runBudgetMeta)
+	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+
+	seen := planner.seen()
+	sys := planner.seenSystemPrompts()
+	gt.Array(t, seen).Length(5).Required()
+	// Reads: plan, launch, replan, final, retry.
+	gt.String(t, seen[3]).Contains("[budget] remaining $0.60 of $2.00")
+	gt.String(t, seen[4]).Contains("[budget] remaining $0.50 of $2.00")
+	gt.String(t, seen[4]).Contains("title is required")
+	gt.String(t, sys[4]).Equal(sys[3])
+	gt.Bool(t, contains(sys[4], "of $2.00")).False()
+}
+
+// A plan is validated against the very figure the planner was shown, on a call
+// that shows one: the planner allocating ALL of a $0.50 it was told it had is
+// accepted, and the child is spawned with that $0.50 — even though the raw
+// remaining is $0.509 (shown floored to the cent) and the allowance has fallen to
+// $0.10 by the time the round launches.
+func TestAPlanIsCheckedAgainstTheFigureThePlannerWasShown(t *testing.T) {
+	planner := &scriptedPlanner{replies: []string{
+		`{"tasks":[{"id":"t1","title":"Read","description":"read it","acceptance_criteria":"a","tools":["slack_ro"],"budget_usd":0.50}]}`,
+		`read it`,
+		`{"finalize":{"reason":"done"}}`,
+		`the answer`,
+	}}
+	rec := newBudgetRecorder()
+	rt := newRuntimeWithSpend(t, planner.client(), generousBudget(), testSpend(), nil, rec.factory(),
+		planexec.Config[planexec.TextResult]{TextOnly: true, Remaining: sequencedRemaining(0.509, 0.10)})
+
+	proc := rt.run(t, textInput(), runBudgetMeta)
+	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+
+	seen := planner.seen()
+	gt.Array(t, seen).Length(4).Required()
+	gt.String(t, seen[0]).Equal("[budget] remaining $0.50 of $2.00" + "what happened here?")
+	// Accepted on the first attempt: the second call is the child, not a re-plan.
+	gt.String(t, seen[1]).Equal("read it")
+	gt.Array(t, rec.amounts()).Equal([]string{"$0.50", "$2.00"})
+}
+
+// A call continuing from answered tool calls is told no new figure — it sends no
+// user turn — and its plan is still validated against the allowance read afresh
+// for that call. A plan sized to the figure of the last turn that carried one is
+// therefore rejected once the phase's own lookups have lowered the allowance, and
+// the re-plan's turn carries the current figure.
+func TestAPlanAfterALookupIsCheckedAgainstAFreshFigure(t *testing.T) {
+	lookup := &recordingTool{name: "get_workspace"}
+	planner := &toolCallingPlanner{replies: []any{
+		&gollem.FunctionCall{ID: "c1", Name: "get_workspace", Arguments: map[string]any{"id": "ws-1"}},
+		// Sized to the $0.50 the opening turn showed; $0.20 is left by now.
+		`{"tasks":[{"id":"t1","title":"Read","description":"read it","acceptance_criteria":"done","tools":["slack_ro"],"budget_usd":0.50}]}`,
+		`{"tasks":[{"id":"t1","title":"Read","description":"read it","acceptance_criteria":"done","tools":["slack_ro"],"budget_usd":0.20}]}`,
+		`read it`,
+		`{"finalize":{"reason":"done"}}`,
+		`Answered.`,
+	}}
+	rt := newRuntime(t, planner.client(), generousBudget(), nil,
+		func(context.Context, *agentkit.Process) ([]gollem.Tool, error) {
+			return []gollem.Tool{lookup}, nil
+		},
+		planexec.Config[planexec.TextResult]{TextOnly: true, Remaining: sequencedRemaining(0.50, 0.20)})
+
+	proc := rt.run(t, textInput(), runBudgetMeta)
+	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+
+	seen := planner.seen()
+	gt.Array(t, seen).Length(6).Required()
+	gt.String(t, seen[0]).Contains("[budget] remaining $0.50 of $2.00")
+	gt.String(t, seen[1]).Equal("")
+	// The rejected plan is answered by a re-plan whose turn states the figure the
+	// rejection was judged against.
+	gt.String(t, seen[2]).Contains("[budget] remaining $0.20 of $2.00")
+	gt.String(t, seen[2]).Contains("exceed")
 }
 
 // runBudgetMeta is the run-level metadata these tests spawn with: a $2.00 budget,
@@ -1946,15 +2108,21 @@ func TestPlannerToolResultsReachTheTerminalCall(t *testing.T) {
 	// The notice fires almost immediately, so the run wraps up right after the
 	// tool phase drains.
 	cfg := budget.Config{MaxSteps: 8, MaxInputTokens: 100_000, MaxOutputTokens: 100_000, NoticeRatio: 0.1}
-	rt := newTextRuntime(t, planner.client(), cfg, nil,
+	rt := newRuntime(t, planner.client(), cfg, nil,
 		func(context.Context, *agentkit.Process) ([]gollem.Tool, error) {
 			return []gollem.Tool{lookup}, nil
-		})
+		},
+		planexec.Config[planexec.TextResult]{TextOnly: true, Remaining: sequencedRemaining(0.90, 0.80)})
 
-	proc := rt.run(t, textInput(), nil)
+	proc := rt.run(t, textInput(), runBudgetMeta)
 	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
 	out := decodeText(t, proc.Output)
 	gt.String(t, out.Text).Contains("partial answer")
+
+	// The opening turn carried the figure; the terminal call answering the tool
+	// round carries none, and puts none in its system prompt either.
+	gt.String(t, planner.seen()[0]).Contains("[budget] remaining $0.90 of $2.00")
+	gt.Bool(t, contains(planner.systemSeen()[1], "of $2.00")).False()
 
 	gt.Array(t, lookup.calls()).Length(2)
 
