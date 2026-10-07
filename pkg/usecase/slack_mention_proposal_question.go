@@ -105,7 +105,11 @@ func buildProposalQuestionBlocks(ctx context.Context, q proposal.QuestionPayload
 				nil,
 				elem,
 			)
-			input.Optional = true
+			// Not optional: the input is the item's only answer surface, and
+			// HandleQuestionSubmit rejects the form while it is blank. Marking
+			// it optional made Slack label it "(optional)", contradicting
+			// that check.
+			input.Optional = false
 			blocks = append(blocks, input)
 			continue
 		}
@@ -132,9 +136,9 @@ func buildProposalQuestionBlocks(ctx context.Context, q proposal.QuestionPayload
 			nil,
 			element,
 		)
-		// Validation is enforced server-side in HandleQuestionSubmit so we
-		// can re-render the form with a clear error on missing answers,
-		// rather than relying on Slack's terse non-optional rejection.
+		// Optional because the item counts as answered when EITHER the choice
+		// or the "Other" input below is filled; HandleQuestionSubmit enforces
+		// that server-side and re-renders the form with an error otherwise.
 		input.Optional = true
 		blocks = append(blocks, input)
 
@@ -351,13 +355,53 @@ func missingDraftQuestionItems(pq *model.PendingQuestion, answers map[string]dra
 	return missing
 }
 
+// missingDraftQuestionTexts returns the question text of each missing item, in
+// form order.
+func missingDraftQuestionTexts(pq *model.PendingQuestion, missing []string) []string {
+	missingSet := make(map[string]struct{}, len(missing))
+	for _, id := range missing {
+		missingSet[id] = struct{}{}
+	}
+	texts := make([]string, 0, len(missing))
+	for _, item := range pq.Items {
+		if _, ok := missingSet[item.ID]; ok {
+			texts = append(texts, item.Text)
+		}
+	}
+	return texts
+}
+
+// notifyUnansweredQuestions tells the submitting user, and only them, which
+// questions are still blank. Both question forms send it on every rejected
+// submit: from the second rejection on, the re-rendered form is identical to
+// the one on screen, so the form alone shows the user no response. A failed
+// post is reported and otherwise ignored — the question stays pending either
+// way.
+func notifyUnansweredQuestions(ctx context.Context, poster ephemeralPoster, channelID, userID string, pq *model.PendingQuestion, missing []string) {
+	if poster == nil || channelID == "" || userID == "" {
+		return
+	}
+	texts := missingDraftQuestionTexts(pq, missing)
+	lines := make([]string, len(texts))
+	for i, t := range texts {
+		lines[i] = "• " + t
+	}
+	text := i18n.T(ctx, i18n.MsgQuestionFormUnanswered, strings.Join(lines, "\n"))
+	if err := poster.PostEphemeral(ctx, channelID, userID, text); err != nil {
+		errutil.Handle(ctx, goerr.Wrap(err, "post unanswered question notice",
+			goerr.V("channel_id", channelID), goerr.V("user_id", userID)),
+			"failed to post unanswered question notice")
+	}
+}
+
 // HandleQuestionSubmit is the Submit-button entry point for the open-mode
 // question form. It loads the live session, parses the user's selections
 // against the pending question snapshot, validates that every item has an
 // answer, swaps the form message into a read-only "answered" record, and
 // resumes the planner with the formatted answers as the next-turn user
-// input. Validation failures re-render the form with an inline error so
-// the user can fix and resubmit.
+// input. Validation failures re-render the form with an inline error and
+// tell the submitter which questions are blank in an ephemeral, so the user
+// can fix and resubmit.
 func (uc *MentionProposalUseCase) HandleQuestionSubmit(ctx context.Context, callback *goslack.InteractionCallback, action *goslack.BlockAction) error {
 	if !uc.draftReady() {
 		return goerr.New("draft usecase is not configured")
@@ -410,7 +454,19 @@ func (uc *MentionProposalUseCase) HandleQuestionSubmit(ctx context.Context, call
 		requesterID = callback.User.ID
 	}
 	if missing := missingDraftQuestionItems(pq, answers); len(missing) > 0 {
+		// The draft is not bound to a workspace until it materializes, so
+		// workspace_id is empty for most draft forms; the draft and the thread
+		// identify the form.
+		logger.Info("draft question submit rejected: unanswered items",
+			"workspace_id", session.WorkspaceID,
+			"proposal_id", string(session.ProposalID),
+			"channel_id", channelID,
+			"thread_ts", threadTS,
+			"missing_item_ids", missing,
+			"user_id", callback.User.ID,
+		)
 		uc.repostQuestionWithError(ctx, channelID, messageTS, requesterID, pq, answers, missing)
+		notifyUnansweredQuestions(ctx, uc.slackService, channelID, callback.User.ID, pq, missing)
 		return nil
 	}
 
@@ -491,19 +547,9 @@ func (uc *MentionProposalUseCase) repostQuestionWithError(ctx context.Context, c
 		Reason: pq.Reason,
 		Items:  pendingItemsToDraftItems(pq.Items),
 	}, "", requesterUserID)
-	missingSet := make(map[string]struct{}, len(missing))
-	for _, id := range missing {
-		missingSet[id] = struct{}{}
-	}
-	missingTexts := make([]string, 0, len(missing))
-	for _, item := range pq.Items {
-		if _, ok := missingSet[item.ID]; ok {
-			missingTexts = append(missingTexts, item.Text)
-		}
-	}
 	banner := goslack.NewSectionBlock(
 		goslack.NewTextBlockObject(goslack.MarkdownType,
-			":warning: Please answer: "+strings.Join(missingTexts, " / "),
+			":warning: Please answer: "+strings.Join(missingDraftQuestionTexts(pq, missing), " / "),
 			false, false),
 		nil, nil,
 	)

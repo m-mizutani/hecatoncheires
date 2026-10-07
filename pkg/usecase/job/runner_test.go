@@ -974,6 +974,10 @@ func (p *recordingQuestionPoster) PostEphemeral(_ context.Context, _, _, _ strin
 	return nil
 }
 
+func (p *recordingQuestionPoster) GetUserInfo(_ context.Context, userID string) (*slacksvc.User, error) {
+	return &slacksvc.User{ID: userID}, nil
+}
+
 func (p *recordingQuestionPoster) posts() int { return int(p.n.Load()) }
 
 // awaitJobRunLogStage waits for the run's log to reach want and returns it.

@@ -569,6 +569,32 @@ The dispatcher then runs the F1-F8 filter chain (see `pkg/usecase/slack.go`
 (`<@botUserID>` substring check) ensures `app_mention` and
 `message.channels` duplicates do not trigger the planner twice.
 
+### Question form: every question must be answered
+
+The same rule applies to all three question forms — the case-draft form,
+the thread-mode case creation form, and an interactive Job's form
+(see [configuration.md](./configuration.md#interactive-jobs-interactive)):
+**Submit is accepted only when every question has an answer.**
+
+- A free-text question's input is required, so Slack does not label it
+  `(optional)`. A single- or multi-choice question counts as answered when
+  either a choice is selected or its `Other (free text)` input is filled, so
+  both of those inputs are optional.
+- When Submit leaves a question blank, the form is re-rendered with a
+  `:warning:` banner (it names the blank questions on the case-draft and Job
+  forms, and asks for every answer on the thread-mode form), and the submitter alone
+  receives an ephemeral message listing them. The ephemeral is sent on
+  **every** rejected Submit, not only the first: from the second rejection on
+  the re-rendered form is identical to the one on screen, so the ephemeral is
+  the only visible response. The question stays pending and nothing resumes.
+- Each rejection is logged at INFO (`... question submit rejected: unanswered
+  items`) with the workspace id, the form's identifiers (`job_id` + `run_id`
+  for a Job; `proposal_id` + `channel_id` + `thread_ts` for a case draft;
+  `case_channel_id` + `case_thread_ts` for thread-mode creation), the blank
+  question ids (`missing_item_ids`) and the submitter's `user_id`. Answer text
+  is never logged. A case draft is not bound to a workspace until it
+  materializes, so its `workspace_id` is usually empty.
+
 ### Recovery from a wrong workspace pick
 
 The planner picks the workspace from the registered list and may still pick
