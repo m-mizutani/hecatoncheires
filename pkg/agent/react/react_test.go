@@ -480,11 +480,13 @@ func TestTokenBudgetsStopTheRun(t *testing.T) {
 }
 
 // call is what one Generate was told: the text of its inputs, the system prompt
-// in force for it, and the tool-call ids the conversation answers going into it.
+// in force for it, the tool-call ids the conversation answers going into it, and
+// whether it was sent with tool calls disabled.
 type call struct {
-	text         string
-	systemPrompt string
-	answered     []string
+	text          string
+	systemPrompt  string
+	answered      []string
+	toolsDisabled bool
 }
 
 // inputRecordingLLM is scriptedLLM plus a record of what each Generate received,
@@ -511,8 +513,12 @@ func inputRecordingLLM(t *testing.T, responses ...any) (gollem.LLMClient, func()
 				seeded = h.Messages
 			}
 			return &mock.SessionMock{
-				GenerateFunc: func(_ context.Context, input []gollem.Input, _ ...gollem.GenerateOption) (*gollem.Response, error) {
-					rec := call{systemPrompt: cfg.SystemPrompt()}
+				GenerateFunc: func(_ context.Context, input []gollem.Input, genOpts ...gollem.GenerateOption) (*gollem.Response, error) {
+					genCfg := gollem.NewGenerateConfig(genOpts...)
+					rec := call{
+						systemPrompt:  cfg.SystemPrompt(),
+						toolsDisabled: genCfg.ToolCallsDisabled(),
+					}
 					var b strings.Builder
 					for _, in := range input {
 						if txt, ok := in.(gollem.Text); ok {
@@ -638,6 +644,11 @@ func TestBudgetNoticeReachesTheModel(t *testing.T) {
 	// be told to stop calling tools — being told that here is what made the run
 	// skip the call its task still needed.
 	gt.Bool(t, strings.Contains(seen[2].systemPrompt, "Do not call any tool again")).False()
+	// For the same reason that call keeps its tools, and so does every call before
+	// the reserve.
+	gt.Bool(t, seen[0].toolsDisabled).False()
+	gt.Bool(t, seen[1].toolsDisabled).False()
+	gt.Bool(t, seen[2].toolsDisabled).False()
 	// The turn itself carried the result and nothing else.
 	gt.Value(t, seen[2].answered).Equal([]string{"c"})
 	gt.String(t, seen[2].text).Equal("")
@@ -673,6 +684,12 @@ func TestTheReserveAllowsOneFinalToolCall(t *testing.T) {
 	gt.String(t, seen[2].systemPrompt).Contains("The budget reserve is spent")
 	gt.String(t, seen[2].systemPrompt).Contains("Do not call any tool again")
 	gt.Bool(t, strings.Contains(seen[2].systemPrompt, "THIS turn is your final tool call")).False()
+	// The instruction alone did not stop a model calling tools, so the second move
+	// is also sent with tool calls disabled — and only the second move: the first
+	// is the call the task still needs.
+	gt.Bool(t, seen[0].toolsDisabled).False()
+	gt.Bool(t, seen[1].toolsDisabled).False()
+	gt.Bool(t, seen[2].toolsDisabled).True()
 	// It carries the result and nothing else: a call answering a tool round may
 	// not send a user turn as well.
 	gt.Value(t, seen[2].answered).Equal([]string{"c2"})
@@ -747,15 +764,20 @@ func TestTheReserveFirstMoveIsANudgeNotAGate(t *testing.T) {
 	// the run ended, rather than being asked for a tool call again.
 	gt.Array(t, seen).Length(2).Required()
 	gt.String(t, seen[1].systemPrompt).Contains("THIS turn is your final tool call")
+	// The first move keeps its tools: it is asked for a call, so it cannot be the
+	// call that is forbidden one.
+	gt.Bool(t, seen[1].toolsDisabled).False()
 	// Only the pre-reserve round ran a tool.
 	gt.Array(t, tool.Calls()).Length(1)
 }
 
-// TestTheReserveBoundIsANudgeNotAGate pins that a tool call made past the
-// reserve's one round is still run and answered. Dropping it would leave the
-// model's function-call turn unanswered, which a provider rejects outright — the
-// whole run then fails instead of producing the shorter result the reserve is for.
-func TestTheReserveBoundIsANudgeNotAGate(t *testing.T) {
+// TestACallPastTheReserveBoundIsStillAnswered pins that a tool call made past
+// the reserve's one round is still run and answered. Those calls are sent with
+// tool calls disabled, but a provider is not bound to honour that, and the script
+// here plays one that does not. Dropping the call would leave the model's
+// function-call turn unanswered, which a provider rejects outright — the whole run
+// then fails instead of producing the shorter result the reserve is for.
+func TestACallPastTheReserveBoundIsStillAnswered(t *testing.T) {
 	tool := &recordingTool{name: "probe__ping"}
 	call := func(id string) *gollem.Response {
 		return callResponse(&gollem.FunctionCall{ID: id, Name: "probe__ping", Arguments: map[string]any{}})
@@ -771,11 +793,14 @@ func TestTheReserveBoundIsANudgeNotAGate(t *testing.T) {
 
 	seen := inputs()
 	gt.Array(t, seen).Length(4).Required()
-	// The over-budget round was told to stop and asked anyway; both the call it
-	// made and the one before it were answered.
+	// The over-budget round was told to stop, sent with tool calls disabled, and
+	// answered with a call anyway; both the call it made and the one before it were
+	// answered.
 	gt.String(t, seen[2].systemPrompt).Contains("Do not call any tool again")
+	gt.Bool(t, seen[2].toolsDisabled).True()
 	gt.Value(t, seen[2].answered).Equal([]string{"c2"})
 	gt.String(t, seen[3].systemPrompt).Contains("Do not call any tool again")
+	gt.Bool(t, seen[3].toolsDisabled).True()
 	gt.Value(t, seen[3].answered).Equal([]string{"c3"})
 	gt.Array(t, tool.Calls()).Length(3)
 }
