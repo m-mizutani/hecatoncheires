@@ -3,6 +3,7 @@ package planexec_test
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -13,6 +14,9 @@ import (
 	"github.com/gollem-dev/agentkit"
 	agentprocmemory "github.com/gollem-dev/agentkit/repository/memory"
 	"github.com/gollem-dev/gollem"
+	"github.com/gollem-dev/gollem/llm/claude"
+	"github.com/gollem-dev/gollem/llm/gemini"
+	"github.com/gollem-dev/gollem/llm/openai"
 	"github.com/gollem-dev/gollem/mock"
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
@@ -1410,6 +1414,158 @@ func TestAReplanPastItsToolAllowanceCannotCallTools(t *testing.T) {
 	gt.String(t, planner.seen()[6]).Equal("")
 	gt.Value(t, planner.answeredWith()[6]).Equal([]string{"r"})
 	gt.Bool(t, contains(planner.systemSeen()[7], "Do not call any more tools")).False()
+}
+
+// TestRealLLM_ToolCallsDisabledAfterAnsweredToolRound checks, against a real
+// provider, the request shape a planning or terminal call past its tool
+// allowance sends: the conversation ENDS on the answered tool results, there is
+// no new user turn, the tools are still declared, tool calls are disabled, and —
+// for a planning call or a structured terminal call — a JSON response schema is
+// set. The session options mirror agentkit's generateBase (history, tools,
+// system prompt, JSON content type and schema at session level; the disabled
+// setting per call).
+//
+// gollem's own live test (TestSchemaCallAfterToolUseWithRealLLM) covers tool
+// history with disabled tool calls and a schema, but its request ends on a fresh
+// user turn, so it does not cover this shape.
+//
+// Gated by TEST_PLANEXEC_TOOL_CHOICE; the client is built from TEST_LLM_*.
+func TestRealLLM_ToolCallsDisabledAfterAnsweredToolRound(t *testing.T) {
+	llm := realLLMForToolChoice(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	lookup := &recordingTool{name: "get_workspace"}
+	const systemPrompt = "You coordinate an investigation. Before answering anything, " +
+		"call the get_workspace tool with id ws-1."
+	schema := &gollem.Parameter{
+		Type: gollem.TypeObject,
+		Properties: map[string]*gollem.Parameter{
+			"summary": {Type: gollem.TypeString, Description: "what the lookup returned", Required: true},
+		},
+	}
+
+	// 1. Obtain a real tool call, with the tools declared and no schema.
+	first, err := llm.NewSession(ctx,
+		gollem.WithSessionSystemPrompt(systemPrompt),
+		gollem.WithSessionTools(lookup),
+	)
+	gt.NoError(t, err).Required()
+	resp, err := first.Generate(ctx, []gollem.Input{gollem.Text("What does workspace ws-1 contain?")})
+	gt.NoError(t, err).Required()
+	gt.Array(t, resp.FunctionCalls).Longer(0).Required()
+
+	// 2. Answer every call in ONE trailing tool message, as agentkit's
+	// Session().CallTool does.
+	history, err := first.History()
+	gt.NoError(t, err).Required()
+	answered := history.Clone()
+	toolMsg := gollem.Message{Role: gollem.RoleTool}
+	for _, fc := range resp.FunctionCalls {
+		out, rerr := lookup.Run(ctx, fc.Arguments)
+		gt.NoError(t, rerr).Required()
+		content, cerr := gollem.NewToolResponseContent(fc.ID, fc.Name, out, false)
+		gt.NoError(t, cerr).Required()
+		toolMsg.Contents = append(toolMsg.Contents, content)
+	}
+	answered.Messages = append(answered.Messages, toolMsg)
+
+	cases := map[string][]gollem.SessionOption{
+		"with a response schema": {
+			gollem.WithSessionContentType(gollem.ContentTypeJSON),
+			gollem.WithSessionResponseSchema(schema),
+		},
+		"plain text": nil,
+	}
+	for name, extra := range cases {
+		t.Run(name, func(t *testing.T) {
+			opts := append([]gollem.SessionOption{
+				gollem.WithSessionSystemPrompt(systemPrompt + "\n\nDo not call any more tools; continue now with what you already have."),
+				gollem.WithSessionTools(lookup),
+				gollem.WithSessionHistory(answered.Clone()),
+			}, extra...)
+			next, err := llm.NewSession(ctx, opts...)
+			gt.NoError(t, err).Required()
+
+			// 3. Continue from the answered calls with NO input and tool calls disabled.
+			out, err := next.Generate(ctx, nil, gollem.WithToolCallsDisabled())
+			gt.NoError(t, err).Required()
+			gt.Array(t, out.FunctionCalls).Length(0)
+			body := strings.Join(out.Texts, "")
+			gt.String(t, strings.TrimSpace(body)).NotEqual("")
+			if extra != nil {
+				var decoded struct {
+					Summary string `json:"summary"`
+				}
+				gt.NoError(t, json.Unmarshal([]byte(body), &decoded)).Required()
+				gt.String(t, decoded.Summary).NotEqual("")
+			}
+		})
+	}
+}
+
+// realLLMForToolChoice builds a real LLM client for the gated tool-choice test
+// from the TEST_LLM_* variables the other live tests use.
+func realLLMForToolChoice(t *testing.T) gollem.LLMClient {
+	t.Helper()
+	if _, ok := os.LookupEnv("TEST_PLANEXEC_TOOL_CHOICE"); !ok {
+		t.Skip("TEST_PLANEXEC_TOOL_CHOICE not set; skipping real-LLM tool-choice test")
+	}
+	ctx := context.Background()
+	model := os.Getenv("TEST_LLM_MODEL")
+	switch os.Getenv("TEST_LLM_PROVIDER") {
+	case "openai":
+		key := os.Getenv("TEST_LLM_OPENAI_API_KEY")
+		gt.Value(t, key).NotEqual("").Required()
+		var opts []openai.Option
+		if model != "" {
+			opts = append(opts, openai.WithModel(model))
+		}
+		c, err := openai.New(ctx, key, opts...)
+		gt.NoError(t, err).Required()
+		return c
+	case "claude":
+		key := os.Getenv("TEST_LLM_CLAUDE_API_KEY")
+		project := os.Getenv("TEST_LLM_GEMINI_PROJECT_ID")
+		switch {
+		case key != "":
+			var opts []claude.Option
+			if model != "" {
+				opts = append(opts, claude.WithModel(model))
+			}
+			c, err := claude.New(ctx, key, opts...)
+			gt.NoError(t, err).Required()
+			return c
+		case project != "":
+			location := os.Getenv("TEST_LLM_GEMINI_LOCATION")
+			gt.Value(t, location).NotEqual("").Required()
+			var opts []claude.VertexOption
+			if model != "" {
+				opts = append(opts, claude.WithVertexModel(model))
+			}
+			c, err := claude.NewWithVertex(ctx, location, project, opts...)
+			gt.NoError(t, err).Required()
+			return c
+		default:
+			t.Skip("claude provider needs TEST_LLM_CLAUDE_API_KEY or TEST_LLM_GEMINI_PROJECT_ID")
+			return nil
+		}
+	case "gemini":
+		project := os.Getenv("TEST_LLM_GEMINI_PROJECT_ID")
+		location := os.Getenv("TEST_LLM_GEMINI_LOCATION")
+		gt.Value(t, project).NotEqual("").Required()
+		gt.Value(t, location).NotEqual("").Required()
+		var opts []gemini.Option
+		if model != "" {
+			opts = append(opts, gemini.WithModel(model))
+		}
+		c, err := gemini.New(ctx, project, location, opts...)
+		gt.NoError(t, err).Required()
+		return c
+	default:
+		t.Skip("TEST_LLM_PROVIDER must be openai | claude | gemini")
+		return nil
+	}
 }
 
 // An empty reply from a planning call sent with tool calls disabled is an
