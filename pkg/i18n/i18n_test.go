@@ -2,6 +2,7 @@ package i18n_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/m-mizutani/gt"
@@ -53,6 +54,18 @@ func TestT(t *testing.T) {
 
 		gt.Value(t, i18n.T(enCtx, i18n.MsgThreadCaseQuestionFallback)).Equal("We need a bit more info to create this case.")
 		gt.Value(t, i18n.T(jaCtx, i18n.MsgThreadCaseQuestionFallback)).Equal("ケースの作成にはもう少し情報が必要です。")
+	})
+
+	t.Run("unanswered question notice ends with the question list", func(t *testing.T) {
+		const list = "• Severity?\n• Anything else?"
+		enCtx := i18n.ContextWithLang(context.Background(), i18n.LangEN)
+		jaCtx := i18n.ContextWithLang(context.Background(), i18n.LangJA)
+
+		gt.Value(t, i18n.T(enCtx, i18n.MsgQuestionFormUnanswered, list)).Equal(
+			"Your answers have not been sent yet. Answer the following questions in the form, then press Submit again:\n" + list)
+		ja := i18n.T(jaCtx, i18n.MsgQuestionFormUnanswered, list)
+		gt.String(t, ja).NotEqual(i18n.T(enCtx, i18n.MsgQuestionFormUnanswered, list))
+		gt.Bool(t, strings.HasSuffix(ja, "\n"+list)).True()
 	})
 
 	t.Run("falls back to default lang for no lang in context", func(t *testing.T) {

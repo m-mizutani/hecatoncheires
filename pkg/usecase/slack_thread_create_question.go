@@ -12,6 +12,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/proposal"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/threadcase"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 )
 
 // ActionIDThreadCreateQuestionSubmit is the action_id of the Submit button on
@@ -68,7 +69,11 @@ func buildThreadCreateQuestionBlocks(ctx context.Context, reason string, items [
 				goslack.NewTextBlockObject(goslack.PlainTextType, item.Text, false, false),
 				nil, elem,
 			)
-			input.Optional = true
+			// Not optional: the input is the item's only answer surface, and
+			// the submit handler rejects the form while it is blank. Marking
+			// it optional made Slack label it "(optional)", contradicting
+			// that check.
+			input.Optional = false
 			blocks = append(blocks, input)
 			continue
 		}
@@ -89,6 +94,8 @@ func buildThreadCreateQuestionBlocks(ctx context.Context, reason string, items [
 			goslack.NewTextBlockObject(goslack.PlainTextType, item.Text, false, false),
 			nil, element,
 		)
+		// Optional because the item counts as answered when EITHER the choice
+		// or the "Other" input below is filled; the submit handler enforces it.
 		input.Optional = true
 		blocks = append(blocks, input)
 
@@ -165,7 +172,8 @@ func (uc *AgentUseCase) postThreadCreateQuestionForm(ctx context.Context, ssn *m
 // against the pending snapshot, swaps the form into a read-only "answered"
 // record, clears the pending question, and resumes the create agent with the
 // formatted answers as the next-turn input. Missing answers re-render the form
-// with an inline error.
+// with an inline error and tell the submitter which questions are blank in an
+// ephemeral.
 func (uc *AgentUseCase) HandleThreadCaseQuestionSubmit(ctx context.Context, callback *goslack.InteractionCallback, action *goslack.BlockAction) error {
 	if callback == nil || action == nil {
 		return goerr.New("nil callback or action")
@@ -233,7 +241,17 @@ func (uc *AgentUseCase) HandleThreadCaseQuestionSubmit(ctx context.Context, call
 		reporter = callback.User.ID
 	}
 	if missing := missingDraftQuestionItems(pq, answers); len(missing) > 0 {
+		logging.From(ctx).Info("thread case question submit rejected: unanswered items",
+			"workspace_id", wsID,
+			"case_channel_id", caseChannel,
+			"case_thread_ts", caseTS,
+			"missing_item_ids", missing,
+			"user_id", callback.User.ID,
+		)
 		uc.repostThreadQuestionWithError(ctx, uiChannel, messageTS, encodeCaseThreadValue(caseChannel, caseTS), reporter, pq, answers, missing)
+		if uc.deps.SlackService != nil {
+			notifyUnansweredQuestions(ctx, uc.deps.SlackService, uiChannel, callback.User.ID, pq, missing)
+		}
 		return nil
 	}
 

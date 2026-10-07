@@ -14,8 +14,10 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/runtrace"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
+	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/uierr"
 )
 
@@ -79,13 +81,15 @@ func decodeJobQuestionRef(value string) (jobQuestionRef, error) {
 }
 
 // jobQuestionPoster is the narrow Slack surface the interactive-Job question
-// flow needs: post the form into the case thread (Solicit) and update it in
-// place to an answered / error view (submit handler). slacksvc.Service
-// satisfies it.
+// flow needs: post the form into the case thread (Solicit), update it in
+// place to an answered / error view (submit handler), tell the submitter why
+// a submit was refused, and look up the submitter's locale so that notice is
+// in their language. slacksvc.Service satisfies it.
 type jobQuestionPoster interface {
 	PostThreadMessage(ctx context.Context, channelID, threadTS string, blocks []goslack.Block, text string, opts ...slacksvc.PostThreadOption) (string, error)
 	UpdateMessage(ctx context.Context, channelID, timestamp string, blocks []goslack.Block, text string) error
 	PostEphemeral(ctx context.Context, channelID, userID, text string) error
+	GetUserInfo(ctx context.Context, userID string) (*slacksvc.User, error)
 }
 
 // JobInteractor is the interaction.Interactor for a single interactive Job
@@ -254,7 +258,11 @@ func buildJobQuestionBlocks(req interaction.Request, refValue, requesterUserID s
 				nil,
 				elem,
 			)
-			input.Optional = true
+			// Not optional: the input is the item's only answer surface, and
+			// the submit handler rejects the form while it is blank. Marking
+			// it optional made Slack label it "(optional)", contradicting
+			// that check.
+			input.Optional = false
 			blocks = append(blocks, input)
 			continue
 		}
@@ -280,6 +288,8 @@ func buildJobQuestionBlocks(req interaction.Request, refValue, requesterUserID s
 			nil,
 			element,
 		)
+		// Optional because the item counts as answered when EITHER the choice
+		// or the "Other" input below is filled; the submit handler enforces it.
 		input.Optional = true
 		blocks = append(blocks, input)
 
@@ -468,7 +478,8 @@ func pendingToInteractionRequest(pending *model.PendingInteraction) interaction.
 // HandleQuestionSubmit is the Slack Submit-button entry point for an
 // interactive Job's question form. It decodes the resume context from the
 // button value, loads the suspended run, validates that every item was
-// answered (re-rendering the form with a banner otherwise), swaps the form
+// answered (otherwise re-rendering the form with a banner and telling the
+// submitter which questions are blank in an ephemeral), swaps the form
 // into a read-only answered view, and resumes the run with the parsed
 // answers. A stale submit (the run already resumed / expired) degrades to a
 // "no longer active" surface and a no-op. It is the single usecase entry
@@ -484,6 +495,10 @@ func (r *JobRunner) HandleQuestionSubmit(ctx context.Context, callback *goslack.
 	key := model.JobRunKey{WorkspaceID: ref.WorkspaceID, CaseID: ref.CaseID, JobID: ref.JobID}
 	channelID := callback.Channel.ID
 	messageTS := callback.Message.Timestamp
+	// Only the notices addressed to the submitter use their language. The
+	// resumed run keeps ctx, so what it posts to the thread stays in the
+	// deployment default like every other Job run's posts.
+	noticeCtx := r.contextWithSubmitterLang(ctx, callback.User.ID)
 
 	if r.deps.WorkspaceAccess == nil {
 		return goerr.New("workspace access control is not configured for job question submit")
@@ -493,7 +508,7 @@ func (r *JobRunner) HandleQuestionSubmit(ctx context.Context, callback *goslack.
 			return goerr.Wrap(err, "authorize job question submit",
 				goerr.V("workspace_id", ref.WorkspaceID), goerr.V("user_id", callback.User.ID))
 		}
-		r.notifyWorkspaceAccessDenied(ctx, channelID, callback.User.ID, err)
+		r.notifyWorkspaceAccessDenied(noticeCtx, channelID, callback.User.ID, err)
 		return nil
 	}
 
@@ -515,7 +530,18 @@ func (r *JobRunner) HandleQuestionSubmit(ctx context.Context, callback *goslack.
 
 	answers := parseJobQuestionAnswers(pending, callback.BlockActionState)
 	if missing := missingJobQuestionItems(pending, answers); len(missing) > 0 {
+		logging.From(ctx).Info("job question submit rejected: unanswered items",
+			"workspace_id", ref.WorkspaceID,
+			"case_id", ref.CaseID,
+			"job_id", ref.JobID,
+			"run_id", ref.RunID,
+			"missing_item_ids", missing,
+			"user_id", callback.User.ID,
+		)
 		r.repostJobQuestionWithError(ctx, channelID, messageTS, action.Value, pending, missing)
+		// The re-rendered form is identical from the second rejection on, so
+		// it alone tells the user nothing; the ephemeral is sent every time.
+		r.notifyJobQuestionUnanswered(noticeCtx, channelID, callback.User.ID, pending, missing)
 		return nil
 	}
 
@@ -529,6 +555,30 @@ func (r *JobRunner) HandleQuestionSubmit(ctx context.Context, callback *goslack.
 	}
 
 	return r.Resume(ctx, key, ref.RunID, answers)
+}
+
+// contextWithSubmitterLang sets the submitting user's Slack locale as the
+// i18n language, so the notices this handler sends them are in their
+// language. A failed lookup keeps the deployment default: bot and deleted
+// users have no usable locale, so it is reported benign.
+func (r *JobRunner) contextWithSubmitterLang(ctx context.Context, userID string) context.Context {
+	if r.deps.InteractionPoster == nil || userID == "" {
+		return ctx
+	}
+	user, err := r.deps.InteractionPoster.GetUserInfo(ctx, userID)
+	if err != nil {
+		errutil.Handle(ctx, goerr.Wrap(err, "failed to get user locale for i18n",
+			goerr.V("user_id", userID), goerr.T(errutil.TagBenign)),
+			"failed to get user locale for i18n")
+		return ctx
+	}
+	if user == nil {
+		return ctx
+	}
+	if lang := i18n.DetectLang(user.Locale); lang != "" {
+		return i18n.ContextWithLang(ctx, lang)
+	}
+	return ctx
 }
 
 // notifyWorkspaceAccessDenied tells the answering user, and only them, that
@@ -571,24 +621,50 @@ func (r *JobRunner) repostJobQuestionWithError(ctx context.Context, channelID, m
 	if r.deps.InteractionPoster == nil {
 		return
 	}
-	missingSet := make(map[string]struct{}, len(missing))
-	for _, id := range missing {
-		missingSet[id] = struct{}{}
-	}
-	missingTexts := make([]string, 0, len(missing))
-	for _, item := range pending.Items {
-		if _, ok := missingSet[item.ID]; ok {
-			missingTexts = append(missingTexts, item.Text)
-		}
-	}
 	blocks, fallback := buildJobQuestionBlocks(pendingToInteractionRequest(pending), refValue, "")
 	banner := goslack.NewSectionBlock(
 		goslack.NewTextBlockObject(goslack.MarkdownType,
-			":warning: Please answer: "+strings.Join(missingTexts, " / "), false, false),
+			":warning: Please answer: "+strings.Join(missingJobQuestionTexts(pending, missing), " / "), false, false),
 		nil, nil,
 	)
 	withBanner := append([]goslack.Block{banner}, blocks...)
 	if err := r.deps.InteractionPoster.UpdateMessage(ctx, channelID, messageTS, withBanner, fallback); err != nil {
 		errutil.Handle(ctx, err, "re-render job question form with validation banner")
 	}
+}
+
+// notifyJobQuestionUnanswered tells the submitting user, and only them, which
+// questions are still blank. A failed post is reported and otherwise ignored:
+// the form already carries the banner and the run stays suspended either way.
+func (r *JobRunner) notifyJobQuestionUnanswered(ctx context.Context, channelID, userID string, pending *model.PendingInteraction, missing []string) {
+	if r.deps.InteractionPoster == nil || channelID == "" || userID == "" {
+		return
+	}
+	texts := missingJobQuestionTexts(pending, missing)
+	lines := make([]string, len(texts))
+	for i, t := range texts {
+		lines[i] = "• " + t
+	}
+	text := i18n.T(ctx, i18n.MsgQuestionFormUnanswered, strings.Join(lines, "\n"))
+	if err := r.deps.InteractionPoster.PostEphemeral(ctx, channelID, userID, text); err != nil {
+		errutil.Handle(ctx, goerr.Wrap(err, "post unanswered job question notice",
+			goerr.V("channel_id", channelID), goerr.V("user_id", userID)),
+			"failed to post unanswered job question notice")
+	}
+}
+
+// missingJobQuestionTexts returns the question text of each missing item, in
+// form order.
+func missingJobQuestionTexts(pending *model.PendingInteraction, missing []string) []string {
+	missingSet := make(map[string]struct{}, len(missing))
+	for _, id := range missing {
+		missingSet[id] = struct{}{}
+	}
+	texts := make([]string, 0, len(missing))
+	for _, item := range pending.Items {
+		if _, ok := missingSet[item.ID]; ok {
+			texts = append(texts, item.Text)
+		}
+	}
+	return texts
 }

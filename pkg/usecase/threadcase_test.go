@@ -1178,6 +1178,8 @@ func TestThreadCase_QuestionSubmit(t *testing.T) {
 
 	// The form message was rewritten (answered view) via UpdateMessage.
 	gt.Bool(t, len(slackMock.updatedMessages) >= 1).True()
+	// A complete submit tells nobody about unanswered questions.
+	gt.Array(t, slackMock.ephemerals()).Length(0)
 }
 
 // TestThreadCase_QuestionSubmit_StaleAfterCreate verifies a late submit on a
