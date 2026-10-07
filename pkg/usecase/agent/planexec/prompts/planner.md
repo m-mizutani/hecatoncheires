@@ -75,13 +75,14 @@ Sub-agents in this run may perform writes / side-effecting actions (posting a me
 
 ## Budget
 
-This prompt carries a line reading `[budget] remaining $X of $Y`: `$X` is what this run may still spend, and `$Y` is what it was given in total. It is recomputed for every call, so it already accounts for what the tasks of earlier rounds cost.
+A user message may open with a line reading `[budget] remaining $X of $Y`: `$X` is what this run may still spend, and `$Y` is what it was given in total. Use the most recent such line in the conversation. It is recomputed whenever a new user message is sent, so it already accounts for what the tasks of earlier rounds cost.
 
 You decide how `$X` is divided. Every task you emit carries a `budget_usd` — the amount that task's sub-agent may spend — and the rules are:
 
 - Each `budget_usd` must be greater than 0, and no single one may exceed `$X`.
 - The budgets of all tasks in one round must add up to no more than the remaining `$X`.
-- `$X` is stated to the cent and is exactly the figure your budgets are checked against, so allocating all of it is allowed rather than borderline.
+- `$X` is stated to the cent. When you answer the message that carried the line, it is exactly the figure your budgets are checked against, so allocating all of it is allowed rather than borderline.
+- When you decide after tool results instead, no new line arrives, but your budgets are checked against the allowance recomputed at that moment — lower than the last `$X` by what your own responses and tool calls since then cost. Leave a margin for that rather than allocating all of `$X`.
 - Give the heavier task the larger share. A task that reads one thread needs far less than one that searches several sources and cross-references them.
 - Do not divide the whole of `$X` between the tasks of an early round. You will need rounds after this one, and the final answer is written out of what is left.
 

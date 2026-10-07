@@ -500,10 +500,11 @@ func (s *strategy[T]) stepPlan(ctx context.Context, sys agentkit.Syscalls, st st
 	// told and the bound its plan is validated against. Re-reading it after the
 	// call would validate against a figure smaller than the one the planner was
 	// given — by the cost of that very call — and reject a plan that did exactly
-	// what it was told.
+	// what it was told. A call continuing from answered tool calls is told no
+	// figure (see plannerInput) and is still validated against this fresh one.
 	remaining, total, budgeted := s.remainingBudget(sys)
 
-	prompt, err := s.plannerPrompt(st, budgetLine(remaining, total, budgeted))
+	prompt, err := s.plannerPrompt(st)
 	if err != nil {
 		return st, agentkit.Decision[Output[T]]{}, err
 	}
@@ -514,7 +515,7 @@ func (s *strategy[T]) stepPlan(ctx context.Context, sys agentkit.Syscalls, st st
 		withBudget:   budgeted,
 	})
 
-	res, err := sys.Session().Generate(ctx, plannerInput(st),
+	res, err := sys.Session().Generate(ctx, plannerInput(st, budgetLine(remaining, total, budgeted)),
 		agentkit.WithSystemPrompt(prompt),
 		agentkit.WithSchema(schema),
 		agentkit.WithRole(RolePlanner),
@@ -545,7 +546,8 @@ func (s *strategy[T]) stepPlan(ctx context.Context, sys agentkit.Syscalls, st st
 	return s.launchRound(ctx, sys, st, plan.Tasks)
 }
 
-// plannerInput is the user turn a planning call sends.
+// plannerInput is the user turn a planning call sends. budgetLine is the
+// allowance line to open it with, or "" for none.
 //
 // A call that follows the tool phase sends NOTHING, and that case is checked
 // first. stepPlannerTool answered each call in the conversation, so the model's
@@ -553,7 +555,9 @@ func (s *strategy[T]) stepPlan(ctx context.Context, sys agentkit.Syscalls, st st
 // would land as a second user turn behind the results, which is not what the
 // model's call is waiting for — and the instruction that would have carried it
 // belongs in the system prompt instead (see plannerPrompt). The state that would
-// mix the two does not arise: divertToTools clears NextInput on the way in.
+// mix the two does not arise: divertToTools clears NextInput on the way in. The
+// allowance line is dropped with the rest: the planner reads the figure off the
+// last turn that carried one (see budgetPrefix).
 //
 // Any other call must send a turn. gollem appends no user content for an empty
 // input, so with no answered calls behind it the request would END on the previous
@@ -561,14 +565,26 @@ func (s *strategy[T]) stepPlan(ctx context.Context, sys agentkit.Syscalls, st st
 // plannerContinue keeps the request well-formed without re-asking the original
 // request, which would ask the same question again as though nothing had been
 // learnt.
-func plannerInput(st state) []gollem.Input {
+func plannerInput(st state, budgetLine string) []gollem.Input {
 	if st.ToolsAnswered {
 		return nil
 	}
-	if st.NextInput != "" {
-		return []gollem.Input{gollem.Text(st.NextInput)}
+	text := st.NextInput
+	if text == "" {
+		text = plannerContinue
 	}
-	return []gollem.Input{gollem.Text(plannerContinue)}
+	return withBudgetLine(budgetLine, gollem.Text(text))
+}
+
+// withBudgetLine opens a user turn with the allowance line. The line is its own
+// input rather than a prefix of the text so the text stays exactly what the
+// caller built; every provider gollem supports puts consecutive text inputs in
+// ONE user turn, so the request shape is unchanged.
+func withBudgetLine(budgetLine string, text gollem.Text) []gollem.Input {
+	if budgetLine == "" {
+		return []gollem.Input{text}
+	}
+	return []gollem.Input{gollem.Text(budgetLine), text}
 }
 
 // plannerContinue is the user turn a planning call sends when it has nothing new
@@ -802,7 +818,7 @@ func (s *strategy[T]) stepReplan(ctx context.Context, sys agentkit.Syscalls, st 
 	// planner is told and the bound its plan is validated against.
 	remaining, total, budgeted := s.remainingBudget(sys)
 
-	prompt, err := s.plannerPrompt(st, budgetLine(remaining, total, budgeted))
+	prompt, err := s.plannerPrompt(st)
 	if err != nil {
 		return st, agentkit.Decision[Output[T]]{}, err
 	}
@@ -812,7 +828,7 @@ func (s *strategy[T]) stepReplan(ctx context.Context, sys agentkit.Syscalls, st 
 		withBudget:    budgeted,
 	})
 
-	res, err := sys.Session().Generate(ctx, plannerInput(st),
+	res, err := sys.Session().Generate(ctx, plannerInput(st, budgetLine(remaining, total, budgeted)),
 		agentkit.WithSystemPrompt(prompt),
 		agentkit.WithSchema(schema),
 		agentkit.WithRole(RolePlanner),
@@ -973,9 +989,7 @@ func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st s
 	// prompt, which reaches this call whether or not it sends a user turn — so it
 	// must not be prepended to userPrompt as well, or the same instruction arrives
 	// twice on the calls that do send one.
-	// The terminal call gets the line too: it is the one call that may still ask
-	// for a tool, so it has to know what is left to spend on one.
-	prompt, err := s.plannerPrompt(st, budgetLine(s.remainingBudget(sys)))
+	prompt, err := s.plannerPrompt(st)
 	if err != nil {
 		return st, agentkit.Decision[Output[T]]{}, err
 	}
@@ -987,11 +1001,16 @@ func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st s
 	// notice sends plan / replan straight here without another planning call — and
 	// without it the model is never told to write the answer, nor given the
 	// observation trail to write it from.
+	//
+	// The terminal call gets the allowance line too, when it sends a turn: it is
+	// the one call that may still ask for a tool, so it has to know what is left to
+	// spend on one. Not in the system prompt on the other branch, where a figure
+	// that changes per call would rewrite the cached prefix of every call after it.
 	var input []gollem.Input
 	if st.ToolsAnswered {
 		prompt += "\n\n" + userPrompt
 	} else {
-		input = []gollem.Input{gollem.Text(userPrompt)}
+		input = withBudgetLine(budgetLine(s.remainingBudget(sys)), gollem.Text(userPrompt))
 	}
 
 	opts := []agentkit.GenerateOption{
@@ -1359,9 +1378,21 @@ func roundSummaryLine(round int, results []TaskResult) string {
 // budgetPrefix renders the line that tells the planner what the run may still
 // spend, and out of what.
 //
-// It goes in the SYSTEM prompt, like the reserve instruction and for the same
-// reason: the planning call that follows a tool round sends no user turn, so a
-// figure the planner has to have cannot ride on one.
+// It opens the USER turn of every planner and terminal call that sends one (see
+// plannerInput), and is never put in the system prompt. The figure changes on
+// nearly every call, and a provider's prompt cache matches an exact prefix that
+// runs tools → system → messages: a figure in the system prompt made every call
+// rewrite the whole conversation into the cache instead of reading what the
+// previous call had already written. In a user turn it becomes part of the
+// conversation, which only ever grows by appending, so earlier calls' turns stay
+// a byte-identical prefix.
+//
+// The cost is that a call continuing from answered tool calls sends no user turn
+// (§ "a parallel tool-call turn is answered in ONE call") and is therefore told
+// no new figure: the planner still reads the line of the last turn that carried
+// one, while its plan is validated against a figure read afresh for that call —
+// lower by what the planning phase's own lookups cost. prompts/planner.md tells
+// the planner so.
 //
 // It replaces budget.Config.Prefix, which was declared and never called while
 // prompts/planner.md described the format it would have produced — so the
@@ -1411,11 +1442,14 @@ func budgetBound(remaining pricing.NanoUSD, ok bool) *pricing.NanoUSD {
 
 // plannerPrompt renders the planner system prompt for the run's input.
 //
-// budgetLine is the allowance line to include, or "" for none. It is passed in
-// rather than read here so this stays a pure function of its arguments: the
-// figure comes from the run's live metrics, and reaching for them inside a
-// renderer would make the renderer untestable without a Kernel.
-func (s *strategy[T]) plannerPrompt(st state, budgetLine string) (string, error) {
+// It carries no figure that changes from one call to the next — the allowance
+// line rides on the user turn instead (see budgetPrefix) — so a falling
+// allowance leaves it byte-identical. What still changes it is a notice below
+// being added, and stepFinal appending the final prompt on a call that answers a
+// tool round. AllocatesBudget follows Config.Remaining, the same condition
+// that puts `budget_usd` into the schema, so the instruction and the field it
+// asks for cannot appear without each other.
+func (s *strategy[T]) plannerPrompt(st state) (string, error) {
 	prompt, err := renderPlannerSystemPrompt(plannerPromptInput{
 		HostPrompt:          st.Input.SystemPrompt,
 		Language:            st.Input.LanguageLabel,
@@ -1424,16 +1458,10 @@ func (s *strategy[T]) plannerPrompt(st state, budgetLine string) (string, error)
 		AllowDirect:         st.Input.AllowDirect,
 		StructuredFinal:     !s.cfg.TextOnly,
 		AllowSubAgentWrites: st.Input.AllowSubAgentWrites,
-		AllocatesBudget:     budgetLine != "",
+		AllocatesBudget:     s.cfg.Remaining != nil,
 	})
 	if err != nil {
 		return "", goerr.Wrap(err, "planexec: render the planner prompt")
-	}
-	// Before the notices below, because it is a fact the planner reasons FROM
-	// rather than an instruction: the reserve instruction that may follow it says
-	// what to do now that the figure is what it is.
-	if budgetLine != "" {
-		prompt += "\n\n" + budgetLine
 	}
 	// The tool allowance is spent: say so here rather than as a user turn. The call
 	// that has to hear it is the one following the tool phase, and that call sends

@@ -948,19 +948,48 @@ keeps going to its step or token ceiling, and the remaining figure is read befor
 the planning call that itself costs something. `--agent-max-steps` and the Task
 tier's ceilings are still the only hard bounds.
 
-Five properties a change here must preserve:
+Seven properties a change here must preserve:
 
 - **The remaining figure is read at the moment of the call**, from
   `Config[T].Remaining(sys.Metadata(), sys.Metrics())` — never carried on the
   checkpointed state. A round's children can spend a great deal between two of the
   parent's transitions, and a stale figure would be divided up as if they had not.
 - **It is read ONCE per planning transition, BEFORE the generate, and floored to
-  the cent.** The same value is both shown to the planner and enforced against its
-  plan, so the two cannot disagree: re-reading it after the call would validate
-  against a figure smaller than the one the planner was given, and `USD()` rounds
-  to the NEAREST cent, so an unfloored amount can read higher than it is. Either
-  way a plan that did exactly what it was told is rejected, and each rejection
-  costs a planner call out of the allowance being divided.
+  the cent.** On a call that sends a user turn, the same value is both shown to
+  the planner and enforced against its plan, so the two cannot disagree:
+  re-reading it after the call would validate against a figure smaller than the
+  one the planner was given, and `USD()` rounds to the NEAREST cent, so an
+  unfloored amount can read higher than it is. Either way a plan that did exactly
+  what it was told is rejected, and each rejection costs a planner call out of the
+  allowance being divided. Pinned by
+  `TestAPlanIsCheckedAgainstTheFigureThePlannerWasShown`.
+- **The figure opens the USER turn (`plannerInput` / `withBudgetLine`), never the
+  system prompt.** It changes on nearly every call, and Claude's prompt cache
+  matches an exact prefix running tools → system → messages: with the figure in
+  the system prompt, every planner call of a run read only the tools back from the
+  cache and rewrote the whole conversation (a production Job: 8 planner calls,
+  `cache_read_input_tokens` stuck at the tools' 8,485, 25k–58k tokens written per
+  call). In a user turn it is part of a conversation that only grows by appending,
+  so a falling allowance no longer changes the system prompt. What still changes
+  it, each a handful of times per run at most: the tool-allowance notice and the
+  reserve instructions `plannerPrompt` appends, the final prompt a terminal call
+  answering a tool round carries there (see `stepFinal`), and — for a Claude model
+  without structured outputs — the response schema gollem writes into the system
+  prompt, which differs between the plan and replan schemas. Pinned by
+  `TestConsecutivePlannerCallsShareOneSystemPrompt` and
+  `TestTheAllowanceIsToldInTheUserTurn`.
+- **A call continuing from answered tool calls is shown NO new figure, and is
+  still validated against a fresh read.** It sends no user turn (§ "a parallel
+  tool-call turn is answered in ONE call"), so the planner is reading the line of
+  the last turn that carried one, which is higher than the fresh figure by what the
+  planning phase's own calls cost — no child runs inside a planning phase, since
+  `launchRound` / `launchDirect` suspend on `WaitChildren` right after spawning. A
+  plan sized to the old line can therefore be rejected, and its re-plan's turn
+  carries the current figure. This was a deliberate choice over holding the shown
+  figure on the checkpointed state for the rest of the phase, which would keep
+  shown and enforced equal but let a phase allocate what its own lookups had
+  already spent. `prompts/planner.md` tells the planner to leave a margin there.
+  Pinned by `TestAPlanAfterALookupIsCheckedAgainstAFreshFigure`.
 - **The planner is the one who divides it**, because it is the only party that
   knows which of the tasks it just wrote is the heavy one. An even split is not a
   fallback: a plan with a missing, zero or over-sum budget is rejected and
