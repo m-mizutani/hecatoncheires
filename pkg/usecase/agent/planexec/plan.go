@@ -69,6 +69,9 @@ type PlanResult struct {
 	// Sink.PlanProposed, removed with the in-process Runner in #261.) Do not wire it
 	// into a reply — publishing the planner's reasoning as the answer is exactly
 	// what rationaleDescription is worded to prevent.
+	//
+	// The schema marks it Required (see messageSchema, which explains why), but
+	// the parser does not: an output with no `message` is accepted as before.
 	Message string `json:"message,omitempty"`
 	// Tasks is the parallel investigation phase emitted by the planner.
 	// Empty / omitted when Direct is set — the two are mutually exclusive.
@@ -583,11 +586,8 @@ type schemaOptions struct {
 // task-count bounds, is enforced Go-side in parsePlanResult.
 func planSchema(opts schemaOptions) *gollem.Parameter {
 	props := map[string]*gollem.Parameter{
-		"message": {
-			Type:        gollem.TypeString,
-			Description: rationaleDescription,
-		},
-		"tasks": tasksSchema(opts.knownToolIDs, opts.withBudget),
+		"message": messageSchema(),
+		"tasks":   tasksSchema(opts.knownToolIDs, opts.withBudget),
 	}
 	desc := "Initial planner output: parallel investigation tasks for round 1."
 	if opts.allowDirect {
@@ -626,10 +626,7 @@ func directSchema(knownToolIDs []string) *gollem.Parameter {
 // when the host enabled it.
 func replanSchema(opts schemaOptions) *gollem.Parameter {
 	props := map[string]*gollem.Parameter{
-		"message": {
-			Type:        gollem.TypeString,
-			Description: rationaleDescription,
-		},
+		"message":  messageSchema(),
 		"tasks":    tasksSchema(opts.knownToolIDs, opts.withBudget),
 		"finalize": finalizeSchema(),
 	}
@@ -640,6 +637,30 @@ func replanSchema(opts schemaOptions) *gollem.Parameter {
 		Type:        gollem.TypeObject,
 		Description: "Replan output: set EXACTLY ONE of `tasks` (run another phase), `question` (ask the user), or `finalize` (declare completion). Leaving all unset is rejected — completion must be explicit via `finalize`.",
 		Properties:  props,
+	}
+}
+
+// messageSchema is the `message` property shared by planSchema and replanSchema.
+//
+// It is Required because of the order Claude's structured outputs emit
+// properties in: required properties first, then optional ones, each group in
+// schema order — and the schema gollem sends has its properties sorted
+// alphabetically. With every top-level property optional, a replan was emitted
+// as `finalize` → `message` → `question` → `tasks`, so once the planner had
+// started writing its rationale `finalize` could no longer be emitted (in the
+// plan schema, `direct` likewise precedes `message`). A planner whose `message`
+// said it was finishing then satisfied "set exactly one action" with the only
+// action still ahead of it: a placeholder `question` (reason "x", options
+// "a" / "b") that Question.Validate accepts and the host posts to the thread.
+// Required puts `message` first, so every action is still reachable after it.
+//
+// Only `message` is Required. The actions stay optional: requiring them would
+// make the planner fill every one of them, which breaks "set exactly one".
+func messageSchema() *gollem.Parameter {
+	return &gollem.Parameter{
+		Type:        gollem.TypeString,
+		Description: rationaleDescription,
+		Required:    true,
 	}
 }
 

@@ -154,12 +154,25 @@ func TestParseReplanResult_ContinueTasks(t *testing.T) {
 
 func TestParseReplanResult_Finalize(t *testing.T) {
 	// An explicit finalize is the ONLY way to terminate; it carries an optional
-	// reason and leaves tasks / question empty.
+	// reason and leaves tasks / question empty. The input puts `message` before
+	// `finalize` because that is the order Claude's structured outputs emit once
+	// the schema marks `message` Required (see TestSchemas_OnlyMessageIsRequired).
 	raw := []byte(`{"message":"done","finalize":{"reason":"goal met"}}`)
-	r, err := planexec.ParseReplanResultForTest(raw, knownTools, false, nil)
+	r, err := planexec.ParseReplanResultForTest(raw, knownTools, true, nil)
 	gt.NoError(t, err).Required()
+	gt.String(t, r.Message).Equal("done")
 	gt.Array(t, r.Tasks).Length(0)
 	gt.Value(t, r.Question).Nil()
+	gt.Value(t, r.Finalize).NotNil().Required()
+	gt.String(t, r.Finalize.Reason).Equal("goal met")
+}
+
+func TestParseReplanResult_MessageIsNotRequiredByTheParser(t *testing.T) {
+	// Only the schema requires `message`; an output without one is still accepted.
+	raw := []byte(`{"finalize":{"reason":"goal met"}}`)
+	r, err := planexec.ParseReplanResultForTest(raw, knownTools, true, nil)
+	gt.NoError(t, err).Required()
+	gt.String(t, r.Message).Equal("")
 	gt.Value(t, r.Finalize).NotNil().Required()
 	gt.String(t, r.Finalize.Reason).Equal("goal met")
 }
@@ -593,6 +606,46 @@ func TestSchemas_DescribeMessageAsInternalButKept(t *testing.T) {
 			gt.String(t, msg.Description).Contains("NOT shown to the user")
 			gt.String(t, msg.Description).Contains("kept in this run's record")
 			gt.String(t, msg.Description).NotContains("rationale shown to the user")
+		})
+	}
+}
+
+// Claude's structured outputs emit required properties first and optional ones
+// after, each group in schema order (alphabetical, as gollem sends it). With
+// every top-level property optional, `finalize` and `direct` came before
+// `message`, so a planner that had written its rationale could no longer choose
+// them, and a replan filled `question` with placeholder values instead.
+// Requiring `message` alone puts it first and keeps every action reachable;
+// requiring an action as well would make the planner fill it every time, which
+// breaks "set exactly one".
+func TestSchemas_OnlyMessageIsRequired(t *testing.T) {
+	for name, tc := range map[string]struct {
+		raw     any
+		actions []string
+	}{
+		"plan": {
+			raw:     planexec.PlanSchemaForTest(knownTools, false, true, true),
+			actions: []string{"direct", "tasks"},
+		},
+		"replan": {
+			raw:     planexec.ReplanSchemaForTest(knownTools, true, true),
+			actions: []string{"finalize", "question", "tasks"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			schema, ok := tc.raw.(*gollem.Parameter)
+			gt.Bool(t, ok).True().Required()
+			// Every top-level property is covered below, so a new one must be
+			// classified here too.
+			gt.Number(t, len(schema.Properties)).Equal(len(tc.actions) + 1).Required()
+			msg, has := schema.Properties["message"]
+			gt.Bool(t, has).True().Required()
+			gt.Bool(t, msg.Required).True()
+			for _, action := range tc.actions {
+				p, has := schema.Properties[action]
+				gt.Bool(t, has).True().Required()
+				gt.Bool(t, p.Required).False()
+			}
 		})
 	}
 }
