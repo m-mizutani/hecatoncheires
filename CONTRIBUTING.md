@@ -7,7 +7,7 @@ the code is organized, start with [docs/develop/](docs/develop/README.md) and
 
 ## Development environment
 
-- Go 1.26.4+ (the version in the `go` directive of `go.mod`)
+- Go 1.26.9+ (the version in the `go` directive of `go.mod`)
 - Node.js 22.22+ (react-router v8 requires it)
 - pnpm through Corepack
 - Docker, for the Firestore emulator used by the test suite

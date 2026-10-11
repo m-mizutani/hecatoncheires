@@ -1,6 +1,6 @@
 module github.com/m-mizutani/hecatoncheires
 
-go 1.26.4
+go 1.26.9
 
 require (
 	cloud.google.com/go/bigquery v1.79.0
@@ -34,7 +34,7 @@ require (
 	github.com/slack-go/slack v0.27.0
 	github.com/urfave/cli/v3 v3.10.1
 	github.com/vektah/gqlparser/v2 v2.5.36
-	golang.org/x/net v0.58.0
+	golang.org/x/net v0.60.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/text v0.42.0
 	google.golang.org/api v0.289.0

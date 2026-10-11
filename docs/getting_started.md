@@ -7,7 +7,7 @@ production deployment (Firestore, Cloud Storage, Slack App, secrets), see
 
 ## Prerequisites
 
-- Go 1.26.4+ (the version in the `go` directive of `go.mod`)
+- Go 1.26.9+ (the version in the `go` directive of `go.mod`)
 - Node.js 22.22+ and Corepack-managed pnpm (for building the frontend; the
   version is pinned via the `packageManager` field in `frontend/package.json`.
   react-router v8 requires Node 22.22+)
