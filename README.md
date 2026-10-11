@@ -70,7 +70,7 @@ To try it locally, nothing outside your machine is needed:
 
 | Tool | Version |
 |---|---|
-| Go | 1.26.4+ (the `go` directive in `go.mod`) |
+| Go | 1.26.9+ (the `go` directive in `go.mod`) |
 | Node.js | 22.22+ |
 | pnpm | through Corepack (`corepack enable`) |
 
