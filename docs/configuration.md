@@ -1190,7 +1190,9 @@ can fill a valid title, description, and every **required** custom field. If
 validation fails — a required field missing, or a value outside the allowed
 options — the agent is told what is wrong and tries again, all bounded by the
 turn's budget and step ceiling. A pending question is answered by submitting the
-question form (not by a free-text reply). When the agent cannot conclude, it posts
+question form (not by a free-text reply), and every question on it must be answered
+(see [user_guide.md](./user_guide.md#question-form-every-question-must-be-answered)).
+When the agent cannot conclude, it posts
 a "couldn't conclude" notice. On success the bot posts a Block Kit
 summary of the created Case.
 
@@ -1331,7 +1333,10 @@ How it works:
    question form is posted into the Case's Slack thread, and the run is
    recorded as *awaiting input* (its lease is released so it does not block
    other work).
-2. The user answers the form and clicks **Submit**.
+2. The user answers the form and clicks **Submit**. Every question must be
+   answered; a Submit that leaves one blank keeps the run suspended and tells
+   the submitter which questions are blank (see
+   [user_guide.md](./user_guide.md#question-form-every-question-must-be-answered)).
 3. The run **resumes** under the same conversation history — the planner sees
    everything it already gathered plus the answer, and continues to a
    conclusion (it may ask again if needed).

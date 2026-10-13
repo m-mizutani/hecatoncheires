@@ -128,7 +128,7 @@ func (f *fakeSlackService) GetUserGroupMembers(context.Context, string) ([]strin
 func (f *fakeSlackService) ListTeams(context.Context) ([]slacksvc.Team, error) {
 	panic("unexpected ListTeams")
 }
-func (f *fakeSlackService) PostEphemeral(context.Context, string, string, string) error {
+func (f *fakeSlackService) PostEphemeral(context.Context, string, string, string, ...slacksvc.PostEphemeralOption) error {
 	panic("unexpected PostEphemeral")
 }
 func (f *fakeSlackService) PostEphemeralBlocks(context.Context, string, string, []goslack.Block, string) (string, error) {

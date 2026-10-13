@@ -45,12 +45,15 @@ type agentTestSlackService struct {
 	postThreadReplyFn        func(ctx context.Context, channelID string, threadTS string, text string) (string, error)
 	getBotUserIDFn           func(ctx context.Context) (string, error)
 	getPermalinkFn           func(ctx context.Context, channelID string, ts string) (string, error)
-	postMu                   sync.Mutex
-	postID                   atomic.Int32
-	postedMessages           []agentPostedMessage
-	updatedMessages          []agentUpdatedMessage
-	ephemeralMessages        []agentEphemeralMessage
-	permalinkCalls           []agentPermalinkCall
+	// postEphemeralErr, when set, is returned by every PostEphemeral after
+	// the attempt is recorded.
+	postEphemeralErr  error
+	postMu            sync.Mutex
+	postID            atomic.Int32
+	postedMessages    []agentPostedMessage
+	updatedMessages   []agentUpdatedMessage
+	ephemeralMessages []agentEphemeralMessage
+	permalinkCalls    []agentPermalinkCall
 }
 
 // posts returns a snapshot of every posted message.
@@ -156,11 +159,12 @@ func (m *agentTestSlackService) UpdateView(_ context.Context, _ goslack.ModalVie
 	return nil
 }
 
-func (m *agentTestSlackService) PostEphemeral(_ context.Context, channelID string, userID string, text string) error {
+func (m *agentTestSlackService) PostEphemeral(_ context.Context, channelID string, userID string, text string, opts ...slack.PostEphemeralOption) error {
 	m.postMu.Lock()
 	defer m.postMu.Unlock()
-	m.ephemeralMessages = append(m.ephemeralMessages, agentEphemeralMessage{ChannelID: channelID, UserID: userID, Text: text})
-	return nil
+	cfg := slack.ApplyPostEphemeralOptions(opts...)
+	m.ephemeralMessages = append(m.ephemeralMessages, agentEphemeralMessage{ChannelID: channelID, ThreadTS: cfg.ThreadTS, UserID: userID, Text: text})
+	return m.postEphemeralErr
 }
 
 // ephemerals returns a snapshot of every ephemeral message posted.
@@ -174,6 +178,7 @@ func (m *agentTestSlackService) ephemerals() []agentEphemeralMessage {
 
 type agentEphemeralMessage struct {
 	ChannelID string
+	ThreadTS  string
 	UserID    string
 	Text      string
 }

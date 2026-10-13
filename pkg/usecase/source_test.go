@@ -269,7 +269,7 @@ func (m *mockSlackService) ListTeams(ctx context.Context) ([]slack.Team, error) 
 	return nil, nil
 }
 
-func (m *mockSlackService) PostEphemeral(ctx context.Context, channelID string, userID string, text string) error {
+func (m *mockSlackService) PostEphemeral(ctx context.Context, channelID string, userID string, text string, _ ...slack.PostEphemeralOption) error {
 	m.ephemeralChannelID = channelID
 	m.ephemeralUserID = userID
 	m.ephemeralText = text

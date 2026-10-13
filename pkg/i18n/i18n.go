@@ -217,6 +217,9 @@ const (
 	MsgCaseCreatedFallback             // "Created case #%d: %s" (%d = case ID, %s = title).
 	MsgThreadCaseQuestionFallback      // Fallback for the thread-create question form.
 
+	// Agent question forms (Job / mention-draft / thread-create).
+	MsgQuestionFormUnanswered // Ephemeral sent when a submit leaves questions blank (%s = bulleted question list).
+
 	// User-facing error messages (pkg/utils/uierr + pkg/usecase/uierr.go).
 	// Every failure surfaced to a Slack user is rendered as a fixed 3-part
 	// frame: "⚠️ {What}" / "*{LabelDetail}*: {Detail}[ (cause)]" /

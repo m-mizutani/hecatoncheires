@@ -508,6 +508,45 @@ func TestBotPostsDisableUnfurl(t *testing.T) {
 	})
 }
 
+// An ephemeral message without thread_ts lands in the channel, where a user
+// looking at a thread pane never sees it; WithEphemeralThread must place it
+// in the thread, and omitting the option (or passing an empty ts) must not.
+func TestPostEphemeral_Thread(t *testing.T) {
+	captor := &formCaptor{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/chat.postEphemeral", captor.handler(`{"ok":true,"message_ts":"1700000000.000100"}`))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	svc, err := slack.NewWithAPIURLForTest("xoxb-test", srv.URL+"/")
+	gt.NoError(t, err).Required()
+	ctx := context.Background()
+
+	t.Run("with thread", func(t *testing.T) {
+		gt.NoError(t, svc.PostEphemeral(ctx, "C1", "U1", "notice", slack.WithEphemeralThread("1700000000.000001"))).Required()
+		vals := captor.get("/chat.postEphemeral")
+		gt.Value(t, vals).NotNil().Required()
+		gt.String(t, vals.Get("channel")).Equal("C1")
+		gt.String(t, vals.Get("user")).Equal("U1")
+		gt.String(t, vals.Get("text")).Equal("notice")
+		gt.String(t, vals.Get("thread_ts")).Equal("1700000000.000001")
+	})
+
+	t.Run("without option", func(t *testing.T) {
+		gt.NoError(t, svc.PostEphemeral(ctx, "C1", "U1", "notice")).Required()
+		vals := captor.get("/chat.postEphemeral")
+		gt.Value(t, vals).NotNil().Required()
+		gt.Bool(t, vals.Has("thread_ts")).False()
+	})
+
+	t.Run("empty thread ts", func(t *testing.T) {
+		gt.NoError(t, svc.PostEphemeral(ctx, "C1", "U1", "notice", slack.WithEphemeralThread(""))).Required()
+		vals := captor.get("/chat.postEphemeral")
+		gt.Value(t, vals).NotNil().Required()
+		gt.Bool(t, vals.Has("thread_ts")).False()
+	})
+}
+
 // conversations.replies / conversations.history must surface a message whose
 // body lives entirely in attachments (how the GitHub Slack app posts PR
 // notifications). Reading only the top-level "text" returned "" for those,

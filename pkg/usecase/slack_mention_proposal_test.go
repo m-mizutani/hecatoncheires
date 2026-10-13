@@ -777,12 +777,16 @@ type slackBlockSnapshot struct{}
 // goroutine, not from the one that started it, so a test reading while the
 // worker runs must go through the accessor methods.
 type collectorOnlyMockSlack struct {
-	mu                  sync.Mutex
-	thread              []slacksvc.ConversationMessage
-	history             []slacksvc.ConversationMessage
-	ephemeralText       string
-	ephemeralChannelID  string
-	ephemeralUserID     string
+	mu                 sync.Mutex
+	thread             []slacksvc.ConversationMessage
+	history            []slacksvc.ConversationMessage
+	ephemeralText      string
+	ephemeralChannelID string
+	ephemeralUserID    string
+	ephemeralPosts     []agentEphemeralMessage
+	// ephemeralErr, when set, is returned by every PostEphemeral after the
+	// attempt is recorded.
+	ephemeralErr        error
 	ephemeralBlockPosts []ephemeralBlockPost
 	threadTexts         []string
 	threadReplies       []string // texts posted via PostThreadReply
@@ -849,13 +853,22 @@ func (m *collectorOnlyMockSlack) GetConversationHistory(_ context.Context, _ str
 func (m *collectorOnlyMockSlack) GetPermalink(_ context.Context, channelID, ts string) (string, error) {
 	return "https://slack/" + channelID + "/" + ts, nil
 }
-func (m *collectorOnlyMockSlack) PostEphemeral(_ context.Context, channelID string, userID string, text string) error {
+func (m *collectorOnlyMockSlack) PostEphemeral(_ context.Context, channelID string, userID string, text string, opts ...slacksvc.PostEphemeralOption) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.ephemeralText = text
 	m.ephemeralChannelID = channelID
 	m.ephemeralUserID = userID
-	return nil
+	cfg := slacksvc.ApplyPostEphemeralOptions(opts...)
+	m.ephemeralPosts = append(m.ephemeralPosts, agentEphemeralMessage{ChannelID: channelID, ThreadTS: cfg.ThreadTS, UserID: userID, Text: text})
+	return m.ephemeralErr
+}
+
+// ephemerals returns every plain ephemeral message, in posting order.
+func (m *collectorOnlyMockSlack) ephemerals() []agentEphemeralMessage {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]agentEphemeralMessage(nil), m.ephemeralPosts...)
 }
 
 // ephemeral returns the last plain ephemeral message: channel, user, text.
@@ -1189,6 +1202,8 @@ func TestLifecycle_DraftFlow_QuestionFormSubmitResumesPlanner(t *testing.T) {
 	// Form was rewritten into the answered view (one UpdateMessage just for
 	// the form swap; further updates may follow from the materialize path).
 	gt.Number(t, len(h.slackMock.updates())).GreaterOrEqual(1)
+	// A complete submit tells nobody about unanswered questions.
+	gt.Array(t, h.slackMock.ephemerals()).Length(0)
 
 	// Materialization landed with the user's answer baked into custom fields.
 	d, err := h.repo.CaseProposal().Get(context.Background(), ssn2.ProposalID)

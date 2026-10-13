@@ -970,8 +970,12 @@ func (p *recordingQuestionPoster) UpdateMessage(_ context.Context, _, _ string,
 	return nil
 }
 
-func (p *recordingQuestionPoster) PostEphemeral(_ context.Context, _, _, _ string) error {
+func (p *recordingQuestionPoster) PostEphemeral(_ context.Context, _, _, _ string, _ ...slacksvc.PostEphemeralOption) error {
 	return nil
+}
+
+func (p *recordingQuestionPoster) GetUserInfo(_ context.Context, userID string) (*slacksvc.User, error) {
+	return &slacksvc.User{ID: userID}, nil
 }
 
 func (p *recordingQuestionPoster) posts() int { return int(p.n.Load()) }

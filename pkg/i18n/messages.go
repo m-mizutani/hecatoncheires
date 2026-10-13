@@ -181,6 +181,9 @@ var messagesEN = [msgKeyCount]string{
 	MsgCaseCreatedFallback:             "Created case #%d: %s",
 	MsgThreadCaseQuestionFallback:      "We need a bit more info to create this case.",
 
+	// Agent question forms
+	MsgQuestionFormUnanswered: "Your answers have not been sent yet. Answer the following questions in the form, then press Submit again:\n%s",
+
 	// User-facing error messages (3-part frame).
 	MsgUIErrLabelDetail: "Technical note",
 	MsgUIErrLabelFix:    "What you can do",
@@ -399,6 +402,9 @@ var messagesJA = [msgKeyCount]string{
 	MsgMentionPreviewFallbackWithTitle: "ケース下書き: %s",
 	MsgCaseCreatedFallback:             "ケース #%d を作成しました: %s",
 	MsgThreadCaseQuestionFallback:      "ケースの作成にはもう少し情報が必要です。",
+
+	// Agent question forms
+	MsgQuestionFormUnanswered: "回答はまだ送信されていません。フォームで次の質問に回答してから、もう一度「Submit」を押してください。\n%s",
 
 	// User-facing error messages (3-part frame).
 	MsgUIErrLabelDetail: "技術補足",

@@ -20,6 +20,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/auth"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/async"
 	goslack "github.com/slack-go/slack"
@@ -368,7 +369,7 @@ type recordedEphemeral struct {
 	channelID, userID, text string
 }
 
-func (m *ephemeralRecordingSlack) PostEphemeral(_ context.Context, channelID, userID, text string) error {
+func (m *ephemeralRecordingSlack) PostEphemeral(_ context.Context, channelID, userID, text string, _ ...slacksvc.PostEphemeralOption) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.ephemerals = append(m.ephemerals, recordedEphemeral{channelID: channelID, userID: userID, text: text})

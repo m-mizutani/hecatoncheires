@@ -826,15 +826,21 @@ func (c *client) GetUserGroupMembers(ctx context.Context, groupID string) ([]str
 }
 
 // PostEphemeral posts an ephemeral message visible only to the specified user in a channel.
-func (c *client) PostEphemeral(ctx context.Context, channelID string, userID string, text string) error {
+// Optional PostEphemeralOption values (e.g. WithEphemeralThread) tweak the underlying chat.postEphemeral call.
+func (c *client) PostEphemeral(ctx context.Context, channelID string, userID string, text string, opts ...PostEphemeralOption) error {
+	cfg := ApplyPostEphemeralOptions(opts...)
 	msgOpts := withUnfurlDisabled(
 		slack.MsgOptionText(text, false),
 	)
+	if cfg.ThreadTS != "" {
+		msgOpts = append(msgOpts, slack.MsgOptionTS(cfg.ThreadTS))
+	}
 	_, err := c.api.PostEphemeralContext(ctx, channelID, userID, msgOpts...)
 	if err != nil {
 		return goerr.Wrap(err, "failed to post ephemeral message",
 			goerr.V("channel_id", channelID),
-			goerr.V("user_id", userID))
+			goerr.V("user_id", userID),
+			goerr.V("thread_ts", cfg.ThreadTS))
 	}
 	return nil
 }

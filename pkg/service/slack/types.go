@@ -135,7 +135,8 @@ type Service interface {
 
 	// PostEphemeral posts an ephemeral message visible only to the specified user in a channel.
 	// Uses chat.postEphemeral API. The message does not persist across reloads or sessions.
-	PostEphemeral(ctx context.Context, channelID string, userID string, text string) error
+	// Accepts optional PostEphemeralOption values (e.g. WithEphemeralThread) to tweak posting behavior.
+	PostEphemeral(ctx context.Context, channelID string, userID string, text string, opts ...PostEphemeralOption) error
 
 	// PostEphemeralBlocks posts an ephemeral Block Kit message visible only to the specified user.
 	// Returns the message timestamp for later updates via response_url or chat.update.
@@ -172,6 +173,36 @@ func ApplyPostThreadOptions(opts ...PostThreadOption) PostThreadOptions {
 // inside the thread while raising its visibility to all members.
 func WithBroadcastToChannel() PostThreadOption {
 	return func(o *PostThreadOptions) { o.Broadcast = true }
+}
+
+// PostEphemeralOptions captures the resolved configuration produced by
+// applying PostEphemeralOption values. It is exposed so test fakes can apply
+// the options themselves and observe what was requested (ThreadTS, etc).
+type PostEphemeralOptions struct {
+	ThreadTS string
+}
+
+// PostEphemeralOption tweaks how an ephemeral message is posted via PostEphemeral.
+// Use the With* constructors below; do not construct values manually.
+type PostEphemeralOption func(*PostEphemeralOptions)
+
+// ApplyPostEphemeralOptions walks the given options and returns the resulting
+// configuration. Used internally by the client and by test fakes that need
+// to observe what options were requested.
+func ApplyPostEphemeralOptions(opts ...PostEphemeralOption) PostEphemeralOptions {
+	var cfg PostEphemeralOptions
+	for _, o := range opts {
+		o(&cfg)
+	}
+	return cfg
+}
+
+// WithEphemeralThread posts the ephemeral message into the thread rooted at
+// threadTS instead of the channel. Without it, a user viewing the thread
+// pane does not see the message. An empty threadTS leaves the message in
+// the channel, so callers may pass a possibly-empty thread ts as is.
+func WithEphemeralThread(threadTS string) PostEphemeralOption {
+	return func(o *PostEphemeralOptions) { o.ThreadTS = threadTS }
 }
 
 // UserGroup represents a Slack user group
