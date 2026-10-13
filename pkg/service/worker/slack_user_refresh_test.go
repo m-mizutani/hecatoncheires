@@ -193,7 +193,7 @@ func (m *mockSlackService) ListTeams(ctx context.Context) ([]slack.Team, error) 
 	return teams, nil
 }
 
-func (m *mockSlackService) PostEphemeral(_ context.Context, _ string, _ string, _ string) error {
+func (m *mockSlackService) PostEphemeral(_ context.Context, _ string, _ string, _ string, _ ...slack.PostEphemeralOption) error {
 	return nil
 }
 

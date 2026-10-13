@@ -8,12 +8,13 @@ import (
 
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
 	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
+	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 )
 
-// ephemeralPoster is the narrow Slack surface a denial notice needs.
+// ephemeralPoster is the narrow Slack surface a notice to one user needs.
 type ephemeralPoster interface {
-	PostEphemeral(ctx context.Context, channelID, userID, text string) error
+	PostEphemeral(ctx context.Context, channelID, userID, text string, opts ...slacksvc.PostEphemeralOption) error
 }
 
 // authorizeSlackActor decides whether a Slack actor may act on workspaceID.

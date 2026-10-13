@@ -250,7 +250,9 @@ func (uc *AgentUseCase) HandleThreadCaseQuestionSubmit(ctx context.Context, call
 		)
 		uc.repostThreadQuestionWithError(ctx, uiChannel, messageTS, encodeCaseThreadValue(caseChannel, caseTS), reporter, pq, answers, missing)
 		if uc.deps.SlackService != nil {
-			notifyUnansweredQuestions(ctx, uc.deps.SlackService, uiChannel, callback.User.ID, pq, missing)
+			// Not uiTS: that falls back to the form's own ts, and an ephemeral
+			// sent into a thread that does not exist yet is not shown.
+			notifyUnansweredQuestions(ctx, uc.deps.SlackService, uiChannel, callback.Message.ThreadTimestamp, callback.User.ID, pq, missing)
 		}
 		return nil
 	}

@@ -55,12 +55,14 @@ type fakeQuestionPoster struct {
 
 type ephemeralPost struct {
 	channelID string
+	threadTS  string
 	userID    string
 	text      string
 }
 
-func (f *fakeQuestionPoster) PostEphemeral(_ context.Context, channelID, userID, text string) error {
-	f.ephemerals = append(f.ephemerals, ephemeralPost{channelID: channelID, userID: userID, text: text})
+func (f *fakeQuestionPoster) PostEphemeral(_ context.Context, channelID, userID, text string, opts ...slacksvc.PostEphemeralOption) error {
+	cfg := slacksvc.ApplyPostEphemeralOptions(opts...)
+	f.ephemerals = append(f.ephemerals, ephemeralPost{channelID: channelID, threadTS: cfg.ThreadTS, userID: userID, text: text})
 	return f.ephemeralErr
 }
 
@@ -252,6 +254,8 @@ func (f *freeTextRunFixture) submit(t *testing.T, ctx context.Context, values ma
 	callback := &goslack.InteractionCallback{BlockActionState: &goslack.BlockActionStates{Values: values}}
 	callback.Channel.ID = "C-CASE"
 	callback.Message.Timestamp = "FORM-TS-1"
+	// The form is a reply in the case thread, so Slack reports the thread root.
+	callback.Message.ThreadTimestamp = "1700000000.0001"
 	callback.User.ID = "U-ANSWERER"
 	gt.NoError(t, f.runner.HandleQuestionSubmit(ctx, callback, &goslack.BlockAction{Value: f.refValue})).Required()
 }
@@ -305,6 +309,9 @@ func TestHandleQuestionSubmit_UnansweredQuestions(t *testing.T) {
 	gt.Array(t, poster.ephemerals).Length(2).Required()
 	for _, eph := range poster.ephemerals {
 		gt.String(t, eph.channelID).Equal("C-CASE")
+		// In the form's thread: without thread_ts the notice lands in the
+		// channel, where a user looking at the thread does not see it.
+		gt.String(t, eph.threadTS).Equal("1700000000.0001")
 		gt.String(t, eph.userID).Equal("U-ANSWERER")
 		gt.String(t, eph.text).Contains("Anything else? (optional)")
 		gt.String(t, eph.text).NotContains("Which environment?")

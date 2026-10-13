@@ -970,7 +970,7 @@ func (p *recordingQuestionPoster) UpdateMessage(_ context.Context, _, _ string,
 	return nil
 }
 
-func (p *recordingQuestionPoster) PostEphemeral(_ context.Context, _, _, _ string) error {
+func (p *recordingQuestionPoster) PostEphemeral(_ context.Context, _, _, _ string, _ ...slacksvc.PostEphemeralOption) error {
 	return nil
 }
 

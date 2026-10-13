@@ -127,6 +127,9 @@ func TestHandleQuestionSubmit_UnansweredQuestions(t *testing.T) {
 		gt.Array(t, eph).Length(2).Required()
 		for _, e := range eph {
 			gt.Value(t, e.ChannelID).Equal(f.channelID)
+			// In the form's thread: without thread_ts the notice lands in the
+			// channel, where a user looking at the thread does not see it.
+			gt.Value(t, e.ThreadTS).Equal(f.threadTS)
 			gt.Value(t, e.UserID).Equal("U1")
 			gt.String(t, e.Text).Contains("Anything else? (optional)")
 			gt.String(t, e.Text).NotContains("What is the severity?")
@@ -171,6 +174,30 @@ func TestHandleQuestionSubmit_UnansweredQuestions(t *testing.T) {
 		recs := logRecords(t, logs, "failed to post unanswered question notice")
 		gt.Array(t, recs).Length(1).Required()
 		gt.Value(t, recs[0]["level"]).Equal("ERROR")
+	})
+
+	// A form that is not a thread reply has no thread to post into. Its own ts
+	// must not be used as one: an ephemeral sent into a thread that does not
+	// exist yet is not shown, so the notice goes to the channel instead.
+	t.Run("a form outside a thread is answered in the channel", func(t *testing.T) {
+		f := newDispatcherWithOpenSession(t, "C-OPEN", formTS, model.SessionEndedWithQuestion)
+		gt.NoError(t, f.repo.Session().SetPendingQuestion(context.Background(), f.channelID, f.threadTS,
+			&model.PendingQuestion{
+				PostedChannelID: f.channelID,
+				PostedMessageTS: formTS,
+				Reason:          "need details",
+				Items:           []model.PendingQuestionItem{{ID: "q-note", Text: "Anything else? (optional)", Type: "free_text"}},
+			})).Required()
+
+		cb := newDraftQuestionSubmitCallback(f.channelID, "", formTS)
+		gt.NoError(t, f.mentionProposal.HandleQuestionSubmit(context.Background(), cb, cb.ActionCallback.BlockActions[0])).Required()
+		async.Wait()
+
+		eph := f.slackMock.ephemerals()
+		gt.Array(t, eph).Length(1).Required()
+		gt.Value(t, eph[0].ChannelID).Equal(f.channelID)
+		gt.Value(t, eph[0].ThreadTS).Equal("")
+		gt.String(t, eph[0].Text).Contains("Anything else? (optional)")
 	})
 }
 

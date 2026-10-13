@@ -8,6 +8,7 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
+	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/proposal"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
@@ -374,10 +375,11 @@ func missingDraftQuestionTexts(pq *model.PendingQuestion, missing []string) []st
 // notifyUnansweredQuestions tells the submitting user, and only them, which
 // questions are still blank. Both question forms send it on every rejected
 // submit: from the second rejection on, the re-rendered form is identical to
-// the one on screen, so the form alone shows the user no response. A failed
-// post is reported and otherwise ignored — the question stays pending either
-// way.
-func notifyUnansweredQuestions(ctx context.Context, poster ephemeralPoster, channelID, userID string, pq *model.PendingQuestion, missing []string) {
+// the one on screen, so the form alone shows the user no response. The notice
+// goes into the form's thread (threadTS), where the user pressed Submit. A
+// failed post is reported and otherwise ignored — the question stays pending
+// either way.
+func notifyUnansweredQuestions(ctx context.Context, poster ephemeralPoster, channelID, threadTS, userID string, pq *model.PendingQuestion, missing []string) {
 	if poster == nil || channelID == "" || userID == "" {
 		return
 	}
@@ -387,9 +389,9 @@ func notifyUnansweredQuestions(ctx context.Context, poster ephemeralPoster, chan
 		lines[i] = "• " + t
 	}
 	text := i18n.T(ctx, i18n.MsgQuestionFormUnanswered, strings.Join(lines, "\n"))
-	if err := poster.PostEphemeral(ctx, channelID, userID, text); err != nil {
+	if err := poster.PostEphemeral(ctx, channelID, userID, text, slacksvc.WithEphemeralThread(threadTS)); err != nil {
 		errutil.Handle(ctx, goerr.Wrap(err, "post unanswered question notice",
-			goerr.V("channel_id", channelID), goerr.V("user_id", userID)),
+			goerr.V("channel_id", channelID), goerr.V("thread_ts", threadTS), goerr.V("user_id", userID)),
 			"failed to post unanswered question notice")
 	}
 }
@@ -466,7 +468,9 @@ func (uc *MentionProposalUseCase) HandleQuestionSubmit(ctx context.Context, call
 			"user_id", callback.User.ID,
 		)
 		uc.repostQuestionWithError(ctx, channelID, messageTS, requesterID, pq, answers, missing)
-		notifyUnansweredQuestions(ctx, uc.slackService, channelID, callback.User.ID, pq, missing)
+		// Not threadTS: that falls back to the form's own ts, and an ephemeral
+		// sent into a thread that does not exist yet is not shown.
+		notifyUnansweredQuestions(ctx, uc.slackService, channelID, callback.Message.ThreadTimestamp, callback.User.ID, pq, missing)
 		return nil
 	}
 

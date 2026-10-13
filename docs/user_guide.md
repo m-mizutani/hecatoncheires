@@ -586,7 +586,10 @@ the thread-mode case creation form, and an interactive Job's form
   receives an ephemeral message listing them. The ephemeral is sent on
   **every** rejected Submit, not only the first: from the second rejection on
   the re-rendered form is identical to the one on screen, so the ephemeral is
-  the only visible response. The question stays pending and nothing resumes.
+  the only visible response. It is posted in the thread that holds the form,
+  next to the Submit button that was pressed (a form that is not a thread
+  reply gets it in the channel). The question stays pending and nothing
+  resumes.
 - Each rejection is logged at INFO (`... question submit rejected: unanswered
   items`) with the workspace id, the form's identifiers (`job_id` + `run_id`
   for a Job; `proposal_id` + `channel_id` + `thread_ts` for a case draft;

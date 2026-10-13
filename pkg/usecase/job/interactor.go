@@ -88,7 +88,7 @@ func decodeJobQuestionRef(value string) (jobQuestionRef, error) {
 type jobQuestionPoster interface {
 	PostThreadMessage(ctx context.Context, channelID, threadTS string, blocks []goslack.Block, text string, opts ...slacksvc.PostThreadOption) (string, error)
 	UpdateMessage(ctx context.Context, channelID, timestamp string, blocks []goslack.Block, text string) error
-	PostEphemeral(ctx context.Context, channelID, userID, text string) error
+	PostEphemeral(ctx context.Context, channelID, userID, text string, opts ...slacksvc.PostEphemeralOption) error
 	GetUserInfo(ctx context.Context, userID string) (*slacksvc.User, error)
 }
 
@@ -541,7 +541,7 @@ func (r *JobRunner) HandleQuestionSubmit(ctx context.Context, callback *goslack.
 		r.repostJobQuestionWithError(ctx, channelID, messageTS, action.Value, pending, missing)
 		// The re-rendered form is identical from the second rejection on, so
 		// it alone tells the user nothing; the ephemeral is sent every time.
-		r.notifyJobQuestionUnanswered(noticeCtx, channelID, callback.User.ID, pending, missing)
+		r.notifyJobQuestionUnanswered(noticeCtx, channelID, callback.Message.ThreadTimestamp, callback.User.ID, pending, missing)
 		return nil
 	}
 
@@ -634,9 +634,11 @@ func (r *JobRunner) repostJobQuestionWithError(ctx context.Context, channelID, m
 }
 
 // notifyJobQuestionUnanswered tells the submitting user, and only them, which
-// questions are still blank. A failed post is reported and otherwise ignored:
-// the form already carries the banner and the run stays suspended either way.
-func (r *JobRunner) notifyJobQuestionUnanswered(ctx context.Context, channelID, userID string, pending *model.PendingInteraction, missing []string) {
+// questions are still blank. The notice goes into the form's thread (threadTS),
+// where the user pressed Submit. A failed post is reported and otherwise
+// ignored: the form already carries the banner and the run stays suspended
+// either way.
+func (r *JobRunner) notifyJobQuestionUnanswered(ctx context.Context, channelID, threadTS, userID string, pending *model.PendingInteraction, missing []string) {
 	if r.deps.InteractionPoster == nil || channelID == "" || userID == "" {
 		return
 	}
@@ -646,9 +648,9 @@ func (r *JobRunner) notifyJobQuestionUnanswered(ctx context.Context, channelID, 
 		lines[i] = "• " + t
 	}
 	text := i18n.T(ctx, i18n.MsgQuestionFormUnanswered, strings.Join(lines, "\n"))
-	if err := r.deps.InteractionPoster.PostEphemeral(ctx, channelID, userID, text); err != nil {
+	if err := r.deps.InteractionPoster.PostEphemeral(ctx, channelID, userID, text, slacksvc.WithEphemeralThread(threadTS)); err != nil {
 		errutil.Handle(ctx, goerr.Wrap(err, "post unanswered job question notice",
-			goerr.V("channel_id", channelID), goerr.V("user_id", userID)),
+			goerr.V("channel_id", channelID), goerr.V("thread_ts", threadTS), goerr.V("user_id", userID)),
 			"failed to post unanswered job question notice")
 	}
 }

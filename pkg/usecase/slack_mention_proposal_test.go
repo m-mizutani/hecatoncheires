@@ -853,13 +853,14 @@ func (m *collectorOnlyMockSlack) GetConversationHistory(_ context.Context, _ str
 func (m *collectorOnlyMockSlack) GetPermalink(_ context.Context, channelID, ts string) (string, error) {
 	return "https://slack/" + channelID + "/" + ts, nil
 }
-func (m *collectorOnlyMockSlack) PostEphemeral(_ context.Context, channelID string, userID string, text string) error {
+func (m *collectorOnlyMockSlack) PostEphemeral(_ context.Context, channelID string, userID string, text string, opts ...slacksvc.PostEphemeralOption) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.ephemeralText = text
 	m.ephemeralChannelID = channelID
 	m.ephemeralUserID = userID
-	m.ephemeralPosts = append(m.ephemeralPosts, agentEphemeralMessage{ChannelID: channelID, UserID: userID, Text: text})
+	cfg := slacksvc.ApplyPostEphemeralOptions(opts...)
+	m.ephemeralPosts = append(m.ephemeralPosts, agentEphemeralMessage{ChannelID: channelID, ThreadTS: cfg.ThreadTS, UserID: userID, Text: text})
 	return m.ephemeralErr
 }
 

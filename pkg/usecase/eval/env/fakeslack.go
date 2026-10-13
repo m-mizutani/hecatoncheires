@@ -158,7 +158,9 @@ func (f *fakeSlack) GetUserGroupMembers(_ context.Context, _ string) ([]string, 
 
 func (f *fakeSlack) ListTeams(_ context.Context) ([]slacksvc.Team, error) { return nil, nil }
 
-func (f *fakeSlack) PostEphemeral(_ context.Context, _, _, _ string) error { return nil }
+func (f *fakeSlack) PostEphemeral(_ context.Context, _, _, _ string, _ ...slacksvc.PostEphemeralOption) error {
+	return nil
+}
 
 func (f *fakeSlack) PostEphemeralBlocks(_ context.Context, _, _ string, _ []goslack.Block, _ string) (string, error) {
 	return "eval.eph", nil

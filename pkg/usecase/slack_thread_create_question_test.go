@@ -158,6 +158,9 @@ func TestHandleThreadCaseQuestionSubmit_UnansweredQuestions(t *testing.T) {
 		gt.Array(t, eph).Length(2).Required()
 		for _, e := range eph {
 			gt.Value(t, e.ChannelID).Equal(channel)
+			// In the form's thread: without thread_ts the notice lands in the
+			// channel, where a user looking at the thread does not see it.
+			gt.Value(t, e.ThreadTS).Equal(rootTS)
 			gt.Value(t, e.UserID).Equal("U-ANSWERER")
 			gt.String(t, e.Text).Contains("Anything else? (optional)")
 			gt.String(t, e.Text).NotContains("Severity?")

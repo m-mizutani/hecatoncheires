@@ -159,10 +159,11 @@ func (m *agentTestSlackService) UpdateView(_ context.Context, _ goslack.ModalVie
 	return nil
 }
 
-func (m *agentTestSlackService) PostEphemeral(_ context.Context, channelID string, userID string, text string) error {
+func (m *agentTestSlackService) PostEphemeral(_ context.Context, channelID string, userID string, text string, opts ...slack.PostEphemeralOption) error {
 	m.postMu.Lock()
 	defer m.postMu.Unlock()
-	m.ephemeralMessages = append(m.ephemeralMessages, agentEphemeralMessage{ChannelID: channelID, UserID: userID, Text: text})
+	cfg := slack.ApplyPostEphemeralOptions(opts...)
+	m.ephemeralMessages = append(m.ephemeralMessages, agentEphemeralMessage{ChannelID: channelID, ThreadTS: cfg.ThreadTS, UserID: userID, Text: text})
 	return m.postEphemeralErr
 }
 
@@ -177,6 +178,7 @@ func (m *agentTestSlackService) ephemerals() []agentEphemeralMessage {
 
 type agentEphemeralMessage struct {
 	ChannelID string
+	ThreadTS  string
 	UserID    string
 	Text      string
 }
