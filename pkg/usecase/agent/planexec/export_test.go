@@ -95,10 +95,8 @@ var RenderFinalUserPromptForTest = renderFinalUserPrompt
 var RenderObservationsForFinalForTest = renderObservationsForFinal
 
 // PlannerSystemPromptForTest renders the planner system prompt for a state whose
-// planning phase has spent `rounds` tool rounds, so a test can assert what the
-// model is told about its allowance. The notice lives here rather than in a user
-// turn because the turn that would carry it reports tool results, and such a turn
-// may carry nothing else.
+// planning phase has spent `rounds` tool rounds, so a test can assert that the
+// allowance does not change it.
 func PlannerSystemPromptForTest(rounds int) (string, error) {
 	return PlannerSystemPromptWithBudgetForTest(rounds, false)
 }
@@ -123,7 +121,7 @@ func PlannerSystemPromptWithBudgetForTest(rounds int, allocates bool) (string, e
 // PlannerToolCallsDisabledForTest reports whether a planning or terminal call
 // made from a state whose planning phase has spent `rounds` tool rounds is sent
 // with tool calls disabled. It reads the same state PlannerSystemPromptForTest
-// renders, so a test can pin that the notice and the setting move together.
+// renders.
 func PlannerToolCallsDisabledForTest(rounds int) bool {
 	return len(toolCallOptions(state{PlannerToolRounds: rounds})) > 0
 }

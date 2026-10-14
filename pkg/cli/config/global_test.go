@@ -600,6 +600,107 @@ func TestLLMModelSection_Validate(t *testing.T) {
 	}
 }
 
+func TestLLMModelSection_Validate_Reasoning(t *testing.T) {
+	claudeModel := func(thinking, display, effort string) *config.LLMModelSection {
+		return &config.LLMModelSection{
+			Provider:         "claude",
+			Model:            "claude-sonnet-5-5",
+			InputUSDPerMTok:  3,
+			OutputUSDPerMTok: 15,
+			Thinking:         thinking,
+			ThinkingDisplay:  display,
+			Effort:           effort,
+		}
+	}
+
+	accepted := map[string]struct {
+		section *config.LLMModelSection
+	}{
+		"none set":                {claudeModel("", "", "")},
+		"adaptive alone":          {claudeModel("adaptive", "", "")},
+		"adaptive summarized":     {claudeModel("adaptive", "summarized", "")},
+		"adaptive omitted":        {claudeModel("adaptive", "omitted", "")},
+		"effort low":              {claudeModel("", "", "low")},
+		"effort medium":           {claudeModel("", "", "medium")},
+		"effort high":             {claudeModel("", "", "high")},
+		"effort xhigh":            {claudeModel("", "", "xhigh")},
+		"effort max":              {claudeModel("", "", "max")},
+		"all three":               {claudeModel("adaptive", "summarized", "high")},
+		"non-claude with nothing": {&config.LLMModelSection{Provider: "gemini", Model: "gemini-3.7-flash", InputUSDPerMTok: 1, OutputUSDPerMTok: 2}},
+	}
+	for name, tc := range accepted {
+		t.Run("accepts "+name, func(t *testing.T) {
+			def, err := tc.section.Validate()
+			gt.NoError(t, err).Required()
+			// Carried to the definition unchanged, which is what NewClientFor reads.
+			gt.String(t, def.Thinking).Equal(tc.section.Thinking)
+			gt.String(t, def.ThinkingDisplay).Equal(tc.section.ThinkingDisplay)
+			gt.String(t, def.Effort).Equal(tc.section.Effort)
+		})
+	}
+
+	nonClaude := func(provider, model string, mutate func(*config.LLMModelSection)) *config.LLMModelSection {
+		s := &config.LLMModelSection{Provider: provider, Model: model, InputUSDPerMTok: 1, OutputUSDPerMTok: 2}
+		mutate(s)
+		return s
+	}
+	rejected := map[string]*config.LLMModelSection{
+		"unknown thinking":           claudeModel("enabled", "", ""),
+		"thinking in another case":   claudeModel("Adaptive", "", ""),
+		"unknown display":            claudeModel("adaptive", "full", ""),
+		"display without thinking":   claudeModel("", "summarized", ""),
+		"unknown effort":             claudeModel("", "", "minimal"),
+		"thinking on a gemini model": nonClaude("gemini", "gemini-3.7-flash", func(s *config.LLMModelSection) { s.Thinking = "adaptive" }),
+		"effort on an openai model":  nonClaude("openai", "gpt-5", func(s *config.LLMModelSection) { s.Effort = "high" }),
+		"display on a gemini model":  nonClaude("gemini", "gemini-3.7-flash", func(s *config.LLMModelSection) { s.ThinkingDisplay = "omitted" }),
+		"all three on an openai model": nonClaude("openai", "gpt-5", func(s *config.LLMModelSection) {
+			s.Thinking, s.ThinkingDisplay, s.Effort = "adaptive", "summarized", "high"
+		}),
+	}
+	for name, section := range rejected {
+		t.Run("rejects "+name, func(t *testing.T) {
+			_, err := section.Validate()
+			gt.Error(t, err).Is(agentkernel.ErrInvalidReasoningSetting)
+		})
+	}
+}
+
+// The three keys are read from the document under the names the API sends them
+// as, and a rejected value fails the load — that is, the process start.
+func TestLoadLLMModels_Reasoning(t *testing.T) {
+	t.Run("read from the document", func(t *testing.T) {
+		path := writeGlobalConfig(t, "models.toml", `
+[[llm_model]]
+provider = "claude"
+model = "claude-sonnet-5-5"
+input_usd_per_mtok = 3.0
+output_usd_per_mtok = 15.0
+thinking = "adaptive"
+thinking_display = "summarized"
+effort = "xhigh"
+`)
+		defs, err := config.LoadLLMModels([]string{path})
+		gt.NoError(t, err).Required()
+		gt.Array(t, defs).Length(1).Required()
+		gt.String(t, defs[0].Thinking).Equal("adaptive")
+		gt.String(t, defs[0].ThinkingDisplay).Equal("summarized")
+		gt.String(t, defs[0].Effort).Equal("xhigh")
+	})
+
+	t.Run("rejected for another provider", func(t *testing.T) {
+		path := writeGlobalConfig(t, "models.toml", `
+[[llm_model]]
+provider = "gemini"
+model = "gemini-3.7-flash"
+input_usd_per_mtok = 0.75
+output_usd_per_mtok = 3.75
+effort = "high"
+`)
+		_, err := config.LoadLLMModels([]string{path})
+		gt.Error(t, err).Is(agentkernel.ErrInvalidReasoningSetting)
+	})
+}
+
 func TestLoadAgentSection_Basic(t *testing.T) {
 	path := writeGlobalConfig(t, "agent.toml", `
 [agent]

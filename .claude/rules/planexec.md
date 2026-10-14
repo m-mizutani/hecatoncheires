@@ -36,34 +36,52 @@ Differences worth knowing before changing it:
   instead of a decision, the run diverts to `planner_tool`, runs ONE of them per
   transition, and comes back. It is bounded by `plannerToolRoundsMax` per planning
   phase, because those calls are free of the round budget — nothing else would stop
-  a model that only ever looks things up. Past the bound a call is told to stop —
-  through the SYSTEM prompt (`plannerPrompt`), because the call that has to hear it
-  sends no user turn at all — AND sent with tool calls disabled
-  (`gollem.WithToolCallsDisabled()` via `agentkit.WithLLMOptions`, i.e.
-  `tool_choice: none`). The instruction alone was a nudge, and it failed: a model
-  told to stop went on calling tools, including a Slack post whose text was a
-  one-character placeholder, which ran and was posted to the case thread twice in
-  one run. Both halves are decided by ONE function, `toolDirectiveFor`; do not
-  add a condition to the prompt without the option or the option without the
-  prompt. The tools stay declared on the request (withholding them changes the
-  tool list and invalidates the whole cached prefix). A call a provider returns
-  anyway is still run and answered (dropping it breaks the conversation).
-  The reserve follows the same rule: its first move (`reserveInstruction`) keeps
-  its tools, since it asks for one call; its second move
-  (`reserveSpentInstruction`) is sent with tool calls disabled.
+  a model that only ever looks things up. Past the bound a call is sent with tool
+  calls disabled (`gollem.WithToolCallsDisabled()` via `agentkit.WithLLMOptions`,
+  i.e. `tool_choice: none`) and is told NOTHING: the call that needs stopping
+  continues from the answered calls and sends no user turn, and the system prompt
+  is fixed for the run (next bullet). An instruction was never enough anyway: a
+  model told to stop went on calling tools, including a Slack post whose text was
+  a one-character placeholder, which ran and was posted to the case thread twice
+  in one run. The decision lives in ONE function, `toolDirectiveFor`. The tools
+  stay declared on the request (withholding them changes the tool list and
+  invalidates the whole cached prefix). A call a provider returns anyway is still
+  run and answered (dropping it breaks the conversation).
+  The reserve follows the same rule: its first move keeps its tools, since it asks
+  for one call, and `reserveInstruction` rides on the terminal call's user turn
+  when that call sends one (a call continuing from a tool round is not told); its
+  second move is sent with tool calls disabled.
   Each call is answered in the conversation by `Session().CallTool`, and the
   planning call that follows sends NOTHING — no restated request, no instruction.
+- **One run passes ONE system prompt.** `plannerPrompt` renders it from
+  `st.Input` and the strategy's configuration only, and every plan, replan and
+  terminal call passes it to gollem byte for byte. Claude checks a thinking block
+  against the system prompt, tools and messages before it, so changing the
+  top-level system mid-run invalidates every thinking block already in the
+  conversation. Never append anything to it per call and never add a
+  `role: system` message mid-conversation; what differs per call goes in request
+  parameters (`tool_choice`, the response schema) or in a user turn the call
+  sends anyway. Pinned by `TestOneRunSendsOneSystemPrompt`, which compares what
+  planexec passes, not the request on the wire: for a Claude model without
+  structured outputs, gollem itself appends the response schema to the system
+  prompt it sends, and the plan, replan and terminal schemas differ. That case is
+  not fixed here.
   See `.claude/rules/architecture.md` § "a parallel tool-call turn is answered in
   ONE call" for both halves of that rule and the rejections that taught them.
 - **The terminal call may ask for tools too, and is treated the same way.**
   agentkit's managed session declares the claim's tools on EVERY call, so a model
   that spent the run calling tools can answer the terminal call with another call
   instead of the answer. `stepFinal` diverts to the tool phase and comes back
-  sending no user turn, since the conversation already carries the results; the
-  final prompt rides in that call's SYSTEM prompt instead, because a budget notice
-  can route plan / replan straight to final and make this the only terminal call
-  the run ever makes — dropping it would leave the model never told to write the
-  answer (`TestPlannerToolResultsReachTheTerminalCall`). Reading a function-call reply as "the
+  sending no user turn, since the conversation already carries the results. The
+  final prompt is not sent on that call at all: every observation trail already
+  reached the conversation as a replan user turn (`formatObservationsAsUserTurn`),
+  the output's shape is the response schema, and the language directive is in the
+  system prompt (`TestATerminalCallAfterAToolRoundIsShapedByTheSchema`). A text
+  host (`TextOnly`) has no output schema, so that one call sends `TextResult`'s
+  and the reply's `text` is the answer: with no final prompt, the last
+  instruction the model holds is the planner's "emit one decision object", and a
+  `{"finalize": ...}` would otherwise be posted as the reply
+  (`TestATextTerminalCallAfterAToolRoundNeverReturnsAPlannerDecision`). Reading a function-call reply as "the
   final response was empty" ends the turn in a fallback with nothing to say, after
   the investigation has already been paid for — pinned by
   `TestTerminalCallMayAskForATool`. The wrap-up path needs the same care for the

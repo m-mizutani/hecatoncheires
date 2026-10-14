@@ -2,8 +2,13 @@ package config_test
 
 import (
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/gt"
 
 	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
@@ -76,6 +81,122 @@ func TestLLM_Claude_VertexRequiresLocation(t *testing.T) {
 
 	gt.Error(t, err)
 	gt.String(t, err.Error()).Contains("location")
+}
+
+// claudeRequestBody builds a Claude API client for def against a fake Messages
+// endpoint, makes one Generate, and returns the request body the client sent.
+func claudeRequestBody(t *testing.T, def agentkernel.ModelDef) map[string]any {
+	t.Helper()
+	var body []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		gt.NoError(t, err).Required()
+		body = raw
+		w.Header().Set("Content-Type", "application/json")
+		_, err = w.Write([]byte(`{"id":"msg_1","type":"message","role":"assistant","model":"` + def.Model +
+			`","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",` +
+			`"usage":{"input_tokens":1,"output_tokens":1}}`))
+		gt.NoError(t, err).Required()
+	}))
+	t.Cleanup(srv.Close)
+	// The SDK reads the endpoint from here when the client names none, which is
+	// what NewClientFor's client does.
+	t.Setenv("ANTHROPIC_BASE_URL", srv.URL)
+
+	ctx := context.Background()
+	cfg := config.NewLLMForTest(def.Ref, "", "anthropic-key", "", "")
+	client, err := cfg.NewClientFor(ctx, def)
+	gt.NoError(t, err).Required()
+	session, err := client.NewSession(ctx)
+	gt.NoError(t, err).Required()
+	_, err = session.Generate(ctx, []gollem.Input{gollem.Text("hello")})
+	gt.NoError(t, err).Required()
+
+	gt.Value(t, body).NotNil().Required()
+	var decoded map[string]any
+	gt.NoError(t, json.Unmarshal(body, &decoded)).Required()
+	return decoded
+}
+
+func TestLLM_Claude_SendsTheReasoningSettings(t *testing.T) {
+	t.Run("all set", func(t *testing.T) {
+		def := modelDef(agentkernel.ProviderClaude, "claude-sonnet-5-5")
+		def.Thinking = agentkernel.ThinkingAdaptive
+		def.ThinkingDisplay = "summarized"
+		def.Effort = "xhigh"
+
+		body := claudeRequestBody(t, def)
+		gt.Value(t, body["thinking"]).Equal(map[string]any{"type": "adaptive", "display": "summarized"})
+		outputConfig, ok := body["output_config"].(map[string]any)
+		gt.Bool(t, ok).True().Required()
+		gt.Value(t, outputConfig["effort"]).Equal("xhigh")
+	})
+
+	t.Run("adaptive without a display leaves the display to the API", func(t *testing.T) {
+		def := modelDef(agentkernel.ProviderClaude, "claude-sonnet-5-5")
+		def.Thinking = agentkernel.ThinkingAdaptive
+
+		body := claudeRequestBody(t, def)
+		gt.Value(t, body["thinking"]).Equal(map[string]any{"type": "adaptive"})
+		_, hasOutputConfig := body["output_config"]
+		gt.Bool(t, hasOutputConfig).False()
+	})
+
+	t.Run("none set sends neither", func(t *testing.T) {
+		body := claudeRequestBody(t, modelDef(agentkernel.ProviderClaude, "claude-sonnet-5-5"))
+		_, hasThinking := body["thinking"]
+		gt.Bool(t, hasThinking).False()
+		_, hasOutputConfig := body["output_config"]
+		gt.Bool(t, hasOutputConfig).False()
+	})
+}
+
+// Both claude builders read one decision of what to send. The Anthropic API half
+// is checked on the wire above; a Vertex AI client cannot be pointed at a fake
+// server, so the decision is checked by value here, together with the Vertex AI
+// builder adding an option for exactly the settings the decision sends.
+func TestLLM_Claude_ReasoningDecisionServesBothBuilders(t *testing.T) {
+	def := func(thinking, display, effort string) agentkernel.ModelDef {
+		d := modelDef(agentkernel.ProviderClaude, "claude-sonnet-5-5")
+		d.Thinking, d.ThinkingDisplay, d.Effort = thinking, display, effort
+		return d
+	}
+
+	for name, tc := range map[string]struct {
+		def          agentkernel.ModelDef
+		wantAdaptive bool
+		wantDisplay  string
+		wantEffort   string
+		wantOptions  int
+	}{
+		"none":                  {def("", "", ""), false, "", "", 1},
+		"adaptive":              {def("adaptive", "", ""), true, "", "", 2},
+		"adaptive summarized":   {def("adaptive", "summarized", ""), true, "summarized", "", 2},
+		"effort only":           {def("", "", "low"), false, "", "low", 2},
+		"adaptive omitted, max": {def("adaptive", "omitted", "max"), true, "omitted", "max", 3},
+	} {
+		t.Run(name, func(t *testing.T) {
+			adaptive, display, effort := config.ClaudeReasoningForTest(tc.def)
+			gt.Value(t, adaptive).Equal(tc.wantAdaptive)
+			gt.String(t, display).Equal(tc.wantDisplay)
+			gt.String(t, effort).Equal(tc.wantEffort)
+
+			api, vertex := config.ClaudeOptionCountsForTest(tc.def)
+			gt.Number(t, api).Equal(tc.wantOptions)
+			gt.Number(t, vertex).Equal(tc.wantOptions)
+		})
+	}
+}
+
+// NewClientFor validates the definition, so a reasoning setting that cannot
+// apply is refused even when the definition did not come from a config file.
+func TestLLM_NewClientFor_RejectsReasoningOnAnotherProvider(t *testing.T) {
+	cfg := config.NewLLMForTest("gpt-5", "openai-key", "", "", "")
+	def := modelDef(agentkernel.ProviderOpenAI, "gpt-5")
+	def.Effort = "high"
+
+	_, err := cfg.NewClientFor(context.Background(), def)
+	gt.Error(t, err).Is(agentkernel.ErrInvalidReasoningSetting)
 }
 
 func TestLLM_Gemini_RequiresProjectAndLocation(t *testing.T) {

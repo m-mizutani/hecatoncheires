@@ -87,6 +87,44 @@ func TestModelDefValidate(t *testing.T) {
 	}
 }
 
+func TestModelDefValidate_Reasoning(t *testing.T) {
+	with := func(provider, thinking, display, effort string) kernel.ModelDef {
+		d := modelDef("main", "m", opusRate)
+		d.Provider = provider
+		d.Thinking, d.ThinkingDisplay, d.Effort = thinking, display, effort
+		return d
+	}
+	claude := kernel.ProviderClaude
+
+	// The values are written as the operator writes them in the config file: they
+	// are the contract, not the constants behind it.
+	for name, def := range map[string]kernel.ModelDef{
+		"adaptive with summarized and max": with(claude, "adaptive", "summarized", "max"),
+		"adaptive with omitted":            with(claude, "adaptive", "omitted", ""),
+		"effort low":                       with(claude, "", "", "low"),
+		"effort medium":                    with(claude, "", "", "medium"),
+		"effort high":                      with(claude, "", "", "high"),
+		"effort xhigh":                     with(claude, "", "", "xhigh"),
+	} {
+		t.Run("accepts "+name, func(t *testing.T) {
+			gt.NoError(t, def.Validate())
+		})
+	}
+
+	for name, def := range map[string]kernel.ModelDef{
+		"unknown thinking":         with(claude, "enabled", "", ""),
+		"unknown display":          with(claude, "adaptive", "full", ""),
+		"display without thinking": with(claude, "", "omitted", ""),
+		"unknown effort":           with(claude, "", "", "none"),
+		"thinking on gemini":       with(kernel.ProviderGemini, "adaptive", "", ""),
+		"effort on openai":         with(kernel.ProviderOpenAI, "", "", "low"),
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			gt.Error(t, def.Validate()).Is(kernel.ErrInvalidReasoningSetting)
+		})
+	}
+}
+
 func validPolicyInput() kernel.ModelPolicyInput {
 	return kernel.ModelPolicyInput{
 		Defs: []kernel.ModelDef{
