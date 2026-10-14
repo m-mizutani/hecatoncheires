@@ -3,6 +3,7 @@ package planexec_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -852,12 +853,16 @@ func TestBudgetNoticeWrapsTheRunUp(t *testing.T) {
 
 	// The opening plan call is nowhere near the ceiling and must not be nagged;
 	// the terminal call is past the threshold and must be told what the reserve is
-	// for. It reaches the call through the SYSTEM prompt, which is the only route
-	// that also works when the terminal call sends no user turn.
+	// for. It is told on its user turn, which it sends here because no tool round
+	// lies between it and the replan that diverted to it. The system prompt is the
+	// opening call's, unchanged.
+	inputs := planner.seen()
+	gt.Array(t, inputs).Length(3).Required()
+	gt.Bool(t, strings.Contains(inputs[0], "THIS turn is your final tool call")).False()
+	gt.String(t, inputs[2]).Contains("THIS turn is your final tool call")
 	prompts := planner.seenSystemPrompts()
 	gt.Array(t, prompts).Length(3).Required()
-	gt.Bool(t, strings.Contains(prompts[0], "reserve")).False()
-	gt.String(t, prompts[2]).Contains("THIS turn is your final tool call")
+	gt.String(t, prompts[2]).Equal(prompts[0])
 }
 
 // TestASpentBudgetWrapsTheRunUpInsteadOfFailingIt is the regression test for the
@@ -927,16 +932,16 @@ func TestASpentBudgetWrapsTheRunUpInsteadOfFailingIt(t *testing.T) {
 	// Four calls: plan, the child's two, the terminal output. No replan — the
 	// reserve diverts stepReplan to the terminal call without generating, so no
 	// further round is started on a budget that is already gone.
-	prompts := planner.systemSeen()
-	gt.Array(t, prompts).Length(4).Required()
+	inputs := planner.seen()
+	gt.Array(t, inputs).Length(4).Required()
 	// Neither the parent's plan call nor either of the child's crossed anything on
 	// its own: only their sum did. This is what distinguishes the fold from an
 	// ordinary notice, and it is observable — a reserve instruction on any of the
 	// first three would mean the run was warned before the fold.
-	gt.Bool(t, strings.Contains(prompts[0], "reserve")).False()
-	gt.Bool(t, strings.Contains(prompts[1], "reserve")).False()
-	gt.Bool(t, strings.Contains(prompts[2], "reserve")).False()
-	gt.String(t, prompts[3]).Contains("THIS turn is your final tool call")
+	gt.Bool(t, strings.Contains(inputs[0], "THIS turn is your final tool call")).False()
+	gt.Bool(t, strings.Contains(inputs[1], "THIS turn is your final tool call")).False()
+	gt.Bool(t, strings.Contains(inputs[2], "THIS turn is your final tool call")).False()
+	gt.String(t, inputs[3]).Contains("THIS turn is your final tool call")
 }
 
 // TestTheReserveAllowsATerminalToolCall pins the two moves the reserve is for on
@@ -951,7 +956,9 @@ func TestTheReserveAllowsATerminalToolCall(t *testing.T) {
 		// No replan reply is scripted: reaching one would fail the test, which is
 		// how the run is pinned to going straight to the terminal call.
 		&gollem.FunctionCall{ID: "w1", Name: "case__update_case", Arguments: map[string]any{"id": "case-1"}},
-		`the final answer`,
+		// Continuing from the tool round, the text host's terminal call answers
+		// in TextResult's shape.
+		`{"text":"the final answer"}`,
 	}}
 	// Notice at 15% of 20 steps = 3 committed transitions, which the first round
 	// and its child cross together.
@@ -970,25 +977,24 @@ func TestTheReserveAllowsATerminalToolCall(t *testing.T) {
 	// The call actually ran: the reserve's instruction is not a dry run.
 	gt.Array(t, writer.calls()).Length(1)
 
-	prompts := planner.systemSeen()
-	gt.Array(t, prompts).Length(4).Required()
-	// The reserve's first move asks for the call and forbids writing the output.
-	gt.String(t, prompts[2]).Contains("THIS turn is your final tool call")
-	gt.Bool(t, strings.Contains(prompts[2], "Do not call any tool again")).False()
-	// The second move carries that call's result and the opposite instruction.
-	gt.String(t, prompts[3]).Contains("The budget reserve is spent")
-	gt.String(t, prompts[3]).Contains("Do not call any tool again")
+	// The reserve's first move asks for the call and forbids writing the output,
+	// on its user turn, after the final prompt.
+	inputs := planner.seen()
+	gt.Array(t, inputs).Length(4).Required()
+	gt.String(t, inputs[2]).Contains("THIS turn is your final tool call")
 	// The first move keeps its tools — it is asked for a call — and the second is
-	// sent with tool calls disabled, because the instruction alone did not stop a
-	// model calling them.
+	// sent with tool calls disabled. That setting is the whole of how the second
+	// move is stopped: it continues from the tool round, so it sends no user turn,
+	// and the system prompt is the run's, unchanged.
 	disabled := planner.disabledSeen()
 	gt.Array(t, disabled).Length(4).Required()
 	gt.Bool(t, disabled[2]).False()
 	gt.Bool(t, disabled[3]).True()
-	// It carries the result and nothing else: a call answering a tool round may
-	// not send a user turn as well.
-	gt.String(t, planner.seen()[3]).Equal("")
+	gt.String(t, inputs[3]).Equal("")
 	gt.Value(t, planner.answeredWith()[3]).Equal([]string{"w1"})
+	prompts := planner.systemSeen()
+	gt.String(t, prompts[2]).Equal(prompts[0])
+	gt.String(t, prompts[3]).Equal(prompts[0])
 }
 
 // TestAnEmptyFirstReserveMoveStillGetsTheOutputAsked pins the failure mode the
@@ -1016,13 +1022,13 @@ func TestAnEmptyFirstReserveMoveStillGetsTheOutputAsked(t *testing.T) {
 	gt.Value(t, out.Kind).Equal(planexec.OutputFinal)
 	gt.String(t, out.Text).Contains("final answer")
 
-	prompts := planner.systemSeen()
-	gt.Array(t, prompts).Length(4).Required()
-	gt.String(t, prompts[2]).Contains("THIS turn is your final tool call")
+	inputs := planner.seen()
+	gt.Array(t, inputs).Length(4).Required()
+	gt.String(t, inputs[2]).Contains("THIS turn is your final tool call")
 	// The round is spent by the empty reply, so the call that follows asks for the
 	// output instead of repeating the request for a tool call.
-	gt.String(t, prompts[3]).Contains("The budget reserve is spent")
-	gt.Bool(t, strings.Contains(prompts[3], "THIS turn is your final tool call")).False()
+	gt.String(t, inputs[3]).Contains("Produce the final response for the user")
+	gt.Bool(t, strings.Contains(inputs[3], "THIS turn is your final tool call")).False()
 	disabled := planner.disabledSeen()
 	gt.Array(t, disabled).Length(4).Required()
 	gt.Bool(t, disabled[2]).False()
@@ -1031,9 +1037,9 @@ func TestAnEmptyFirstReserveMoveStillGetsTheOutputAsked(t *testing.T) {
 
 // TestATerminalOutputRetryInTheReserveIsAskedForTheOutput pins that a rejected
 // terminal output stops the run being told not to write one. The retry's user
-// turn says "re-emit the output correctly"; leaving reserveInstruction in the
-// system prompt would say "do not write the terminal output on this turn"
-// alongside it, and a model cannot satisfy both.
+// turn says "re-emit the output correctly"; adding reserveInstruction to it
+// would say "do not write the terminal output on this turn" alongside, and a
+// model cannot satisfy both.
 func TestATerminalOutputRetryInTheReserveIsAskedForTheOutput(t *testing.T) {
 	planner := &toolCallingPlanner{replies: []any{
 		`{"tasks":[{"id":"t1","title":"Read","description":"read it","acceptance_criteria":"done","tools":["slack_ro"],"budget_usd":0.01}]}`,
@@ -1055,32 +1061,33 @@ func TestATerminalOutputRetryInTheReserveIsAskedForTheOutput(t *testing.T) {
 	gt.Value(t, out.Data).NotNil().Required()
 	gt.String(t, out.Data.Title).Equal("Drafted")
 
-	prompts := planner.systemSeen()
-	gt.Array(t, prompts).Length(4).Required()
-	gt.String(t, prompts[2]).Contains("THIS turn is your final tool call")
-	gt.String(t, prompts[3]).Contains("The budget reserve is spent")
-	gt.Bool(t, strings.Contains(prompts[3], "Do not write the terminal output")).False()
+	inputs := planner.seen()
+	gt.Array(t, inputs).Length(4).Required()
+	gt.String(t, inputs[2]).Contains("THIS turn is your final tool call")
+	gt.String(t, inputs[3]).Contains("Your previous final output was rejected")
+	gt.Bool(t, strings.Contains(inputs[3], "Do not write the terminal output")).False()
 	// The retry is past the reserve's first move, so it is sent with tool calls
 	// disabled alongside the structured-output schema.
 	disabled := planner.disabledSeen()
 	gt.Array(t, disabled).Length(4).Required()
 	gt.Bool(t, disabled[2]).False()
 	gt.Bool(t, disabled[3]).True()
+	gt.Value(t, planner.schemaSeen()[3]).NotNil()
 }
 
 // TestTheReserveDoesNotStarveTheTerminalPrompt pins that the reserve instruction
-// is ADDED to the terminal prompt rather than replacing it. The call that follows
-// the tool round sends no user turn, so its whole brief — the observation trail
-// and the output format — rides in the system prompt; a reserve instruction that
-// displaced it would leave the model told to stop calling tools and never told
-// what to write.
+// is ADDED to the terminal prompt rather than replacing it. The first move's user
+// turn is the only turn that carries the final prompt — the observation trail
+// and the output format — because the call after the tool round sends none; a
+// reserve instruction that displaced it would leave the model told to make one
+// call and never told what to write.
 func TestTheReserveDoesNotStarveTheTerminalPrompt(t *testing.T) {
 	writer := &recordingTool{name: "case__update_case"}
 	planner := &toolCallingPlanner{replies: []any{
 		`{"tasks":[{"id":"t1","title":"Read","description":"read it","acceptance_criteria":"done","tools":["slack_ro"],"budget_usd":0.01}]}`,
 		`read it`,
 		&gollem.FunctionCall{ID: "w1", Name: "case__update_case", Arguments: map[string]any{"id": "case-1"}},
-		`the final answer`,
+		`{"text":"the final answer"}`,
 	}}
 	cfg := budget.Config{MaxSteps: 20, MaxInputTokens: 100_000, MaxOutputTokens: 100_000, NoticeRatio: 0.15}
 	rt := newTextRuntime(t, planner.client(), cfg, nil,
@@ -1091,11 +1098,17 @@ func TestTheReserveDoesNotStarveTheTerminalPrompt(t *testing.T) {
 	proc := rt.run(t, textInput(), nil)
 	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
 
-	prompts := planner.systemSeen()
-	gt.Array(t, prompts).Length(4).Required()
-	gt.String(t, prompts[3]).Contains("The investigation loop has finished")
-	gt.String(t, prompts[3]).Contains("Emit plain natural-language text")
-	gt.String(t, prompts[3]).Contains("The budget reserve is spent")
+	inputs := planner.seen()
+	gt.Array(t, inputs).Length(4).Required()
+	first := inputs[2]
+	gt.String(t, first).Contains("The investigation loop has finished")
+	gt.String(t, first).Contains("Emit plain natural-language text")
+	gt.String(t, first).Contains("THIS turn is your final tool call")
+	// The instruction follows the final prompt, so it is the last thing the turn says.
+	gt.Bool(t, strings.Index(first, "Emit plain natural-language text") <
+		strings.Index(first, "THIS turn is your final tool call")).True()
+	// The second move continues from the tool round and sends nothing.
+	gt.String(t, inputs[3]).Equal("")
 }
 
 // recordingTool answers a planner lookup and records that it was called.
@@ -1157,6 +1170,9 @@ type toolCallingPlanner struct {
 	// toolsDisabled[i] is whether the i-th Generate was sent with tool calls
 	// disabled (gollem.WithToolCallsDisabled).
 	toolsDisabled []bool
+	// schemas[i] is the response schema the i-th Generate's session was given, nil
+	// for none.
+	schemas []*gollem.Parameter
 }
 
 // client answers the i-th Generate with replies[i] and grows the conversation by
@@ -1189,6 +1205,7 @@ func (p *toolCallingPlanner) client() gollem.LLMClient {
 					p.systemPrompts = append(p.systemPrompts, cfg.SystemPrompt())
 					p.respIDs = append(p.respIDs, trailingToolResponseIDs(seeded))
 					p.toolsDisabled = append(p.toolsDisabled, genCfg.ToolCallsDisabled())
+					p.schemas = append(p.schemas, cfg.ResponseSchema())
 					p.mu.Unlock()
 					if i >= len(p.replies) {
 						return nil, goerr.New("unexpected extra generate call", goerr.V("call_index", i))
@@ -1267,6 +1284,16 @@ func (p *toolCallingPlanner) disabledSeen() []bool {
 	defer p.mu.Unlock()
 	out := make([]bool, len(p.toolsDisabled))
 	copy(out, p.toolsDisabled)
+	return out
+}
+
+// schemaSeen reports, per call in call order, the response schema that call was
+// sent with.
+func (p *toolCallingPlanner) schemaSeen() []*gollem.Parameter {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*gollem.Parameter, len(p.schemas))
+	copy(out, p.schemas)
 	return out
 }
 
@@ -1378,8 +1405,8 @@ func TestPlannerToolCallsAreAlwaysAnswered(t *testing.T) {
 }
 
 // The allowance applies to a re-planning phase exactly as to the opening one: a
-// replan that has spent its tool rounds is told to stop and sent with tool calls
-// disabled, and the accepted decision restores the allowance for the terminal call.
+// replan that has spent its tool rounds is sent with tool calls disabled, and the
+// accepted decision restores the allowance for the terminal call.
 func TestAReplanPastItsToolAllowanceCannotCallTools(t *testing.T) {
 	lookup := &recordingTool{name: "get_workspace"}
 	call := func() any {
@@ -1408,12 +1435,14 @@ func TestAReplanPastItsToolAllowanceCannotCallTools(t *testing.T) {
 	gt.Array(t, disabled).Length(8).Required()
 	gt.Value(t, disabled).Equal([]bool{false, false, false, false, false, false, true, false})
 
-	// The replan that cannot call tools is told so, continues from the fourth
-	// answered call, and sends no user turn of its own.
-	gt.String(t, planner.systemSeen()[6]).Contains("Do not call any more tools")
+	// The replan that cannot call tools continues from the fourth answered call,
+	// sends no user turn of its own, and runs under the run's system prompt: the
+	// setting above is the only thing that differs.
 	gt.String(t, planner.seen()[6]).Equal("")
 	gt.Value(t, planner.answeredWith()[6]).Equal([]string{"r"})
-	gt.Bool(t, contains(planner.systemSeen()[7], "Do not call any more tools")).False()
+	sys := planner.systemSeen()
+	gt.String(t, sys[6]).Equal(sys[0])
+	gt.String(t, sys[7]).Equal(sys[0])
 }
 
 // TestRealLLM_ToolCallsDisabledAfterAnsweredToolRound checks, against a real
@@ -1637,24 +1666,20 @@ func TestAnEmptyTerminalReplyAfterTheToolAllowanceFallsBack(t *testing.T) {
 	gt.Bool(t, disabled[7]).True()
 }
 
-// Once the allowance is spent the planner is told to stop AND the call is sent
-// with tool calls disabled. The instruction alone did not stop a model: told to
-// stop, it went on calling tools, a side-effecting post among them.
-//
-// The instruction rides in the SYSTEM prompt. It cannot ride in the user turn: the
+// Once the allowance is spent the call is sent with tool calls disabled, and that
+// is the whole of how it is stopped: the system prompt is byte for byte the one
+// sent within the allowance. Nothing can be said in the user turn either — the
 // turn that would carry it is the one reporting the tool results, and a turn
 // holding function responses may hold nothing else.
-func TestTheToolAllowanceIsToldInTheSystemPrompt(t *testing.T) {
+func TestTheToolAllowanceIsEnforcedByToolChoiceAlone(t *testing.T) {
 	within, err := planexec.PlannerSystemPromptForTest(planexec.PlannerToolRoundsMaxForTest - 1)
 	gt.NoError(t, err).Required()
-	gt.Bool(t, contains(within, "Do not call any more tools")).False()
 	gt.Bool(t, planexec.PlannerToolCallsDisabledForTest(planexec.PlannerToolRoundsMaxForTest-1)).False()
 
 	spent, err := planexec.PlannerSystemPromptForTest(planexec.PlannerToolRoundsMaxForTest)
 	gt.NoError(t, err).Required()
-	gt.String(t, spent).Contains("Do not call any more tools")
 	gt.Bool(t, planexec.PlannerToolCallsDisabledForTest(planexec.PlannerToolRoundsMaxForTest)).True()
-	// The host's own prompt survives alongside it.
+	gt.String(t, spent).Equal(within)
 	gt.String(t, spent).Contains("host prompt")
 }
 
@@ -2102,8 +2127,9 @@ func TestPlannerToolResultsReachTheTerminalCall(t *testing.T) {
 			{ID: "c2", Name: "get_workspace", Arguments: map[string]any{"id": "ws-2"}},
 		},
 		// The planning call that follows never happens: the notice fires first and
-		// the run goes to produce its answer. This reply is the terminal one.
-		`the partial answer`,
+		// the run goes to produce its answer. This reply is the terminal one, in
+		// TextResult's shape because the call continues from the tool round.
+		`{"text":"the partial answer"}`,
 	}}
 	// The notice fires almost immediately, so the run wraps up right after the
 	// tool phase drains.
@@ -2120,9 +2146,8 @@ func TestPlannerToolResultsReachTheTerminalCall(t *testing.T) {
 	gt.String(t, out.Text).Contains("partial answer")
 
 	// The opening turn carried the figure; the terminal call answering the tool
-	// round carries none, and puts none in its system prompt either.
+	// round carries none.
 	gt.String(t, planner.seen()[0]).Contains("[budget] remaining $0.90 of $2.00")
-	gt.Bool(t, contains(planner.systemSeen()[1], "of $2.00")).False()
 
 	gt.Array(t, lookup.calls()).Length(2)
 
@@ -2132,14 +2157,224 @@ func TestPlannerToolResultsReachTheTerminalCall(t *testing.T) {
 	gt.Array(t, answered[0]).Length(0)
 	gt.Value(t, answered[1]).Equal([]string{"c1", "c2"})
 
-	// This is the ONLY terminal call the run makes, so the final prompt has to
-	// reach it — in the SYSTEM prompt, since the call sends no user turn. Without
-	// it the model is never told to write the user-visible answer, nor given the
-	// observation trail to write it from, and the run answers whatever the planner
-	// conversation happened to leave it on.
+	// The terminal call carries the results and nothing else: no user turn, and
+	// the system prompt of the opening call, unchanged. No round ran, so there is
+	// no observation trail it could be missing.
 	gt.String(t, planner.seen()[1]).Equal("")
-	gt.String(t, planner.systemSeen()[1]).Contains("Produce the final response for the user")
-	gt.String(t, planner.systemSeen()[1]).Contains("no investigations were run before the loop exited")
+	gt.String(t, planner.systemSeen()[1]).Equal(planner.systemSeen()[0])
+	// With no final prompt, the text host's terminal call is held to TextResult's
+	// shape, which is what tells it to answer rather than plan.
+	gt.Value(t, planner.schemaSeen()[1]).NotNil().Required()
+	gt.Map(t, planner.schemaSeen()[1].Properties).HasKey("text")
+}
+
+// A text host's terminal call continuing from a tool round carries no final
+// prompt, so the last instruction the model holds is the planner's. Whatever it
+// answers that is not TextResult's shape must not reach the user as the reply.
+func TestATextTerminalCallAfterAToolRoundNeverReturnsAPlannerDecision(t *testing.T) {
+	newRun := func(t *testing.T, terminal ...any) (*toolCallingPlanner, *agentkit.Process) {
+		lookup := &recordingTool{name: "get_workspace"}
+		replies := append([]any{
+			&gollem.FunctionCall{ID: "c1", Name: "get_workspace", Arguments: map[string]any{"id": "ws-1"}},
+		}, terminal...)
+		planner := &toolCallingPlanner{replies: replies}
+		cfg := budget.Config{MaxSteps: 8, MaxInputTokens: 100_000, MaxOutputTokens: 100_000, NoticeRatio: 0.1}
+		rt := newTextRuntime(t, planner.client(), cfg, nil,
+			func(context.Context, *agentkit.Process) ([]gollem.Tool, error) {
+				return []gollem.Tool{lookup}, nil
+			})
+		return planner, rt.run(t, textInput(), nil)
+	}
+
+	t.Run("a decision object carries no text and is not a reply", func(t *testing.T) {
+		planner, proc := newRun(t, `{"finalize":{"reason":"done"}}`, `the answer in plain text`)
+		gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+		out := decodeText(t, proc.Output)
+		gt.Value(t, out.Kind).Equal(planexec.OutputFinal)
+		gt.String(t, out.Text).Equal("the answer in plain text")
+
+		// Read as TextResult the decision has no text, which on the reserve's first
+		// move spends the round; the next call sends the full final prompt.
+		inputs := planner.seen()
+		gt.Array(t, inputs).Length(3).Required()
+		gt.String(t, inputs[2]).Contains("Emit plain natural-language text")
+	})
+
+	t.Run("prose is asked for again with the full final prompt", func(t *testing.T) {
+		planner, proc := newRun(t, `not json at all`, `the answer in plain text`)
+		gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+		out := decodeText(t, proc.Output)
+		gt.Value(t, out.Kind).Equal(planexec.OutputFinal)
+		gt.String(t, out.Text).Equal("the answer in plain text")
+
+		// The retry sends a user turn, so it carries the final prompt — which asks
+		// for plain text — and no schema.
+		inputs := planner.seen()
+		gt.Array(t, inputs).Length(3).Required()
+		gt.String(t, inputs[2]).Contains("Emit plain natural-language text")
+		gt.Value(t, planner.schemaSeen()[2]).Nil()
+	})
+}
+
+// EVERY planner, replan and terminal call of one run is sent under one system
+// prompt, byte for byte — through a planning phase that exhausts its tool
+// allowance, a replan that looks something up, and a terminal call continuing
+// from a lookup. Claude checks a thinking block against the system prompt that
+// preceded it, so a system prompt that changed anywhere in the run would
+// invalidate every thinking block the conversation already held.
+func TestOneRunSendsOneSystemPrompt(t *testing.T) {
+	lookup := &recordingTool{name: "get_workspace"}
+	call := func(id string) any {
+		return &gollem.FunctionCall{ID: id, Name: "get_workspace", Arguments: map[string]any{"id": "ws-1"}}
+	}
+	var replies []any
+	// Calls 0..max-1: the opening planning phase spends its whole tool allowance.
+	for i := range planexec.PlannerToolRoundsMaxForTest {
+		replies = append(replies, call(fmt.Sprintf("p%d", i)))
+	}
+	limit := planexec.PlannerToolRoundsMaxForTest
+	replies = append(replies,
+		// Call max: past the allowance, the planner decides.
+		`{"tasks":[{"id":"t1","title":"Read","description":"read it","acceptance_criteria":"done","tools":["slack_ro"],"budget_usd":0.01}]}`,
+		// Call max+1: the child.
+		`read it`,
+		// Calls max+2, max+3: the replan looks something up, then finalizes.
+		call("r1"),
+		`{"finalize":{"reason":"done"}}`,
+		// Calls max+4, max+5: the terminal call looks something up, then answers.
+		call("f1"),
+		`{"title":"Drafted","description":"after the lookups"}`,
+	)
+	planner := &toolCallingPlanner{replies: replies}
+	rt := newRuntime[caseDraft](t, planner.client(), generousBudget(), nil,
+		func(context.Context, *agentkit.Process) ([]gollem.Tool, error) {
+			return []gollem.Tool{lookup}, nil
+		}, planexec.Config[caseDraft]{})
+
+	proc := rt.run(t, textInput(), nil)
+	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+	out, err := planexec.DecodeOutput[caseDraft](proc.Output)
+	gt.NoError(t, err).Required()
+	gt.Value(t, out.Kind).Equal(planexec.OutputFinal)
+	gt.Array(t, lookup.calls()).Length(limit + 2)
+
+	sys := planner.systemSeen()
+	gt.Array(t, sys).Length(limit + 6).Required()
+	child := limit + 1
+	for i := range sys {
+		if i == child {
+			continue
+		}
+		gt.String(t, sys[i]).Equal(sys[0])
+	}
+	// The child runs as a separate Process with its own prompt, which is what makes
+	// the comparison above meaningful: the mock records every call it answers.
+	gt.String(t, sys[child]).NotEqual(sys[0])
+
+	// What differs between the calls is the request parameters: the call past the
+	// planning allowance is sent with tool calls disabled, and nothing else is.
+	disabled := planner.disabledSeen()
+	gt.Array(t, disabled).Length(limit + 6).Required()
+	for i, d := range disabled {
+		gt.Value(t, d).Equal(i == limit)
+	}
+	// The last terminal call continues from its lookup: no user turn, the
+	// terminal output's schema.
+	last := limit + 5
+	gt.String(t, planner.seen()[last]).Equal("")
+	gt.Value(t, planner.answeredWith()[last]).Equal([]string{"f1"})
+	gt.Value(t, planner.schemaSeen()[last]).NotNil().Required()
+	gt.Map(t, planner.schemaSeen()[last].Properties).HasKey("title")
+}
+
+// A replan that looks something up and is then sent to the terminal call by the
+// reserve reaches it with ToolsAnswered set, so the terminal call sends no user
+// turn and no final prompt. The round's observations are not lost: the replan
+// call that asked for the lookup carried them on its own user turn, which is in
+// the conversation the terminal call continues.
+func TestObservationsReachTheConversationBeforeAToolRoundEndsInTheReserve(t *testing.T) {
+	lookup := &recordingTool{name: "get_workspace"}
+	planner := &toolCallingPlanner{replies: []any{
+		`{"tasks":[{"id":"t1","title":"Read","description":"read it","acceptance_criteria":"done","tools":["slack_ro"],"budget_usd":0.01}]}`,
+		`the child found the answer`,
+		// The replan looks something up; the notice fires before it decides.
+		&gollem.FunctionCall{ID: "r1", Name: "get_workspace", Arguments: map[string]any{"id": "ws-1"}},
+		`{"text":"the final answer"}`,
+	}}
+	// Notice at 25% of 20 steps = 5 committed transitions: the replan call is made
+	// under it, and the lookup that follows crosses it.
+	cfg := budget.Config{MaxSteps: 20, MaxInputTokens: 100_000, MaxOutputTokens: 100_000, NoticeRatio: 0.25}
+	rt := newTextRuntime(t, planner.client(), cfg, nil,
+		func(context.Context, *agentkit.Process) ([]gollem.Tool, error) {
+			return []gollem.Tool{lookup}, nil
+		})
+
+	proc := rt.run(t, textInput(), nil)
+	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+	out := decodeText(t, proc.Output)
+	gt.String(t, out.Text).Contains("the final answer")
+	gt.Array(t, lookup.calls()).Length(1)
+
+	inputs := planner.seen()
+	gt.Array(t, inputs).Length(4).Required()
+	// Call 2 is the replan: it carries the round's observations.
+	gt.String(t, inputs[2]).Contains("# Observations from prior investigations")
+	gt.String(t, inputs[2]).Contains("the child found the answer")
+	// Call 3 is the terminal call, continuing from the lookup with nothing of its
+	// own, under the run's system prompt.
+	gt.String(t, inputs[3]).Equal("")
+	gt.Value(t, planner.answeredWith()[3]).Equal([]string{"r1"})
+	sys := planner.systemSeen()
+	gt.String(t, sys[3]).Equal(sys[0])
+	// It is the reserve's first move, so it keeps its tools — and, sending no user
+	// turn, it is not told that it is the final tool call.
+	gt.Bool(t, planner.disabledSeen()[3]).False()
+	gt.Bool(t, strings.Contains(inputs[3], "THIS turn is your final tool call")).False()
+}
+
+// A structured terminal call continuing from answered tool calls sends no user
+// turn and is held to the output's shape by the response schema alone, which is
+// what replaced writing the final prompt into its system prompt.
+func TestATerminalCallAfterAToolRoundIsShapedByTheSchema(t *testing.T) {
+	lookup := &recordingTool{name: "get_workspace"}
+	planner := &toolCallingPlanner{replies: []any{
+		`{"tasks":[{"id":"t1","title":"Read","description":"read it","acceptance_criteria":"done","tools":["slack_ro"],"budget_usd":0.01}]}`,
+		`read it`,
+		`{"finalize":{"reason":"done"}}`,
+		// The terminal call looks something up first.
+		&gollem.FunctionCall{ID: "f1", Name: "get_workspace", Arguments: map[string]any{"id": "ws-1"}},
+		`{"title":"Drafted","description":"after the lookup"}`,
+	}}
+	rt := newRuntime[caseDraft](t, planner.client(), generousBudget(), nil,
+		func(context.Context, *agentkit.Process) ([]gollem.Tool, error) {
+			return []gollem.Tool{lookup}, nil
+		}, planexec.Config[caseDraft]{})
+
+	proc := rt.run(t, textInput(), nil)
+	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+	out, err := planexec.DecodeOutput[caseDraft](proc.Output)
+	gt.NoError(t, err).Required()
+	gt.Value(t, out.Kind).Equal(planexec.OutputFinal)
+	gt.Value(t, out.Data).NotNil().Required()
+	gt.String(t, out.Data.Title).Equal("Drafted")
+
+	inputs := planner.seen()
+	schemas := planner.schemaSeen()
+	sys := planner.systemSeen()
+	gt.Array(t, inputs).Length(5).Required()
+	// The first terminal call sends the final prompt; the second continues from the
+	// lookup and sends nothing.
+	gt.String(t, inputs[3]).Contains("Produce the final response for the user")
+	gt.String(t, inputs[4]).Equal("")
+	gt.Value(t, planner.answeredWith()[4]).Equal([]string{"f1"})
+	// Both are held to the terminal output's schema, not to a plan's.
+	gt.Value(t, schemas[3]).NotNil().Required()
+	gt.Value(t, schemas[4]).NotNil().Required()
+	gt.Value(t, schemas[4]).Equal(schemas[3])
+	gt.Map(t, schemas[4].Properties).HasKey("title")
+	// And the system prompt is the planner's, unchanged.
+	gt.String(t, sys[3]).Equal(sys[0])
+	gt.String(t, sys[4]).Equal(sys[0])
 }
 
 // The terminal call may itself ask for a tool: agentkit declares the claim's tools
@@ -2156,7 +2391,7 @@ func TestTerminalCallMayAskForATool(t *testing.T) {
 		// The terminal call asks for a lookup instead of writing the answer.
 		&gollem.FunctionCall{ID: "f1", Name: "get_workspace", Arguments: map[string]any{"id": "ws-1"}},
 		// With the result in hand it writes it.
-		`The workspace has a severity field.`,
+		`{"text":"The workspace has a severity field."}`,
 	}}
 	rt := newTextRuntime(t, planner.client(), generousBudget(), nil,
 		func(context.Context, *agentkit.Process) ([]gollem.Tool, error) {
@@ -2179,9 +2414,9 @@ func TestTerminalCallMayAskForATool(t *testing.T) {
 
 // A terminal call that keeps asking for tools has to be stopped, or the run
 // spends its whole step budget looking things up and ends with a fallback instead
-// of the answer it had already paid for. Past the allowance it is told to stop
-// and sent with tool calls disabled.
-func TestTerminalCallIsToldWhenItsToolAllowanceIsSpent(t *testing.T) {
+// of the answer it had already paid for. Past the allowance it is sent with tool
+// calls disabled.
+func TestTerminalCallPastItsToolAllowanceCannotCallTools(t *testing.T) {
 	lookup := &recordingTool{name: "get_workspace"}
 	call := func() any {
 		return &gollem.FunctionCall{ID: "f", Name: "get_workspace", Arguments: map[string]any{"id": "ws-1"}}
@@ -2192,7 +2427,7 @@ func TestTerminalCallIsToldWhenItsToolAllowanceIsSpent(t *testing.T) {
 		`{"finalize":{"reason":"done"}}`,
 		// Four terminal calls that each ask for a lookup instead of answering.
 		call(), call(), call(), call(),
-		`Answered at last.`,
+		`{"text":"Answered at last."}`,
 	}}
 	rt := newTextRuntime(t, planner.client(), generousBudget(), nil,
 		func(context.Context, *agentkit.Process) ([]gollem.Tool, error) {
@@ -2214,16 +2449,13 @@ func TestTerminalCallIsToldWhenItsToolAllowanceIsSpent(t *testing.T) {
 		gt.String(t, planner.seen()[i]).Equal("")
 	}
 
-	// The instruction therefore has to arrive in the system prompt, and it arrives
-	// exactly once — the same notice in the user turn as well would say it twice on
-	// every call that does send one.
-	spent := planner.systemSeen()[7]
-	gt.String(t, spent).Contains("Do not call any more tools")
-	gt.Number(t, strings.Count(spent, "Do not call any more tools")).Equal(1)
-	// The first terminal call is still within the allowance, so it is not nagged.
-	gt.Bool(t, contains(planner.systemSeen()[3], "Do not call any more tools")).False()
+	// Nothing is said to the call past the allowance: it sends no user turn, and
+	// its system prompt is the run's, unchanged.
+	sys := planner.systemSeen()
+	gt.String(t, sys[7]).Equal(sys[0])
+	gt.String(t, sys[3]).Equal(sys[0])
 
-	// Tool calls are disabled on exactly the call that is told to stop: the
+	// Tool calls are disabled on exactly the call past the allowance: the
 	// terminal calls before it (3-6) and the planning calls (0, 2) keep their tools.
 	disabled := planner.disabledSeen()
 	gt.Array(t, disabled).Length(8).Required()

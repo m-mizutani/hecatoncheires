@@ -1916,6 +1916,9 @@ input_usd_per_mtok       = 5.0
 output_usd_per_mtok      = 25.0
 cache_read_usd_per_mtok  = 0.5
 cache_write_usd_per_mtok = 6.25
+thinking                 = "adaptive"   # optional, claude only
+thinking_display         = "summarized" # optional, requires thinking
+effort                   = "high"       # optional, claude only
 
 [[llm_model]]
 alias    = "cheap"                # the reference name is "cheap"
@@ -1935,6 +1938,17 @@ cache_read_usd_per_mtok = 0.075
 | `output_usd_per_mtok` | float | **Yes** | Price of one million generated tokens, in USD. Must be positive |
 | `cache_read_usd_per_mtok` | float | No | Price of one million tokens served from the prompt cache. Defaults to `0` |
 | `cache_write_usd_per_mtok` | float | No | Price of one million tokens written to the prompt cache. Defaults to `0`. Only Claude reports cache writes; the value is never charged for other providers |
+| `thinking` | string | No | `claude` only. Sent as `thinking.type` on every request. The only accepted value is `adaptive`. Omitted, no `thinking` is sent and the model's default applies |
+| `thinking_display` | string | No | `claude` only, and only together with `thinking`. Sent as `thinking.display`: `summarized` returns a summary of the model's thinking, `omitted` returns thinking blocks with empty text. Omitted, no `display` is sent and the API's default applies |
+| `effort` | string | No | `claude` only. Sent as `output_config.effort`: `low`, `medium`, `high`, `xhigh` or `max`. Omitted, no `effort` is sent and the model's default applies |
+
+**`thinking`, `thinking_display` and `effort` are checked for their value set
+only.** A value outside the lists above, one of these keys on an `openai` or
+`gemini` entry, or `thinking_display` without `thinking` fails at startup.
+Whether a particular model accepts a value is not checked here: a model that does
+not support it rejects every request with a `400`, and that error is returned as
+the run's failure. The key names follow the request fields they are sent as, so a
+value the API adds to one of those fields later needs no new key.
 
 **Write the prices from the provider's own pricing page**, in dollars per 1M
 tokens — the unit those pages use. Two rules follow from what the figure is for:

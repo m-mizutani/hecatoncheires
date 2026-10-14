@@ -421,6 +421,12 @@ type LLMModelSection struct {
 	// provider bills no per-token cache read or write).
 	CacheReadUSDPerMTok  float64 `toml:"cache_read_usd_per_mtok"`
 	CacheWriteUSDPerMTok float64 `toml:"cache_write_usd_per_mtok"`
+	// Thinking, ThinkingDisplay and Effort are optional and claude-only. They
+	// name the request fields they are sent as (thinking.type, thinking.display,
+	// output_config.effort), and each is left out of the request when unset.
+	Thinking        string `toml:"thinking"`
+	ThinkingDisplay string `toml:"thinking_display"`
+	Effort          string `toml:"effort"`
 }
 
 // Validate checks one entry and returns its resolved form.
@@ -447,10 +453,13 @@ func (s *LLMModelSection) Validate() (agentkernel.ModelDef, error) {
 			goerr.V(LLMModelRefKey, ref))
 	}
 	def := agentkernel.ModelDef{
-		Ref:      ref,
-		Provider: s.Provider,
-		Model:    s.Model,
-		Rate:     rate,
+		Ref:             ref,
+		Provider:        s.Provider,
+		Model:           s.Model,
+		Rate:            rate,
+		Thinking:        s.Thinking,
+		ThinkingDisplay: s.ThinkingDisplay,
+		Effort:          s.Effort,
 	}
 	if err := def.Validate(); err != nil {
 		return agentkernel.ModelDef{}, goerr.Wrap(err, "invalid [[llm_model]]",

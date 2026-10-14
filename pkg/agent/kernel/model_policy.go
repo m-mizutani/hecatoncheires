@@ -37,7 +37,37 @@ type ModelDef struct {
 	Model string
 	// Rate prices one token of each kind.
 	Rate pricing.Rate
+
+	// Thinking, ThinkingDisplay and Effort are sent as thinking.type,
+	// thinking.display and output_config.effort on every request to a claude
+	// model. Empty means not sent, so the model default applies. Which values a
+	// model accepts is the API's to decide: an unsupported one is sent as given
+	// and the API rejects the request.
+	Thinking        string
+	ThinkingDisplay string
+	Effort          string
 }
+
+// ThinkingAdaptive is the one value ModelDef.Thinking accepts. It is the API's own
+// value, as are the ThinkingDisplay and Effort values below, so a value the API
+// adds later is one constant away.
+const ThinkingAdaptive = "adaptive"
+
+const (
+	thinkingDisplaySummarized = "summarized"
+	thinkingDisplayOmitted    = "omitted"
+
+	effortLow    = "low"
+	effortMedium = "medium"
+	effortHigh   = "high"
+	effortXHigh  = "xhigh"
+	effortMax    = "max"
+)
+
+// ErrInvalidReasoningSetting is returned when a definition's Thinking,
+// ThinkingDisplay or Effort is a value this build does not send, or is set where
+// it cannot apply.
+var ErrInvalidReasoningSetting = goerr.New("invalid thinking / thinking_display / effort setting")
 
 // Validate enforces what a definition cannot be used without.
 func (d ModelDef) Validate() error {
@@ -63,6 +93,46 @@ func (d ModelDef) Validate() error {
 			goerr.V("ref", d.Ref),
 			goerr.V("cache_read", int64(d.Rate.CacheRead)),
 			goerr.V("cache_write", int64(d.Rate.CacheWrite)))
+	}
+	return d.validateReasoning()
+}
+
+// validateReasoning checks Thinking, ThinkingDisplay and Effort. It checks the
+// value set only, never which model accepts which value: that is the API's
+// answer, and a table of it here would go stale with every model release.
+func (d ModelDef) validateReasoning() error {
+	if d.Thinking == "" && d.ThinkingDisplay == "" && d.Effort == "" {
+		return nil
+	}
+	if d.Provider != ProviderClaude {
+		return goerr.Wrap(ErrInvalidReasoningSetting,
+			"thinking, thinking_display and effort can be set only for a claude model",
+			goerr.V("ref", d.Ref), goerr.V("provider", d.Provider))
+	}
+	switch d.Thinking {
+	case "", ThinkingAdaptive:
+	default:
+		return goerr.Wrap(ErrInvalidReasoningSetting, "thinking must be \"adaptive\"",
+			goerr.V("ref", d.Ref), goerr.V("thinking", d.Thinking))
+	}
+	switch d.ThinkingDisplay {
+	case "":
+	case thinkingDisplaySummarized, thinkingDisplayOmitted:
+		if d.Thinking == "" {
+			return goerr.Wrap(ErrInvalidReasoningSetting, "thinking_display requires thinking",
+				goerr.V("ref", d.Ref), goerr.V("thinking_display", d.ThinkingDisplay))
+		}
+	default:
+		return goerr.Wrap(ErrInvalidReasoningSetting,
+			"thinking_display must be \"summarized\" or \"omitted\"",
+			goerr.V("ref", d.Ref), goerr.V("thinking_display", d.ThinkingDisplay))
+	}
+	switch d.Effort {
+	case "", effortLow, effortMedium, effortHigh, effortXHigh, effortMax:
+	default:
+		return goerr.Wrap(ErrInvalidReasoningSetting,
+			"effort must be \"low\", \"medium\", \"high\", \"xhigh\" or \"max\"",
+			goerr.V("ref", d.Ref), goerr.V("effort", d.Effort))
 	}
 	return nil
 }

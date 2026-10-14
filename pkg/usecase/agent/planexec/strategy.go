@@ -372,6 +372,13 @@ func Register[T Validatable](
 				"planexec: invalid final output type", goerr.V("agent", name))
 		}
 		s.outputSchema = schema
+	} else {
+		schema, err := outputSchemaOf[TextResult]()
+		if err != nil {
+			return agentkit.Agent[Input]{}, goerr.Wrap(errors.Join(agentkit.ErrInvalidAgentDef, err),
+				"planexec: invalid text output type", goerr.V("agent", name))
+		}
+		s.textSchema = schema
 	}
 	return agentkit.Register(reg, name, version, s, opts...)
 }
@@ -435,6 +442,9 @@ type strategy[T Validatable] struct {
 	// outputSchema is the terminal output schema derived from T at Register; nil
 	// when cfg.TextOnly.
 	outputSchema *gollem.Parameter
+	// textSchema is TextResult's schema, set only when cfg.TextOnly. A text
+	// terminal call continuing from a tool round sends it (see stepFinal).
+	textSchema *gollem.Parameter
 }
 
 func (s *strategy[T]) Version() int { return s.version }
@@ -553,8 +563,9 @@ func (s *strategy[T]) stepPlan(ctx context.Context, sys agentkit.Syscalls, st st
 // first. stepPlannerTool answered each call in the conversation, so the model's
 // call turn is already answered and an empty input continues from there. Text
 // would land as a second user turn behind the results, which is not what the
-// model's call is waiting for — and the instruction that would have carried it
-// belongs in the system prompt instead (see plannerPrompt). The state that would
+// model's call is waiting for. Nor does any text move into the system prompt
+// instead, which stays the same for the whole run (see plannerPrompt): a call
+// past plannerToolRoundsMax is stopped by tool_choice alone. The state that would
 // mix the two does not arise: divertToTools clears NextInput on the way in. The
 // allowance line is dropped with the rest: the planner reads the figure off the
 // last turn that carried one (see budgetPrefix).
@@ -576,15 +587,19 @@ func plannerInput(st state, budgetLine string) []gollem.Input {
 	return withBudgetLine(budgetLine, gollem.Text(text))
 }
 
-// withBudgetLine opens a user turn with the allowance line. The line is its own
-// input rather than a prefix of the text so the text stays exactly what the
-// caller built; every provider gollem supports puts consecutive text inputs in
-// ONE user turn, so the request shape is unchanged.
-func withBudgetLine(budgetLine string, text gollem.Text) []gollem.Input {
-	if budgetLine == "" {
-		return []gollem.Input{text}
+// withBudgetLine opens a user turn with the allowance line, followed by texts.
+// Each is its own input rather than joined into one string so each text stays
+// exactly what the caller built; every provider gollem supports puts consecutive
+// text inputs in ONE user turn, so the request shape is unchanged.
+func withBudgetLine(budgetLine string, texts ...gollem.Text) []gollem.Input {
+	out := make([]gollem.Input, 0, len(texts)+1)
+	if budgetLine != "" {
+		out = append(out, gollem.Text(budgetLine))
 	}
-	return []gollem.Input{gollem.Text(budgetLine), text}
+	for _, t := range texts {
+		out = append(out, t)
+	}
+	return out
 }
 
 // plannerContinue is the user turn a planning call sends when it has nothing new
@@ -600,34 +615,30 @@ const plannerContinue = "Continue from what you have so far, and give your next 
 // lookup would otherwise only be stopped by the step ceiling, having produced
 // nothing.
 //
-// Past it a call is both told to stop (plannerToolBudgetNotice) and sent with tool
-// calls disabled (tool_choice "none"; see toolDirectiveFor). The instruction alone
-// was not enough: a model told to stop went on calling tools, among them a Slack
-// post whose only text was a placeholder, which ran and reached the case thread —
-// twice in one run, once per planning phase that carried the notice.
+// Past it a call is sent with tool calls disabled (tool_choice "none"; see
+// toolDirectiveFor), and is told nothing: the call that needs stopping is usually
+// the one continuing from answered tool calls, which sends no user turn, and the
+// system prompt stays the same for the whole run (see plannerPrompt). An
+// instruction was never enough on its own anyway: a model told to stop went on
+// calling tools, among them a Slack post whose only text was a placeholder, which
+// ran and reached the case thread — twice in one run, once per planning phase
+// that carried the notice.
 //
 // A call returned anyway is still run and answered (see divertToTools), since a
 // provider is not bound to honour the setting. MaxSteps, which every one of these
 // calls charges, remains the hard stop.
 const plannerToolRoundsMax = 4
 
-// plannerToolBudgetNotice is what the model is told once it has spent its tool
-// rounds, on a planning call or on the terminal one. It rides in the SYSTEM prompt
-// (see plannerPrompt), and the call carrying it is sent with tool calls disabled.
-// It is worded for both kinds of call: a planning call has to decide, a terminal
-// call has to write the answer, and neither may keep looking things up.
-const plannerToolBudgetNotice = "You have used your tool allowance for this step. " +
-	"Do not call any more tools; continue now with what you already have."
-
 // reserveToolRoundsMax is how many tool rounds the budget reserve pays for: one.
 // The reserve is a tenth of the budget by default and has to cover this call, the
 // tool it makes and the terminal output that follows, so a second round would
 // leave nothing to write with.
 //
-// Past it the terminal call is told to stop (reserveSpentInstruction) and sent
-// with tool calls disabled, for the reason plannerToolRoundsMax gives. A call made
-// anyway is still answered by divertToTools, because an unanswered function call
-// breaks the conversation for every later request.
+// Past it the terminal call is sent with tool calls disabled, for the reason
+// plannerToolRoundsMax gives, and is told nothing beyond what its user turn
+// carries — a call continuing from that tool round sends none. A call made anyway
+// is still answered by divertToTools, because an unanswered function call breaks
+// the conversation for every later request.
 const reserveToolRoundsMax = 1
 
 // reserveInstruction is what the terminal call is told on the first transition
@@ -638,19 +649,16 @@ const reserveToolRoundsMax = 1
 // planner a way to write a terminal output describing work it never performed,
 // which is the exact outcome the reserve exists to prevent.
 //
-// Only the terminal call ever sees it: stepPlan and stepReplan divert to
-// phaseFinal at their top when st.Reserve is set, without generating.
+// It rides on the terminal call's user turn, after the final prompt, so it reaches
+// only a call that sends one. A terminal call continuing from answered tool calls
+// sends no user turn and is not told: it keeps its tools for one round, and the
+// call after that is sent with tool calls disabled. Only the terminal call ever
+// sees it: stepPlan and stepReplan divert to phaseFinal at their top when
+// st.Reserve is set, without generating.
 const reserveInstruction = "This run has spent its working budget; only a small reserve is left. " +
 	"Do not start another investigation round. THIS turn is your final tool call: make the one call " +
 	"this turn still needs in order to take effect. Do not write the terminal output on this turn — " +
 	"the call's outcome comes back on the next turn, and that is where you write it."
-
-// reserveSpentInstruction is what the terminal call is told once the reserve's
-// one tool round has been spent. It asks for the output to be SHORT rather than
-// complete: what is left has to cover this call and nothing more.
-const reserveSpentInstruction = "The budget reserve is spent: you have already made your final " +
-	"tool call. Do not call any tool again. Write the terminal output now from the observations " +
-	"you already have, as briefly as it can be understood."
 
 // reserveMovesSpent reports whether the reserve's FIRST move is over, so the
 // terminal call must be asked for the output rather than for a tool call.
@@ -660,9 +668,9 @@ const reserveSpentInstruction = "The budget reserve is spent: you have already m
 //
 //   - the tool round was taken (ReserveToolRounds);
 //   - the terminal output was already asked for and rejected (FinalRetries) —
-//     the retry's user turn says "re-emit the output correctly" while
-//     reserveInstruction says "do not write the terminal output on this turn",
-//     and a model cannot satisfy both;
+//     the retry's user turn says "re-emit the output correctly", and adding
+//     reserveInstruction's "do not write the terminal output on this turn"
+//     would ask for two things a model cannot both satisfy;
 //   - the model answered the first move with nothing at all, which stepFinal
 //     records by spending the round (see the empty-body branch there).
 func reserveMovesSpent(st state) bool {
@@ -677,9 +685,9 @@ func reserveMovesSpent(st state) bool {
 // and a provider rejects the next request unless every call in it has a matching
 // response ("the number of function response parts is equal to the number of
 // function call parts"). Dropping the calls produced exactly that error, retried
-// until the run failed. Past the bound the next call is told to stop asking and
-// sent with tool calls disabled, but a provider may still return a call, and that
-// call is answered like any other.
+// until the run failed. Past the bound the next call is sent with tool calls
+// disabled, but a provider may still return a call, and that call is answered
+// like any other.
 func (s *strategy[T]) divertToTools(st state, res *agentkit.GenerateResult, from string) (state, bool) {
 	if len(res.FunctionCalls) == 0 {
 		return st, false
@@ -748,9 +756,10 @@ func (s *strategy[T]) stepPlannerTool(ctx context.Context, sys agentkit.Syscalls
 		st.ToolsAnswered = true
 	}
 
-	// A planner that has spent its allowance is told so in the SYSTEM prompt of the
-	// call this returns to (see plannerPrompt), not here: that call continues from
-	// the results and sends no user turn that could carry the instruction.
+	// A planner that has spent its allowance is stopped by the call this returns
+	// to, which is sent with tool calls disabled (see toolCallOptions). It is not
+	// told so: that call continues from the results and sends no user turn, and
+	// the system prompt does not change within a run (see plannerPrompt).
 	if len(st.PendingCalls) == 0 {
 		st.Phase = st.AfterTool
 	}
@@ -977,25 +986,8 @@ func (s *strategy[T]) stepAnswer(ctx context.Context, sys agentkit.Syscalls, st 
 func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st state) (state, agentkit.Decision[Output[T]], error) {
 	st = s.note(ctx, st, "📝 Writing the answer")
 
-	// A retry carries the rejection reason instead of the original request: the
-	// model already has the request in the conversation.
-	userPrompt := st.NextInput
-	if st.FinalRetries == 0 || userPrompt == "" {
-		rendered, err := renderFinalUserPrompt(finalPromptInput{
-			Observations:    renderObservationsForFinal(st.Observations),
-			StructuredFinal: !s.cfg.TextOnly,
-			Language:        st.Input.LanguageLabel,
-		})
-		if err != nil {
-			return st, agentkit.Decision[Output[T]]{}, goerr.Wrap(err, "planexec: render final prompt")
-		}
-		userPrompt = rendered
-	}
-	// A terminal call that has been diverting to tools has to be told to stop, the
-	// same way a planning call is. plannerPrompt carries that notice in the SYSTEM
-	// prompt, which reaches this call whether or not it sends a user turn — so it
-	// must not be prepended to userPrompt as well, or the same instruction arrives
-	// twice on the calls that do send one.
+	// The same system prompt as every planning call of the run (see plannerPrompt).
+	// Nothing about this call is added to it, whichever branch below is taken.
 	prompt, err := s.plannerPrompt(st)
 	if err != nil {
 		return st, agentkit.Decision[Output[T]]{}, err
@@ -1003,29 +995,59 @@ func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st s
 
 	// A terminal call reached straight from a tool phase sends no user turn: its
 	// answered calls are the turn the model is waiting on, for the reason
-	// plannerInput gives. The prompt travels in the SYSTEM prompt instead of being
-	// dropped, because this can be the ONLY terminal call the run makes — a budget
-	// notice sends plan / replan straight here without another planning call — and
-	// without it the model is never told to write the answer, nor given the
-	// observation trail to write it from.
+	// plannerInput gives. The final prompt is not sent anywhere else on that branch.
+	// What it would carry is already in the conversation or on the request:
 	//
-	// The terminal call gets the allowance line too, when it sends a turn: it is
-	// the one call that may still ask for a tool, so it has to know what is left to
-	// spend on one. Not in the system prompt on the other branch, where a figure
-	// that changes per call would rewrite the cached prefix of every call after it.
+	//   - every observation trail was sent as a user turn: stepCollect hands
+	//     formatObservationsAsUserTurn to the next replan call. A tool round can
+	//     only follow a call that was made, so a run reaching here with
+	//     ToolsAnswered set has made that replan call already. A replan that
+	//     diverts here before making it has had no tool round since the round
+	//     launched (ToolsAnswered is cleared by the plan or replan call that
+	//     launched it), so it takes the other branch, whose final prompt carries
+	//     the whole trail. A run reaching here from stepPlan has no observations.
+	//   - the output's shape is the response schema below (WithSchema), and the
+	//     language directive is in the system prompt. A text host has no output
+	//     schema of its own, so this branch sends TextResult's (textOutput): with
+	//     no final prompt in the conversation, the last instruction the model holds
+	//     is the planner's "emit one decision object", and without a schema a reply
+	//     like {"finalize": ...} would be returned as the user-facing text.
+	//
+	// The other branch sends the turn, opened by the allowance line: this is the one
+	// call that may still ask for a tool, so it has to know what is left to spend on
+	// one. A retry carries the rejection reason instead of the final prompt: the
+	// model already has the request in the conversation.
+	textOutput := s.cfg.TextOnly && st.ToolsAnswered
 	var input []gollem.Input
-	if st.ToolsAnswered {
-		prompt += "\n\n" + userPrompt
-	} else {
-		input = withBudgetLine(budgetLine(s.remainingBudget(sys)), gollem.Text(userPrompt))
+	if !st.ToolsAnswered {
+		userPrompt := st.NextInput
+		if st.FinalRetries == 0 || userPrompt == "" {
+			rendered, err := renderFinalUserPrompt(finalPromptInput{
+				Observations:    renderObservationsForFinal(st.Observations),
+				StructuredFinal: !s.cfg.TextOnly,
+				Language:        st.Input.LanguageLabel,
+			})
+			if err != nil {
+				return st, agentkit.Decision[Output[T]]{}, goerr.Wrap(err, "planexec: render final prompt")
+			}
+			userPrompt = rendered
+		}
+		texts := []gollem.Text{gollem.Text(userPrompt)}
+		if st.Reserve && !reserveMovesSpent(st) {
+			texts = append(texts, gollem.Text(reserveInstruction))
+		}
+		input = withBudgetLine(budgetLine(s.remainingBudget(sys)), texts...)
 	}
 
 	opts := []agentkit.GenerateOption{
 		agentkit.WithSystemPrompt(prompt),
 		agentkit.WithRole(RoleFinalizer),
 	}
-	if !s.cfg.TextOnly {
+	switch {
+	case !s.cfg.TextOnly:
 		opts = append(opts, agentkit.WithSchema(s.outputSchema))
+	case textOutput:
+		opts = append(opts, agentkit.WithSchema(s.textSchema))
 	}
 	opts = append(opts, toolCallOptions(st)...)
 
@@ -1047,14 +1069,36 @@ func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st s
 	}
 
 	body := strings.Join(res.Texts, "\n")
+	if textOutput && strings.TrimSpace(body) != "" {
+		var tr TextResult
+		if err := json.Unmarshal(extractJSONObject([]byte(body)), &tr); err != nil {
+			st.FinalRetries++
+			if st.FinalRetries > finalOutputMaxRetry {
+				return st, agentkit.Done(Output[T]{
+					Kind:           OutputFallback,
+					FallbackReason: err.Error(),
+					Observations:   st.Observations,
+				}), nil
+			}
+			errutil.Handle(ctx, goerr.Wrap(err, "planexec: text output rejected",
+				goerr.T(errutil.TagBenign)), "planexec: text output rejected")
+			// Empty, so the retry sends the full final prompt, which asks for plain
+			// text: the retry call sends a user turn and no schema, and a correction
+			// asking it to re-emit JSON would contradict that.
+			st.NextInput = ""
+			return st, agentkit.Continue[Output[T]](), nil
+		}
+		body = tr.Text
+	}
 	if strings.TrimSpace(body) == "" {
 		// On the reserve's FIRST move an empty reply is the model OBEYING: it was
 		// told this turn is its final tool call and that it must not write the
 		// output yet, and it made no call. Ending here would spend the reserve on
 		// nothing and hand the host a fallback — the outcome this whole path exists
-		// to avoid. Spend the round and come back: the next terminal call carries
-		// reserveSpentInstruction, which asks for the output. Bounded, because that
-		// call is then past reserveMovesSpent and a second empty reply falls back.
+		// to avoid. Spend the round and come back: the next terminal call sends the
+		// final prompt without reserveInstruction, which asks for the output, and is
+		// sent with tool calls disabled. Bounded, because that call is then past
+		// reserveMovesSpent and a second empty reply falls back.
 		if st.Reserve && !reserveMovesSpent(st) {
 			st.ReserveToolRounds = reserveToolRoundsMax
 			return st, agentkit.Continue[Output[T]](), nil
@@ -1450,13 +1494,25 @@ func budgetBound(remaining pricing.NanoUSD, ok bool) *pricing.NanoUSD {
 
 // plannerPrompt renders the planner system prompt for the run's input.
 //
-// It carries no figure that changes from one call to the next — the allowance
-// line rides on the user turn instead (see budgetPrefix) — so a falling
-// allowance leaves it byte-identical. What still changes it is a notice below
-// being added, and stepFinal appending the final prompt on a call that answers a
-// tool round. AllocatesBudget follows Config.Remaining, the same condition
-// that puts `budget_usd` into the schema, so the instruction and the field it
-// asks for cannot appear without each other.
+// It is rendered from st.Input and the strategy's configuration alone, so every
+// planning and terminal call of one run passes it byte for byte the same. The
+// sameness is a requirement, not a convenience: Claude checks a thinking block against the
+// system prompt, tools and messages that preceded it, so a system prompt changed
+// mid-run invalidates every thinking block the conversation already holds, and
+// it also discards the cached prefix of every later call. Nothing that varies
+// within a run goes here — the allowance line rides on the user turn (see
+// budgetPrefix), a "call no more tools" decision is sent as tool_choice
+// (toolCallOptions), and the terminal output's shape as the response schema
+// (stepFinal).
+//
+// What this guarantees is the system prompt planexec passes to gollem. For a
+// Claude model without structured outputs, gollem appends the response schema to
+// the system prompt it sends, and the plan, replan and terminal schemas differ;
+// that is outside what this function controls.
+//
+// AllocatesBudget follows Config.Remaining, the same condition that puts
+// `budget_usd` into the schema, so the instruction and the field it asks for
+// cannot appear without each other.
 func (s *strategy[T]) plannerPrompt(st state) (string, error) {
 	prompt, err := renderPlannerSystemPrompt(plannerPromptInput{
 		HostPrompt:          st.Input.SystemPrompt,
@@ -1471,53 +1527,46 @@ func (s *strategy[T]) plannerPrompt(st state) (string, error) {
 	if err != nil {
 		return "", goerr.Wrap(err, "planexec: render the planner prompt")
 	}
-	// The tool allowance is spent: say so here rather than as a user turn. The call
-	// that has to hear it is the one following the tool phase, and that call sends
-	// no user turn at all — it continues from the answered calls, see plannerInput.
-	if d := toolDirectiveFor(st); d.instruction != "" {
-		prompt += "\n\n" + d.instruction
-	}
 	return prompt, nil
 }
 
-// toolDirective is what a planning or terminal call is told about calling tools,
-// and whether it may call any.
+// toolDirective is whether a planning or terminal call may call tools.
+//
+// It carries no instruction text. The call that most needs to stop calling tools
+// is the one continuing from answered tool calls, which sends no user turn, and
+// the system prompt must stay the same for the whole run (see plannerPrompt), so
+// there is no place left to put one. tool_choice "none" is the whole of the
+// mechanism, and it does not depend on the model reading anything.
 type toolDirective struct {
-	instruction      string
 	disableToolCalls bool
 }
 
-// toolDirectiveFor decides both halves of a call's toolDirective from the state,
-// in ONE place, so the call told "do not call any more tools" is exactly the call
-// sent with tool calls disabled. plannerPrompt reads the instruction and
-// toolCallOptions the switch; neither restates the conditions.
+// toolDirectiveFor decides a call's toolDirective from the state, in ONE place,
+// so every call made from the same state is sent the same way.
 //
-// Inside the reserve the reserve's own instruction REPLACES the allowance notice
-// rather than joining it: the two would otherwise arrive together saying opposite
-// things, one asking for the final call and the other forbidding any. For the
-// same reason the reserve's first move keeps its tools even when the allowance is
-// spent: it is asked for the one call the turn still needs.
+// Inside the reserve, the reserve's first move keeps its tools even when the
+// planning phase's allowance is spent: it is the one call the turn still needs.
 func toolDirectiveFor(st state) toolDirective {
 	switch {
 	case st.Reserve && reserveMovesSpent(st):
-		return toolDirective{instruction: reserveSpentInstruction, disableToolCalls: true}
+		return toolDirective{disableToolCalls: true}
 	case st.Reserve:
-		return toolDirective{instruction: reserveInstruction}
+		return toolDirective{}
 	case st.PlannerToolRounds >= plannerToolRoundsMax:
-		return toolDirective{instruction: plannerToolBudgetNotice, disableToolCalls: true}
+		return toolDirective{disableToolCalls: true}
 	default:
 		return toolDirective{}
 	}
 }
 
 // toolCallOptions is the generate option a planning or terminal call adds for
-// its toolDirective: tool calls disabled (tool_choice "none") when the call has
-// been told to make none, nothing otherwise.
+// its toolDirective: tool calls disabled (tool_choice "none") when the call may
+// make none, nothing otherwise.
 //
 // The tools stay declared on the request. Withholding them would change the tool
 // list, which invalidates the provider's cached prefix for the whole request (and
 // Claude rejects a history carrying thinking blocks under a different tool list);
-// changing tool_choice invalidates only the cached messages.
+// changing tool_choice invalidates neither.
 func toolCallOptions(st state) []agentkit.GenerateOption {
 	if !toolDirectiveFor(st).disableToolCalls {
 		return nil

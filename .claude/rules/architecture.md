@@ -885,31 +885,32 @@ both repeat on every retry, so a run that hits either produces nothing.
 1. **The call answering a tool round carries NOTHING ELSE.** Text sent with the
    results makes the provider stop recognising them as the answer to the model's
    call, so it reports the request as ending on the model turn. Whatever text was
-   waiting keeps waiting; anything that must reach the model NOW goes in the system
-   prompt for that call, which is rebuilt per call from the state. That is where
-   planexec's tool-allowance notice and react's budget notice live — the notices
-   fire exactly when a call is likely to be answering a tool round, which is why
-   they cannot be inputs — and it is also where planexec's FINAL prompt goes when
-   the terminal call answers one, since a budget notice can make that the only
-   terminal call the run ever makes. "Waiting keeps waiting" is only correct for
-   text a LATER call will send anyway; text that has no later call must be moved,
-   not dropped.
-   The notice has exactly ONE route: `plannerPrompt` puts it in the system prompt
-   of every planning and terminal call. Do not also prepend it to a user prompt —
-   that says it twice on the calls that send one, and silently drops it on the
-   calls that do not.
-   A notice that says "call no more tools" (planexec's tool-allowance notice, and
-   the reserve's second move in both strategies) is not carried by the prompt
-   alone: the same call is sent with tool calls disabled (`tool_choice: none`),
-   decided by the same function that picks the notice. The call answering the
-   tool round is usually the call this applies to, so such a request ends on the
-   tool results with `tool_choice: none`. gollem's live test
-   `TestSchemaCallAfterToolUseWithRealLLM` covers tool_use / tool_result history
-   plus disabled tool calls plus a response schema on Claude, Claude on Vertex AI,
-   OpenAI and Gemini, but there the request ends on a fresh user turn, not on the
-   tool results. Pinned by
+   waiting keeps waiting. The two strategies differ in what they do with text that
+   must reach the model NOW:
+   - **planexec sends no such text at all.** Its system prompt is fixed for the
+     whole run (`.claude/rules/planexec.md` § "One run sends ONE system prompt"),
+     because Claude checks a thinking block against the system prompt before it.
+     "Call no more tools" — past `plannerToolRoundsMax`, and on the reserve's
+     second move — is carried by `tool_choice: none` alone (`toolDirectiveFor`);
+     `reserveInstruction` rides on the terminal call's user turn when that call
+     sends one; and a terminal call continuing from a tool round sends no final
+     prompt, because every observation trail already reached the conversation as
+     a replan user turn and the output's shape is the response schema (`TextResult`'s
+     for a text host).
+   - **react** still rebuilds its system prompt per call and puts its budget
+     notice there; the notice fires exactly when a call is likely to be answering
+     a tool round, which is why it cannot be an input. Do not also prepend it to a
+     user prompt — that says it twice on the calls that send one, and silently
+     drops it on the calls that do not.
+   A call past a tool bound is sent with tool calls disabled (`tool_choice:
+   none`). The call answering the tool round is usually the call this applies
+   to, so such a request ends on the tool results with `tool_choice: none`.
+   gollem's live test `TestSchemaCallAfterToolUseWithRealLLM` covers tool_use /
+   tool_result history plus disabled tool calls plus a response schema on Claude,
+   Claude on Vertex AI, OpenAI and Gemini, but there the request ends on a fresh
+   user turn, not on the tool results. Pinned by
    `TestPlannerToolCallsAreAlwaysAnswered` and
-   `TestTerminalCallIsToldWhenItsToolAllowanceIsSpent` (planexec).
+   `TestTerminalCallPastItsToolAllowanceCannotCallTools` (planexec).
 2. **A call must never send an empty input UNLESS the conversation already answers
    the model's last turn.** gollem appends no user content for an empty input
    (`llm/gemini/client.go`, `len(parts) > 0`), so with nothing behind it the request
@@ -919,9 +920,10 @@ both repeat on every retry, so a run that hits either produces nothing.
    that, and fall back to a short continuation for every other case.
 
 Pinned by `TestAPlanningCallSendsOneWellFormedTurn`,
-`TestTheToolAllowanceIsToldInTheSystemPrompt`,
-`TestTerminalCallIsToldWhenItsToolAllowanceIsSpent`,
-`TestPlannerToolResultsReachTheTerminalCall` (planexec) and
+`TestTheToolAllowanceIsEnforcedByToolChoiceAlone`,
+`TestTerminalCallPastItsToolAllowanceCannotCallTools`,
+`TestPlannerToolResultsReachTheTerminalCall`,
+`TestOneRunSendsOneSystemPrompt` (planexec) and
 `TestBudgetNoticeReachesTheModel` (react). The clear-only-after-success half is
 pinned by `TestAnsweredToolCallsSurviveAFailedPlanningCall` (planexec) and
 `TestAnsweredToolCallsSurviveAFailedGenerate` (react), which fail the call that
@@ -982,14 +984,13 @@ Seven properties a change here must preserve:
   cache and rewrote the whole conversation (a production Job: 8 planner calls,
   `cache_read_input_tokens` stuck at the tools' 8,485, 25k–58k tokens written per
   call). In a user turn it is part of a conversation that only grows by appending,
-  so a falling allowance no longer changes the system prompt. What still changes
-  it, each a handful of times per run at most: the tool-allowance notice and the
-  reserve instructions `plannerPrompt` appends, the final prompt a terminal call
-  answering a tool round carries there (see `stepFinal`), and — for a Claude model
-  without structured outputs — the response schema gollem writes into the system
-  prompt, which differs between the plan and replan schemas. Pinned by
-  `TestConsecutivePlannerCallsShareOneSystemPrompt` and
-  `TestTheAllowanceIsToldInTheUserTurn`.
+  so a falling allowance no longer changes the system prompt. Nothing planexec
+  sends changes it within a run (§ "a parallel tool-call turn is answered in ONE
+  call"). What gollem itself still changes, for a Claude model without structured
+  outputs, is the response schema it writes into the system prompt, which differs
+  between the plan and replan schemas. Pinned by
+  `TestConsecutivePlannerCallsShareOneSystemPrompt`,
+  `TestOneRunSendsOneSystemPrompt` and `TestTheAllowanceIsToldInTheUserTurn`.
 - **A call continuing from answered tool calls is shown NO new figure, and is
   still validated against a fresh read.** It sends no user turn (§ "a parallel
   tool-call turn is answered in ONE call"), so the planner is reading the line of
@@ -1085,14 +1086,16 @@ Five consequences to keep in mind:
   the same instruction, arriving at the only moment such a run got. Pinned by
   `TestAnOverspentRunIsNeverStoppedByItsBudget` (budget) and
   `TestASpentBudgetWrapsTheRunUpInsteadOfFailingIt` (planexec).
-- **A Strategy that observes a notice makes two moves, and the instruction flips
-  between them.** The first says "THIS turn is your final tool call, do not write
-  your result yet"; the call carrying that tool's result says "call nothing more,
-  write your result now, briefly". Both `react` and `planexec` implement it, each
-  with its own wording (`reserveInstruction` / `reserveSpentInstruction`), because
-  one asks for an answer and the other for a terminal output. planexec also skips
-  further fan-out: `stepPlan` and `stepReplan` divert to `phaseFinal` at their top
-  without generating.
+- **A Strategy that observes a notice makes two moves.** The first says "THIS turn
+  is your final tool call, do not write your result yet"; the call after it may
+  call no more tools. `react` words both moves (`reserveInstruction` /
+  `reserveSpentInstruction`) in its system prompt. `planexec` words only the first
+  (`reserveInstruction`), on the terminal call's user turn, and only when that
+  call sends one — a terminal call continuing from a tool round is not told,
+  because its system prompt is fixed for the run; its second move is
+  `tool_choice: none` and nothing else. planexec also skips further fan-out:
+  `stepPlan` and `stepReplan` divert to `phaseFinal` at their top without
+  generating.
 
   Two properties a change here must preserve:
 
@@ -1106,24 +1109,23 @@ Five consequences to keep in mind:
     and a run with nothing left to call would spend the whole reserve being asked
     again. The second move is sent with tool calls disabled
     (`agentkit.WithLLMOptions(gollem.WithToolCallsDisabled())`, i.e.
-    `tool_choice: none`) as well as told to stop. Telling alone was not enough: a
-    model told to make no more calls went on calling tools, a side-effecting Slack
-    post among them, and the post ran. The tools stay declared on the request —
-    withholding them would change the tool list and invalidate the provider's
-    cached prefix — and the instruction and the option are decided together
-    (planexec `toolDirectiveFor`, react `reserveDirectiveFor`). A call a provider
+    `tool_choice: none`); react also tells it to stop. Telling alone was not
+    enough: a model told to make no more calls went on calling tools, a
+    side-effecting Slack post among them, and the post ran. The tools stay
+    declared on the request — withholding them would change the tool list and
+    invalidate the provider's cached prefix — and the option is decided in one
+    place (planexec `toolDirectiveFor`, react `reserveDirectiveFor`). A call a provider
     returns anyway is still run and answered, for the reason § "a parallel
     tool-call turn is answered in ONE call" gives. Pinned by
     `TestTheReserveFirstMoveIsANudgeNotAGate`,
     `TestTheReserveAllowsOneFinalToolCall` and
     `TestACallPastTheReserveBoundIsStillAnswered` (react), and
     `TestTheReserveAllowsATerminalToolCall` (planexec).
-- **The notice reaches the model through the SYSTEM prompt, never as an input** —
-  see § "a parallel tool-call turn is answered in ONE call" for why the call
-  answering a tool round sends no user turn to carry it. In planexec that route is
-  `plannerPrompt`, and the reserve instruction REPLACES the tool-allowance notice
-  there rather than joining it: the two would arrive together saying opposite
-  things.
+- **The notice never rides on a call answering a tool round** — see § "a
+  parallel tool-call turn is answered in ONE call" for why that call sends no
+  user turn. react carries it in its system prompt. planexec does not change its
+  system prompt within a run, so a planexec call answering a tool round is not
+  told at all, and the reserve's bound is enforced by `tool_choice: none`.
 - **A sub-agent's spend is charged to its parent as well as to itself.** A child
   gets its own Process and its own ceiling (the Task tier of
   `agentkernel.Budgets`), AND agentkit folds the finished child's whole `Metrics`

@@ -121,7 +121,7 @@ func (x *LLM) NewClientFor(ctx context.Context, def agentkernel.ModelDef) (golle
 			return nil, goerr.New("--llm-claude-api-key and --llm-gemini-project-id are mutually exclusive for a claude model",
 				goerr.V(LLMModelRefKey, def.Ref))
 		case hasAPIKey:
-			client, err := claude.New(ctx, x.claudeAPIKey, claude.WithModel(def.Model))
+			client, err := claude.New(ctx, x.claudeAPIKey, claudeAPIOptions(def)...)
 			if err != nil {
 				return nil, goerr.Wrap(err, "failed to create Claude client",
 					goerr.V(LLMModelRefKey, def.Ref))
@@ -133,7 +133,7 @@ func (x *LLM) NewClientFor(ctx context.Context, def agentkernel.ModelDef) (golle
 					goerr.V(LLMModelRefKey, def.Ref))
 			}
 			client, err := claude.NewWithVertex(ctx, x.geminiLocation, x.geminiProjectID,
-				claude.WithVertexModel(def.Model))
+				claudeVertexOptions(def)...)
 			if err != nil {
 				return nil, goerr.Wrap(err, "failed to create Claude (Vertex AI) client",
 					goerr.V(LLMModelRefKey, def.Ref))
@@ -163,4 +163,54 @@ func (x *LLM) NewClientFor(ctx context.Context, def agentkernel.ModelDef) (golle
 		return nil, goerr.New("unsupported model provider",
 			goerr.V(LLMModelRefKey, def.Ref), goerr.V("provider", def.Provider))
 	}
+}
+
+// claudeReasoning is what a claude client sends as thinking and
+// output_config.effort. It is decided once, by claudeReasoningOf, so the
+// Anthropic API client and the Vertex AI client cannot disagree about it.
+type claudeReasoning struct {
+	// adaptive sends thinking.type "adaptive"; false sends no thinking.
+	adaptive bool
+	// display is sent as thinking.display; empty sends none.
+	display claude.ThinkingDisplay
+	// effort is sent as output_config.effort; empty sends none.
+	effort claude.Effort
+}
+
+// claudeReasoningOf reads a definition's thinking settings. A setting the
+// definition leaves empty stays empty, so the request carries no such field and
+// the model default applies.
+func claudeReasoningOf(def agentkernel.ModelDef) claudeReasoning {
+	return claudeReasoning{
+		adaptive: def.Thinking == agentkernel.ThinkingAdaptive,
+		display:  claude.ThinkingDisplay(def.ThinkingDisplay),
+		effort:   claude.Effort(def.Effort),
+	}
+}
+
+// claudeAPIOptions builds the options of a claude model reached through
+// Anthropic directly.
+func claudeAPIOptions(def agentkernel.ModelDef) []claude.Option {
+	r := claudeReasoningOf(def)
+	opts := []claude.Option{claude.WithModel(def.Model)}
+	if r.adaptive {
+		opts = append(opts, claude.WithAdaptiveThinking(r.display))
+	}
+	if r.effort != "" {
+		opts = append(opts, claude.WithEffort(r.effort))
+	}
+	return opts
+}
+
+// claudeVertexOptions is claudeAPIOptions for a claude model on Vertex AI.
+func claudeVertexOptions(def agentkernel.ModelDef) []claude.VertexOption {
+	r := claudeReasoningOf(def)
+	opts := []claude.VertexOption{claude.WithVertexModel(def.Model)}
+	if r.adaptive {
+		opts = append(opts, claude.WithVertexAdaptiveThinking(r.display))
+	}
+	if r.effort != "" {
+		opts = append(opts, claude.WithVertexEffort(r.effort))
+	}
+	return opts
 }

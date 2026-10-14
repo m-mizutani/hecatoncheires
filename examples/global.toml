@@ -55,6 +55,16 @@ input_usd_per_mtok       = 5.0
 output_usd_per_mtok      = 25.0
 cache_read_usd_per_mtok  = 0.5
 cache_write_usd_per_mtok = 6.25
+# Optional, claude only. Each is sent on every request to this model, and a key
+# left out is not sent at all, so the model default applies. Which values a
+# model accepts is the API's decision: an unsupported one makes every request
+# fail with a 400 from the API.
+#   thinking         = "adaptive"                    -> thinking.type
+#   thinking_display = "summarized" | "omitted"      -> thinking.display (needs thinking)
+#   effort           = "low" | "medium" | "high" | "xhigh" | "max" -> output_config.effort
+thinking                 = "adaptive"
+thinking_display         = "summarized"
+effort                   = "high"
 
 [[llm_model]]
 # An alias lets a Job ask for "cheap" and lets you change what that means later
