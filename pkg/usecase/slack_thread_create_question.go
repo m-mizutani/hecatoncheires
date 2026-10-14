@@ -205,6 +205,7 @@ func (uc *AgentUseCase) HandleThreadCaseQuestionSubmit(ctx context.Context, call
 		return nil
 	}
 	wsID := entry.Workspace.ID
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 
 	allowed, err := authorizeSlackActor(ctx, uc.workspaceAccess(), uc.deps.SlackService, wsID, callback.User.ID, uiChannel)
 	if err != nil {

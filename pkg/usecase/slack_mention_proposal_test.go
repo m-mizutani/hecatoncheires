@@ -369,6 +369,82 @@ func TestMentionDraftUseCase_BusySecondMentionKeepsTheLiveRunsDraft(t *testing.T
 	gt.String(t, live.MentionText).Contains("please open a case")
 }
 
+// A draft turn has no workspace until its run picks one, so the first mention's
+// turn keeps the user's locale even when the only workspace configures another
+// language. Once a draft names its workspace, a reply's turn follows that
+// workspace's language instead.
+func TestMentionDraftUseCase_TurnLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	userCtx := i18n.ContextWithLang(context.Background(), i18n.LangEN)
+
+	newDraftEnv := func(t *testing.T) (*usecase.MentionProposalUseCase, *memory.Memory, agentkernel.Locator, *agentkit.Kernel) {
+		t.Helper()
+		repo := memory.New()
+		registry := model.NewWorkspaceRegistry()
+		registry.Register(&model.WorkspaceEntry{
+			Workspace: model.Workspace{ID: "ws-ja", Name: "JA"}, FieldSchema: schemaWithSeverity(), Language: i18n.LangJA,
+		})
+		slackMock := newCollectorOnlyMockSlack()
+		uc := usecase.NewMentionProposalUseCase(repo, registry, slackMock)
+		locator, k := bindDraftRuntimeWithoutWorker(t, uc, repo, registry, newScriptedClient(nil), slackMock)
+		return uc, repo, locator, k
+	}
+	turnOf := func(t *testing.T, locator agentkernel.Locator, k *agentkit.Kernel, channelID, threadTS, triggerTS string) spawnedTurn {
+		t.Helper()
+		pid, err := locator.ByTrigger(context.Background(), agentkernel.TriggerKey(channelID, threadTS, triggerTS))
+		gt.NoError(t, err).Required()
+		gt.String(t, string(pid)).NotEqual("").Required()
+		proc, err := k.GetProcess(context.Background(), pid)
+		gt.NoError(t, err).Required()
+		var state struct {
+			Input struct {
+				LanguageLabel string `json:"language_label"`
+			} `json:"input"`
+		}
+		gt.NoError(t, json.Unmarshal(proc.State, &state)).Required()
+		return spawnedTurn{Scope: agentkernel.ScopeFrom(proc.Metadata), LanguageLabel: state.Input.LanguageLabel}
+	}
+
+	t.Run("first mention keeps the user's locale", func(t *testing.T) {
+		uc, _, locator, k := newDraftEnv(t)
+		const ts = "1700000010.000000"
+		gt.NoError(t, uc.HandleAppMention(userCtx, &slackevents.AppMentionEvent{
+			Channel: "C-USER", User: "U-USER", Text: "<@BOT> please open a case", TimeStamp: ts,
+		})).Required()
+
+		turn := turnOf(t, locator, k, "C-USER", ts, ts)
+		gt.String(t, turn.Scope.Lang).Equal("en")
+		gt.String(t, turn.LanguageLabel).Equal("English")
+	})
+
+	t.Run("reply to a draft that names its workspace follows that workspace", func(t *testing.T) {
+		uc, repo, locator, k := newDraftEnv(t)
+		ctx := context.Background()
+		d := model.NewCaseProposal(time.Now().UTC(), "U-USER")
+		d.SelectedWorkspaceID = "ws-ja"
+		gt.NoError(t, repo.CaseProposal().Save(ctx, d)).Required()
+		const threadTS = "1700000020.000000"
+		gt.NoError(t, repo.Session().Put(ctx, &model.Session{
+			ID:            "s-draft-lang",
+			ChannelID:     "C-USER",
+			ThreadTS:      threadTS,
+			CreatorUserID: "U-USER",
+			ProposalID:    d.ID,
+			CreatedAt:     time.Now().UTC(),
+			UpdatedAt:     time.Now().UTC(),
+		})).Required()
+
+		const replyTS = "1700000030.000000"
+		gt.NoError(t, uc.HandleThreadReply(userCtx, &slackevents.MessageEvent{
+			Channel: "C-USER", User: "U-USER", Text: "it is the login page", TimeStamp: replyTS, ThreadTimeStamp: threadTS,
+		})).Required()
+
+		turn := turnOf(t, locator, k, "C-USER", threadTS, replyTS)
+		gt.String(t, turn.Scope.Lang).Equal("ja")
+		gt.String(t, turn.LanguageLabel).Equal("Japanese")
+	})
+}
+
 // containsActionBlock reports whether the block slice contains an
 // ActionBlock — used by tests to identify the preview post (which is the
 // only block sequence in this flow that carries Submit/Edit/Cancel
@@ -576,6 +652,7 @@ type dispatcherFixture struct {
 	uc              *usecase.SlackUseCases
 	mentionProposal *usecase.MentionProposalUseCase
 	repo            interfaces.Repository
+	registry        *model.WorkspaceRegistry
 	slackMock       *collectorOnlyMockSlack
 	locator         agentkernel.Locator
 	channelID       string
@@ -622,7 +699,7 @@ func newDispatcherWithOpenSession(t *testing.T, channelID, threadTS string, last
 	})).Required()
 
 	return &dispatcherFixture{
-		uc: slackUC, mentionProposal: mentionProposal, repo: repo, slackMock: slackMock, locator: locator,
+		uc: slackUC, mentionProposal: mentionProposal, repo: repo, registry: registry, slackMock: slackMock, locator: locator,
 		channelID: channelID, threadTS: threadTS,
 	}
 }

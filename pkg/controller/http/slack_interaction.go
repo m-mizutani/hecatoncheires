@@ -107,7 +107,7 @@ func (h *SlackInteractionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			async.Dispatch(ctx, func(ctx context.Context) error {
 				if _, err := h.actionUC.UpdateAction(ctx, workspaceID, input); err != nil {
 					if errors.Is(err, model.ErrWorkspaceAccessDenied) {
-						h.slackUC.NotifyWorkspaceAccessDenied(ctx, cb.Channel.ID, cb.User.ID, err)
+						h.slackUC.NotifyWorkspaceAccessDenied(ctx, workspaceID, cb.Channel.ID, cb.User.ID, err)
 						return nil
 					}
 					return goerr.Wrap(err, "failed to update action status from Slack",
@@ -138,7 +138,7 @@ func (h *SlackInteractionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			async.Dispatch(ctx, func(ctx context.Context) error {
 				if _, err := h.actionUC.UpdateAction(ctx, workspaceID, input); err != nil {
 					if errors.Is(err, model.ErrWorkspaceAccessDenied) {
-						h.slackUC.NotifyWorkspaceAccessDenied(ctx, cb.Channel.ID, cb.User.ID, err)
+						h.slackUC.NotifyWorkspaceAccessDenied(ctx, workspaceID, cb.Channel.ID, cb.User.ID, err)
 						return nil
 					}
 					return goerr.Wrap(err, "failed to update action assignee from Slack",
@@ -159,7 +159,11 @@ func (h *SlackInteractionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			}
 			switch actionType {
 			case usecase.SlackAgentActionShowSessionInfo:
-				if err := h.agentUC.HandleSessionInfoRequest(ctx, callback.TriggerID, data); err != nil {
+				threadTS := callback.Message.ThreadTimestamp
+				if threadTS == "" {
+					threadTS = callback.Message.Timestamp
+				}
+				if err := h.agentUC.HandleSessionInfoRequest(ctx, callback.TriggerID, data, callback.Channel.ID, threadTS); err != nil {
 					errutil.Handle(ctx, goerr.Wrap(err, "failed to handle session info request", goerr.V("session_id", data)), "failed to handle session info request")
 				}
 			}

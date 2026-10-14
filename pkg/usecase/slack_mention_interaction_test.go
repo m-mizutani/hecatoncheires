@@ -13,6 +13,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 	goslack "github.com/slack-go/slack"
@@ -67,6 +68,44 @@ func TestHandleCancel_DeletesDraftAndEphemeral(t *testing.T) {
 	gt.Bool(t, (*captured)[0]["replace_original"] == true).True()
 	textVal, _ := (*captured)[0]["text"].(string)
 	gt.String(t, textVal).Contains("Case draft canceled")
+}
+
+// The canceled notice follows the language of the workspace the draft already
+// names; a draft that names none keeps the deployment default.
+func TestHandleCancel_FollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	ctx := context.Background()
+
+	cancelText := func(t *testing.T, wsLang i18n.Lang, selected string) string {
+		t.Helper()
+		repo := memory.New()
+		registry := model.NewWorkspaceRegistry()
+		registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: "ws-1", Name: "ws"}, FieldSchema: &config.FieldSchema{}, Language: wsLang})
+		uc := usecase.NewMentionProposalUseCase(repo, registry, newCollectorOnlyMockSlack())
+
+		d := model.NewCaseProposal(time.Now().UTC(), "U1")
+		d.SelectedWorkspaceID = selected
+		gt.NoError(t, repo.CaseProposal().Save(ctx, d)).Required()
+
+		respURL, captured := captureResponseURL(t)
+		cb := &goslack.InteractionCallback{
+			Type:        goslack.InteractionTypeBlockActions,
+			ResponseURL: respURL,
+			ActionCallback: goslack.ActionCallbacks{
+				BlockActions: []*goslack.BlockAction{{ActionID: usecase.ActionIDDraftCancel, Value: string(d.ID)}},
+			},
+		}
+		gt.NoError(t, uc.HandleCancel(ctx, cb, cb.ActionCallback.BlockActions[0])).Required()
+		gt.Number(t, len(*captured)).GreaterOrEqual(1).Required()
+		text, _ := (*captured)[0]["text"].(string)
+		return text
+	}
+
+	jaText := i18n.T(i18n.ContextWithLang(ctx, i18n.LangJA), i18n.MsgMentionCanceledFallback)
+	enText := i18n.T(i18n.ContextWithLang(ctx, i18n.LangEN), i18n.MsgMentionCanceledFallback)
+	gt.String(t, cancelText(t, i18n.LangJA, "ws-1")).Equal(jaText)
+	gt.String(t, cancelText(t, i18n.LangJA, "")).Equal(enText)
+	gt.String(t, cancelText(t, "", "ws-1")).Equal(enText)
 }
 
 func TestHandleSelectWorkspace_LocksFirstThenUpdates(t *testing.T) {

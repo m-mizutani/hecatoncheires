@@ -120,7 +120,7 @@ func TestCaseMultiCaseAdapter_AssignCase_PrivateCaseAccess(t *testing.T) {
 func TestNewCaseMultiActionAdapter_NilUseCase(t *testing.T) {
 	repo := memory.New()
 	actionUC := usecase.NewActionUseCase(repo, nil, nil, "", nil)
-	stepUC := usecase.NewActionStepUseCase(repo, nil, nil)
+	stepUC := usecase.NewActionStepUseCase(repo, nil, nil, nil)
 
 	gt.Value(t, usecase.NewCaseMultiActionAdapter(nil, nil)).Nil()
 	gt.Value(t, usecase.NewCaseMultiActionAdapter(actionUC, nil)).Nil()
@@ -146,7 +146,7 @@ func newCasemultiActionFixture(t *testing.T) *casemultiActionFixture {
 	repo := memory.New()
 	caseUC := usecase.NewCaseUseCase(repo, nil, nil, nil, "")
 	actionUC := usecase.NewActionUseCase(repo, nil, nil, "", nil)
-	stepUC := usecase.NewActionStepUseCase(repo, nil, nil)
+	stepUC := usecase.NewActionStepUseCase(repo, nil, nil, nil)
 
 	// Case creation needs a reporter (channel-mode Case), so the setup runs
 	// under an authenticated ctx. The actual adapter calls under test use

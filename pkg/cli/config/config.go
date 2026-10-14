@@ -17,6 +17,7 @@ import (
 	domainConfig "github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/urfave/cli/v3"
@@ -79,12 +80,25 @@ type WorkspaceBaseConfig struct {
 	// Color is an optional #RRGGBB hex used as the workspace badge background.
 	// Mutually exclusive with Emoji. Empty when unset.
 	Color string `toml:"color"`
+	// Language is the workspace's output language ("en" or "ja"). It takes
+	// priority over each Slack user's locale. Empty when unset.
+	Language string `toml:"language"`
 }
 
-// Validate checks the optional emoji/color fields of the [workspace] section.
-// emoji and color are mutually exclusive; color must be a #RRGGBB hex code;
-// emoji must not exceed maxWorkspaceEmojiRunes runes.
+// Validate checks the optional emoji/color/language fields of the [workspace]
+// section. emoji and color are mutually exclusive; color must be a #RRGGBB hex
+// code; emoji must not exceed maxWorkspaceEmojiRunes runes; language must be a
+// supported language code.
 func (w *WorkspaceBaseConfig) Validate() error {
+	if w.Language != "" {
+		if _, err := i18n.ParseLang(w.Language); err != nil {
+			return goerr.Wrap(ErrInvalidWorkspaceLanguage,
+				"workspace language must be one of: en, ja",
+				goerr.V(WorkspaceIDKey, w.ID),
+				goerr.V(WorkspaceLangKey, w.Language),
+			)
+		}
+	}
 	if w.Emoji != "" && w.Color != "" {
 		return goerr.Wrap(ErrWorkspaceEmojiColorConflict,
 			"workspace emoji and color cannot both be set",
@@ -291,6 +305,8 @@ type WorkspaceConfig struct {
 	CompilePrompt        string
 	AssistPrompt         string
 	AssistLanguage       string
+	// Language is the validated [workspace] language; empty when unset.
+	Language i18n.Lang
 	// CaseCreatePrompt is the workspace-specific additional prompt for the
 	// thread-mode case initialization agent, from [case.prompts].create.
 	CaseCreatePrompt    string
@@ -1009,6 +1025,7 @@ func parseWorkspaceConfig(src WorkspaceConfigSource) (*WorkspaceConfig, error) {
 		CompilePrompt:        appCfg.Compile.Prompt,
 		AssistPrompt:         appCfg.Assist.Prompt,
 		AssistLanguage:       appCfg.Assist.Language,
+		Language:             i18n.Lang(appCfg.Workspace.Language),
 		CaseCreatePrompt:     caseCreatePrompt,
 		Jobs:                 jobs,
 		CaseMode:             caseMode,
@@ -1094,6 +1111,7 @@ func BuildWorkspaceRegistry(workspaceConfigs []*WorkspaceConfig) *model.Workspac
 			CompilePrompt:           wc.CompilePrompt,
 			AssistPrompt:            wc.AssistPrompt,
 			AssistLanguage:          wc.AssistLanguage,
+			Language:                wc.Language,
 			CaseCreatePrompt:        wc.CaseCreatePrompt,
 			Jobs:                    wc.Jobs,
 			CaseMode:                wc.CaseMode,

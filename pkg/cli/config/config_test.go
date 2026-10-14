@@ -12,6 +12,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 	domainConfig "github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 )
 
 func TestLoadFieldSchema(t *testing.T) {
@@ -1486,6 +1487,46 @@ color = "#fff"
 	_, err := config.LoadWorkspaceConfigs([]string{configPath})
 	gt.Value(t, err).NotNil()
 	gt.Error(t, err).Is(config.ErrInvalidWorkspaceColor)
+}
+
+func TestLoadWorkspaceConfigs_Language(t *testing.T) {
+	load := func(t *testing.T, languageLine string) ([]*config.WorkspaceConfig, error) {
+		t.Helper()
+		configPath := filepath.Join(t.TempDir(), "risk.toml")
+		content := "[workspace]\nid = \"risk\"\nname = \"Risk Management\"\n" + languageLine + "\n"
+		gt.NoError(t, os.WriteFile(configPath, []byte(content), 0644)).Required()
+		return config.LoadWorkspaceConfigs([]string{configPath})
+	}
+
+	for _, tc := range []struct {
+		name string
+		line string
+		want i18n.Lang
+	}{
+		{name: "ja", line: `language = "ja"`, want: i18n.LangJA},
+		{name: "en", line: `language = "en"`, want: i18n.LangEN},
+		{name: "omitted", line: "", want: ""},
+		{name: "empty string", line: `language = ""`, want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfgs, err := load(t, tc.line)
+			gt.NoError(t, err).Required()
+			gt.Array(t, cfgs).Length(1).Required()
+			gt.Value(t, cfgs[0].Language).Equal(tc.want)
+
+			registry := config.BuildWorkspaceRegistry(cfgs)
+			entry, err := registry.Get("risk")
+			gt.NoError(t, err).Required()
+			gt.Value(t, entry.Language).Equal(tc.want)
+		})
+	}
+
+	for _, invalid := range []string{"Japanese", "fr", "JA", "ja-JP", " "} {
+		t.Run("rejects "+invalid, func(t *testing.T) {
+			_, err := load(t, `language = "`+invalid+`"`)
+			gt.Error(t, err).Is(config.ErrInvalidWorkspaceLanguage)
+		})
+	}
 }
 
 func TestLoadWorkspaceConfigs_EmojiTooLong(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 
 	agentkernel "github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/job"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
@@ -148,6 +149,120 @@ func TestDurableRuntime_SpawnCarriesTheJobsModelAndBudget(t *testing.T) {
 	plain := scopeOf(withoutModel)
 	gt.String(t, plain.LLMModel).Equal("")
 	gt.Value(t, plain.Budget).Equal(pricing.NanoUSD(0))
+}
+
+// A durable Job run carries the workspace language on its own metadata and in the
+// planner's language directive, and its completion marker follows it. A
+// workspace that configures no language leaves both empty, so the run keeps the
+// deployment default and a prompt with no language directive, as before.
+func TestDurableRuntime_RunFollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name      string
+		wsLang    i18n.Lang
+		wantLang  string
+		wantLabel string
+		wantDone  string
+	}{
+		{
+			name: "workspace ja", wsLang: i18n.LangJA, wantLang: "ja", wantLabel: "Japanese",
+			wantDone: i18n.T(i18n.ContextWithLang(ctx, i18n.LangJA), i18n.MsgJobRunCompleted, "triage"),
+		},
+		{
+			name: "workspace unset", wsLang: "", wantLang: "", wantLabel: "",
+			wantDone: i18n.T(i18n.ContextWithLang(ctx, i18n.LangEN), i18n.MsgJobRunCompleted, "triage"),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo, c := setupCaseWithSlack(t, "ws", "C1", "")
+			registry := model.NewWorkspaceRegistry()
+			j := &model.Job{
+				ID:       "triage",
+				Prompt:   "summarise the case",
+				Strategy: model.JobStrategyPlanexec,
+				Events:   model.JobEvents{Scheduled: &model.ScheduledEventConfig{Every: time.Hour}},
+			}
+			registry.Register(&model.WorkspaceEntry{
+				Workspace: model.Workspace{ID: "ws"},
+				Jobs:      []*model.Job{j},
+				Language:  tc.wsLang,
+			})
+
+			llm := singleReplyLLM("the case looks fine", 120, 34)
+			fake := &fakeNotifier{rootTS: "root-123"}
+			durable := &job.DurableRuntime{History: agentarchive.NewMemoryHistoryStore()}
+			runner := job.NewJobRunner(job.RunnerDeps{
+				Repo: repo, Registry: registry, LLMClient: llm, Durable: durable,
+				SlackNotifier: fake,
+			})
+			k := bindDurableJobRuntime(t, runner, durable, repo, registry, llm)
+			durable.TrackSpawns()
+
+			gt.NoError(t, runner.Run(ctx, j, job.Event{
+				Domain: model.JobEventDomainScheduled, WorkspaceID: "ws", CaseID: c.ID,
+				Timestamp: time.Now().UTC(),
+			})).Required()
+
+			busy, err := durable.Locator.Busy(ctx, agentkernel.JobRunSubject("ws", c.ID, j.ID))
+			gt.NoError(t, err).Required()
+			gt.Value(t, busy).NotNil().Required()
+			proc, err := k.GetProcess(ctx, busy.ProcessID)
+			gt.NoError(t, err).Required()
+			gt.String(t, agentkernel.ScopeFrom(proc.Metadata).Lang).Equal(tc.wantLang)
+
+			var spawned struct {
+				Input struct {
+					LanguageLabel string `json:"language_label"`
+				} `json:"input"`
+			}
+			gt.NoError(t, json.Unmarshal(proc.State, &spawned)).Required()
+			gt.String(t, spawned.Input.LanguageLabel).Equal(tc.wantLabel)
+
+			gt.NoError(t, durable.Drain(ctx)).Required()
+			calls := fake.snapshot()
+			gt.Array(t, calls).Length(2).Required()
+			gt.String(t, calls[1].text).Equal(tc.wantDone)
+		})
+	}
+
+	// The completion marker follows the language the run was spawned with, even
+	// if the configuration loaded when it finishes says otherwise.
+	t.Run("configuration changed while the run was in flight", func(t *testing.T) {
+		repo, c := setupCaseWithSlack(t, "ws", "C1", "")
+		registry := model.NewWorkspaceRegistry()
+		j := &model.Job{
+			ID:     "triage",
+			Prompt: "summarise the case",
+			Events: model.JobEvents{Scheduled: &model.ScheduledEventConfig{Every: time.Hour}},
+		}
+		entry := &model.WorkspaceEntry{Workspace: model.Workspace{ID: "ws"}, Jobs: []*model.Job{j}, Language: i18n.LangJA}
+		registry.Register(entry)
+
+		llm := singleReplyLLM("the case looks fine", 120, 34)
+		fake := &fakeNotifier{rootTS: "root-123"}
+		durable := &job.DurableRuntime{History: agentarchive.NewMemoryHistoryStore()}
+		runner := job.NewJobRunner(job.RunnerDeps{
+			Repo: repo, Registry: registry, LLMClient: llm, Durable: durable,
+			SlackNotifier: fake,
+		})
+		bindDurableJobRuntime(t, runner, durable, repo, registry, llm)
+		durable.TrackSpawns()
+
+		gt.NoError(t, runner.Run(ctx, j, job.Event{
+			Domain: model.JobEventDomainScheduled, WorkspaceID: "ws", CaseID: c.ID,
+			Timestamp: time.Now().UTC(),
+		})).Required()
+		entry.Language = ""
+		gt.NoError(t, durable.Drain(ctx)).Required()
+
+		jaCtx := i18n.ContextWithLang(ctx, i18n.LangJA)
+		calls := fake.snapshot()
+		gt.Array(t, calls).Length(2).Required()
+		gt.String(t, calls[0].text).Equal(i18n.T(jaCtx, i18n.MsgJobRunStarting, "triage"))
+		gt.String(t, calls[1].text).Equal(i18n.T(jaCtx, i18n.MsgJobRunCompleted, "triage"))
+	})
 }
 
 // The run's start time must reach the sub-agents, not only the planner's system

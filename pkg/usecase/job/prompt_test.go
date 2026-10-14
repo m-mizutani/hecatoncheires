@@ -14,6 +14,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/slack"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/job"
 )
 
@@ -150,6 +151,34 @@ func TestBuildSystemPrompt_SlackFormat(t *testing.T) {
 			mustNotContain(t, got, "{{")
 		})
 	}
+}
+
+// A workspace that fixes its language tells the Job agent so, on both the simple
+// strategy (which has no other language directive) and planexec; a workspace with
+// none adds no instruction.
+func TestBuildSystemPrompt_WorkspaceLanguage(t *testing.T) {
+	j := &model.Job{
+		ID:     "summarize",
+		Prompt: "x",
+		Events: model.JobEvents{Scheduled: &model.ScheduledEventConfig{Every: time.Hour}},
+	}
+	ev := job.Event{
+		Domain:      model.JobEventDomainScheduled,
+		WorkspaceID: "ws",
+		CaseID:      42,
+		Timestamp:   time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC),
+	}
+	const directive = "in **Japanese**. This workspace fixes its language."
+
+	ja := newWorkspace("ws", "WS")
+	ja.Language = i18n.LangJA
+	got, err := job.BuildSystemPrompt(job.PromptInputs{Job: j, Workspace: ja, Case: newCase(42), Event: ev})
+	gt.NoError(t, err).Required()
+	mustContain(t, got, directive)
+
+	got, err = job.BuildSystemPrompt(job.PromptInputs{Job: j, Workspace: newWorkspace("ws", "WS"), Case: newCase(42), Event: ev})
+	gt.NoError(t, err).Required()
+	mustNotContain(t, got, "This workspace fixes its language.")
 }
 
 func TestBuildSystemPrompt_SlackThreadTS(t *testing.T) {

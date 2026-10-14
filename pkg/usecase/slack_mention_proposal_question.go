@@ -436,6 +436,20 @@ func (uc *MentionProposalUseCase) HandleQuestionSubmit(ctx context.Context, call
 		return nil
 	}
 
+	// Loaded before anything is posted: a draft that already names its
+	// workspace answers — the unanswered-items notice included — in that
+	// workspace's language.
+	var d *model.CaseProposal
+	if session.ProposalID != "" {
+		d, err = uc.repo.CaseProposal().Get(ctx, session.ProposalID)
+		if err != nil {
+			errutil.Handle(ctx, err, "thread-reply: failed to load draft; continuing without it")
+		}
+	}
+	if d != nil {
+		ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(d.SelectedWorkspaceID))
+	}
+
 	// Decided before the form is consumed: an answer from a user no workspace
 	// allows must leave the question open, not rewrite the form and clear the
 	// pending snapshot only for runDraftTurn to refuse the turn afterwards.
@@ -491,14 +505,6 @@ func (uc *MentionProposalUseCase) HandleQuestionSubmit(ctx context.Context, call
 	if err := uc.repo.Session().SetPendingQuestion(ctx,
 		session.ChannelID, session.ThreadTS, nil); err != nil {
 		errutil.Handle(ctx, err, "clear PendingQuestion before resuming planner")
-	}
-
-	var d *model.CaseProposal
-	if session.ProposalID != "" {
-		d, err = uc.repo.CaseProposal().Get(ctx, session.ProposalID)
-		if err != nil {
-			errutil.Handle(ctx, err, "thread-reply: failed to load draft; continuing without it")
-		}
 	}
 
 	userInput := formatDraftQuestionAnswers(pq, answers)

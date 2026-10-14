@@ -483,6 +483,9 @@ func (d *Durable) deliver(ctx context.Context, target Target, draft *Draft) {
 		d.endSession(ctx, target, model.SessionEndedWithMaterialize)
 		return
 	}
+	// The run picked its workspace only now, so the preview is the first output
+	// that can follow that workspace's language.
+	ctx = i18n.ContextWithWorkspaceLang(ctx, d.registry.Language(draft.WorkspaceID))
 	if err := d.host.Propose(ctx, target, MaterializePayload{
 		WorkspaceID: draft.WorkspaceID,
 		Title:       draft.Title,

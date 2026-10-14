@@ -22,6 +22,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/casebound"
@@ -526,6 +527,29 @@ func TestBuildSystemPrompt_SlackFormatSurvivesWithoutWorkspaceEntry(t *testing.T
 
 	gt.Bool(t, strings.HasPrefix(prompt, "You are an AI assistant. Case:")).False()
 	gt.String(t, prompt).Contains(slackfmt.Section())
+}
+
+// A workspace that fixes its language overrides the "answer in the user's
+// language" instruction; without one that instruction stays.
+func TestBuildSystemPrompt_Language(t *testing.T) {
+	c := &model.Case{Title: "Test Case", Status: types.CaseStatusOpen}
+	now := time.Date(2026, 5, 4, 12, 30, 0, 0, time.UTC)
+	const userLanguage = "Respond in the same language as the user's message."
+
+	ja := casebound.BuildSystemPromptForTest(c, &model.WorkspaceEntry{
+		Workspace: model.Workspace{ID: "ws-ja"}, Language: i18n.LangJA,
+	}, "C0123ABC", "1700000000.000100", now, nil, nil, nil)
+	gt.String(t, ja).Contains("Respond in **Japanese**, whatever language the user's message is written in.")
+	gt.Bool(t, strings.Contains(ja, userLanguage)).False()
+
+	unset := casebound.BuildSystemPromptForTest(c, &model.WorkspaceEntry{
+		Workspace: model.Workspace{ID: "ws-unset"},
+	}, "C0123ABC", "1700000000.000100", now, nil, nil, nil)
+	gt.String(t, unset).Contains(userLanguage)
+	gt.Bool(t, strings.Contains(unset, "Respond in **")).False()
+
+	noEntry := casebound.BuildSystemPromptForTest(c, nil, "C0123ABC", "1700000000.000100", now, nil, nil, nil)
+	gt.String(t, noEntry).Contains(userLanguage)
 }
 
 func TestBuildSystemPrompt_ChannelIDAndTime(t *testing.T) {

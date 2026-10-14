@@ -397,6 +397,11 @@ func (uc *MentionProposalUseCase) HandleThreadReply(ctx context.Context, ev *sla
 			errutil.Handle(ctx, err, "thread-reply: failed to load draft; continuing without it")
 		}
 	}
+	// A draft that already names its workspace answers in that workspace's
+	// language; one that does not keeps the replying user's locale.
+	if d != nil {
+		ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(d.SelectedWorkspaceID))
+	}
 
 	// This reply answers a question (the dispatcher only resumes on one), so the
 	// turn continues the conversation of the run that asked. Without it the reply

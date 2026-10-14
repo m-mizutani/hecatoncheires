@@ -573,6 +573,7 @@ func (uc *CaseUseCase) openInWorkspaceMode(ctx context.Context, workspaceID stri
 // and any failure note on one Slack backend and removes the hidden cross-object
 // dependency (and nil-panic) a bound method would create.
 func postMonitoredThreadAnchor(ctx context.Context, svc slack.Service, entry *model.WorkspaceEntry) (string, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 	dest := entry.SlackMonitorChannelID
 	rootTS, err := svc.PostMessage(ctx, dest, nil, i18n.T(ctx, i18n.MsgReactionCasePlaceholder))
 	if err != nil {
@@ -591,6 +592,7 @@ func postMonitoredThreadAnchor(ctx context.Context, svc slack.Service, entry *mo
 // non-fatal. The Slack service is passed explicitly for the same reason as
 // postMonitoredThreadAnchor.
 func failMonitoredThreadAnchor(ctx context.Context, svc slack.Service, entry *model.WorkspaceEntry, rootTS string) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 	dest := entry.SlackMonitorChannelID
 	failNote := "⚠️ " + i18n.T(ctx, i18n.MsgThreadCaseCreateFallback)
 	if uErr := svc.UpdateMessage(ctx, dest, rootTS, nil, failNote); uErr != nil {
@@ -610,6 +612,7 @@ func failMonitoredThreadAnchor(ctx context.Context, svc slack.Service, entry *mo
 // delegated to the shared funnel openInWorkspaceMode so every OPEN-case path
 // honours the same invariant.
 func (uc *CaseUseCase) CreateCase(ctx context.Context, workspaceID string, title, description string, assigneeIDs []string, fieldValues map[string]model.FieldValue, isPrivate bool, isTest bool, sourceTeamID string, requestKey string) (*model.Case, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.workspaceRegistry.Language(workspaceID))
 	return uc.openInWorkspaceMode(ctx, workspaceID, isPrivate, openProducers{
 		Channel: func(ctx context.Context, entry *model.WorkspaceEntry) (*model.Case, error) {
 			return uc.createChannelModeCase(ctx, workspaceID, entry, title, description, assigneeIDs, fieldValues, isPrivate, isTest, sourceTeamID, requestKey)
@@ -887,6 +890,7 @@ func (uc *CaseUseCase) persistCase(ctx context.Context, workspaceID string, in p
 // mis-routed thread-mode case never reaches CreateChannel — the only place a
 // dedicated channel is provisioned.
 func (uc *CaseUseCase) activateChannelModeCase(ctx context.Context, workspaceID string, entry *model.WorkspaceEntry, c *model.Case, sourceTeamID string) (*model.Case, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.workspaceRegistry.Language(workspaceID))
 	if uc.slackService == nil {
 		return c, nil
 	}
@@ -1011,6 +1015,7 @@ type CaseUpdate struct {
 }
 
 func (uc *CaseUseCase) UpdateCase(ctx context.Context, workspaceID string, id int64, patch CaseUpdate) (*model.Case, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.workspaceRegistry.Language(workspaceID))
 	// Load with the shared write access gate (draft-aware: private drafts fall
 	// back to a reporter check since they have no Slack channel yet). The loaded
 	// Case is preserved verbatim except for the fields the caller touches below.
@@ -1113,6 +1118,7 @@ func (uc *CaseUseCase) UpdateCase(ctx context.Context, workspaceID string, id in
 // assignees must resolve to known Slack users. An empty userIDs slice is a
 // no-op that returns the case unchanged.
 func (uc *CaseUseCase) AssignCase(ctx context.Context, workspaceID string, id int64, userIDs []string) (*model.Case, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.workspaceRegistry.Language(workspaceID))
 	// Fail fast through the shared read gate: it is what turns a missing case
 	// into ErrCaseNotFound and a private case into ErrAccessDenied, which
 	// callers (GraphQL error mapping, agent tools) discriminate on. The
@@ -1182,6 +1188,7 @@ func (uc *CaseUseCase) AssignCase(ctx context.Context, workspaceID string, id in
 // existence check (a since-deleted user must still be removable). An empty
 // userIDs slice is a no-op that returns the case unchanged.
 func (uc *CaseUseCase) UnassignCase(ctx context.Context, workspaceID string, id int64, userIDs []string) (*model.Case, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.workspaceRegistry.Language(workspaceID))
 	// Same fail-fast read as AssignCase: it owns the ErrCaseNotFound /
 	// ErrAccessDenied contract, never the diff.
 	existingCase, err := loadCaseForWrite(ctx, uc.repo, workspaceID, id)
@@ -1776,6 +1783,7 @@ func (uc *CaseUseCase) ReopenCase(ctx context.Context, workspaceID string, id in
 // distinguish "already done" from "now done". BulkArchiveCases is what treats
 // that as a skip.
 func (uc *CaseUseCase) ArchiveCase(ctx context.Context, workspaceID string, id int64) (*model.Case, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.workspaceRegistry.Language(workspaceID))
 	existing, err := loadCaseForWrite(ctx, uc.repo, workspaceID, id)
 	if err != nil {
 		return nil, err
@@ -1809,6 +1817,7 @@ func (uc *CaseUseCase) ArchiveCase(ctx context.Context, workspaceID string, id i
 // the archived_case_not_closed consistency check), making it visible again is
 // the correct repair rather than a further obstacle.
 func (uc *CaseUseCase) UnarchiveCase(ctx context.Context, workspaceID string, id int64) (*model.Case, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.workspaceRegistry.Language(workspaceID))
 	existing, err := loadCaseForWrite(ctx, uc.repo, workspaceID, id)
 	if err != nil {
 		return nil, err
@@ -2065,6 +2074,7 @@ func (uc *CaseUseCase) MaterializeThreadCase(ctx context.Context, workspaceID st
 // case already had, a distinction the returned *model.Case cannot carry since
 // it holds only the post-write value.
 func (uc *CaseUseCase) UpdateCaseStatus(ctx context.Context, workspaceID string, id int64, boardStatus string) (*model.Case, string, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.workspaceRegistry.Language(workspaceID))
 	set := uc.caseStatusSetForWorkspace(workspaceID)
 	if set == nil {
 		return nil, "", goerr.New("workspace has no case status set (not thread mode)",

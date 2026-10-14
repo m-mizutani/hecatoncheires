@@ -11,14 +11,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gollem-dev/agentkit"
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/gt"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/slack"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
+	slacksvc "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/async"
 	slackevents "github.com/slack-go/slack/slackevents"
@@ -1795,4 +1798,175 @@ func TestSlackUseCases_WorkspaceAccessDenied(t *testing.T) {
 		gt.NoError(t, err).Required()
 		gt.Value(t, ssn).Nil()
 	})
+}
+
+// slackLangEnv is one Slack-mention scenario whose spawned turn a test reads
+// back. The runtime is bound without a worker, so the turn stays where the
+// host left it.
+type slackLangEnv struct {
+	repo    interfaces.Repository
+	kernel  *agentkit.Kernel
+	procs   agentkit.Repository
+	caseUC  *usecase.CaseUseCase
+	slackUC *usecase.SlackUseCases
+	slack   *agentTestSlackService
+}
+
+func newSlackLangEnv(t *testing.T, registry *model.WorkspaceRegistry, userInfo func(context.Context, string) (*slacksvc.User, error)) *slackLangEnv {
+	t.Helper()
+	repo := memory.New()
+	slackMock := &agentTestSlackService{}
+	slackMock.getUserInfoFn = userInfo
+	caseUC := usecase.NewCaseUseCase(repo, registry, slackMock, nil, "https://app.test")
+	llm := newScriptedClient(nil)
+	agentUC := usecase.NewAgentUseCase(usecase.AgentDeps{
+		Repo:         repo,
+		Registry:     registry,
+		LLM:          llm,
+		HistoryRepo:  agentarchive.NewMemoryHistoryRepository(),
+		TraceRepo:    agentarchive.NewMemoryTraceRepository(),
+		SlackService: slackMock,
+		CaseUC:       caseUC,
+	})
+	k, procs := bindAgentRuntimeWithProcesses(t, agentRuntimeDeps{UC: agentUC, Repo: repo, Registry: registry, LLM: llm})
+	return &slackLangEnv{
+		repo:    repo,
+		kernel:  k,
+		procs:   procs,
+		caseUC:  caseUC,
+		slackUC: usecase.NewSlackUseCases(repo, registry, agentUC, nil, slackMock),
+		slack:   slackMock,
+	}
+}
+
+func englishLocale(_ context.Context, userID string) (*slacksvc.User, error) {
+	return &slacksvc.User{ID: userID, Locale: "en-US"}, nil
+}
+
+func langMentionEvent(channelID, ts, threadTS string) *slackevents.EventsAPIEvent {
+	return &slackevents.EventsAPIEvent{
+		Type: slackevents.CallbackEvent,
+		InnerEvent: slackevents.EventsAPIInnerEvent{
+			Type: string(slackevents.AppMention),
+			Data: &slackevents.AppMentionEvent{
+				Type:            "app_mention",
+				User:            "U-ASKER",
+				Text:            "<@UBOT001> any update?",
+				TimeStamp:       ts,
+				ThreadTimeStamp: threadTS,
+				Channel:         channelID,
+				EventTimeStamp:  ts,
+			},
+		},
+		TeamID: "T1",
+	}
+}
+
+// A mention starts its turn in the workspace's language even when the person
+// mentioning uses another locale; without a workspace language the turn keeps
+// that person's locale. Each kind of mention that spawns a turn is covered:
+// a case thread in thread mode, a case channel, and a workspace channel.
+func TestSlackUseCases_MentionTurnFollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	ctx := context.Background()
+	failingUserInfo := func(context.Context, string) (*slacksvc.User, error) {
+		return nil, errors.New("users.info is unavailable")
+	}
+
+	t.Run("thread-mode case thread", func(t *testing.T) {
+		const threadTS = "1700000000.000100"
+		run := func(t *testing.T, wsLang i18n.Lang, userInfo func(context.Context, string) (*slacksvc.User, error)) spawnedTurn {
+			registry := newThreadWorkspaceRegistry()
+			entry, err := registry.Get("support")
+			gt.NoError(t, err).Required()
+			entry.Language = wsLang
+			env := newSlackLangEnv(t, registry, userInfo)
+			_, err = env.caseUC.CreateThreadBoundCaseForTest(ctx, "support", "C-MONITOR", threadTS, "U-REPORTER", "Login outage", "body", nil, "")
+			gt.NoError(t, err).Required()
+
+			gt.NoError(t, env.slackUC.HandleSlackEvent(ctx, langMentionEvent("C-MONITOR", "1700000005.000001", threadTS))).Required()
+			async.Wait()
+			return threadTurn(t, env.kernel, env.procs, "C-MONITOR", threadTS, "1700000005.000001")
+		}
+
+		ja := run(t, i18n.LangJA, englishLocale)
+		gt.String(t, ja.Scope.Lang).Equal("ja")
+		gt.String(t, ja.LanguageLabel).Equal("Japanese")
+
+		unset := run(t, "", englishLocale)
+		gt.String(t, unset.Scope.Lang).Equal("en")
+		gt.String(t, unset.LanguageLabel).Equal("English")
+
+		// A failed locale lookup leaves only the workspace language to apply.
+		noLocale := run(t, i18n.LangJA, failingUserInfo)
+		gt.String(t, noLocale.Scope.Lang).Equal("ja")
+		gt.String(t, noLocale.LanguageLabel).Equal("Japanese")
+	})
+
+	t.Run("case channel", func(t *testing.T) {
+		const mentionTS = "1700100000.000001"
+		run := func(t *testing.T, wsLang i18n.Lang) spawnedTurn {
+			registry := model.NewWorkspaceRegistry()
+			registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: "ws-case"}, Language: wsLang})
+			env := newSlackLangEnv(t, registry, englishLocale)
+			_, err := env.repo.Case().Create(ctx, "ws-case", &model.Case{
+				Title: "Bound case", Status: types.CaseStatusOpen, SlackChannelID: "C-CASE", ReporterID: "U-REPORTER",
+			})
+			gt.NoError(t, err).Required()
+
+			gt.NoError(t, env.slackUC.HandleSlackEvent(ctx, langMentionEvent("C-CASE", mentionTS, ""))).Required()
+			async.Wait()
+			return threadTurn(t, env.kernel, env.procs, "C-CASE", mentionTS, mentionTS)
+		}
+
+		gt.String(t, run(t, i18n.LangJA).Scope.Lang).Equal("ja")
+		gt.String(t, run(t, "").Scope.Lang).Equal("en")
+	})
+
+	t.Run("workspace channel", func(t *testing.T) {
+		const mentionTS = "1700200000.000001"
+		run := func(t *testing.T, wsLang i18n.Lang) spawnedTurn {
+			registry := model.NewWorkspaceRegistry()
+			registry.Register(&model.WorkspaceEntry{
+				Workspace:               model.Workspace{ID: "ws-channel"},
+				SlackWorkspaceChannelID: "C-WORKSPACE",
+				Language:                wsLang,
+			})
+			env := newSlackLangEnv(t, registry, englishLocale)
+
+			gt.NoError(t, env.slackUC.HandleSlackEvent(ctx, langMentionEvent("C-WORKSPACE", mentionTS, ""))).Required()
+			async.Wait()
+			return threadTurn(t, env.kernel, env.procs, "C-WORKSPACE", mentionTS, mentionTS)
+		}
+
+		ja := run(t, i18n.LangJA)
+		gt.String(t, ja.Scope.Lang).Equal("ja")
+		gt.String(t, ja.LanguageLabel).Equal("Japanese")
+		gt.String(t, run(t, "").Scope.Lang).Equal("en")
+	})
+}
+
+// A user the workspace policy denies is told so in the workspace's language,
+// even though the denial path sets the user's locale on its own.
+func TestSlackUseCases_MentionDenialFollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	ctx := context.Background()
+	const threadTS = "1700000000.000100"
+
+	registry := newThreadWorkspaceRegistry()
+	entry, err := registry.Get("support")
+	gt.NoError(t, err).Required()
+	entry.Language = i18n.LangJA
+	env := newSlackLangEnv(t, registry, englishLocale)
+	usecase.SetSlackWorkspaceAccessForTest(env.slackUC, denyingAccess(t, registry, "support"))
+	_, err = env.caseUC.CreateThreadBoundCaseForTest(ctx, "support", "C-MONITOR", threadTS, "U-REPORTER", "Login outage", "body", nil, "")
+	gt.NoError(t, err).Required()
+
+	gt.NoError(t, env.slackUC.HandleSlackEvent(ctx, langMentionEvent("C-MONITOR", "1700000005.000001", threadTS))).Required()
+
+	async.Wait()
+	eph := env.slack.ephemerals()
+	gt.Array(t, eph).Length(1).Required()
+	gt.String(t, eph[0].Text).Contains(
+		i18n.T(i18n.ContextWithLang(ctx, i18n.LangJA), i18n.MsgUIErrWorkspaceAccessDeniedWhat))
 }

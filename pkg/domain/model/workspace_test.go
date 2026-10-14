@@ -7,6 +7,7 @@ import (
 	"github.com/m-mizutani/gt"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 )
 
 func TestNewWorkspaceRegistry(t *testing.T) {
@@ -168,6 +169,19 @@ func TestWorkspaceEntry_IsThreadMode(t *testing.T) {
 
 	var nilEntry *model.WorkspaceEntry
 	gt.Bool(t, nilEntry.IsThreadMode()).False()
+}
+
+func TestWorkspaceRegistry_Language(t *testing.T) {
+	reg := model.NewWorkspaceRegistry()
+	reg.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: "ja-ws"}, Language: i18n.LangJA})
+	reg.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: "unset-ws"}})
+
+	gt.Value(t, reg.Language("ja-ws")).Equal(i18n.LangJA)
+	gt.Value(t, reg.Language("unset-ws")).Equal(i18n.Lang(""))
+	gt.Value(t, reg.Language("missing-ws")).Equal(i18n.Lang(""))
+
+	var nilReg *model.WorkspaceRegistry
+	gt.Value(t, nilReg.Language("ja-ws")).Equal(i18n.Lang(""))
 }
 
 func TestWorkspaceRegistry_FindByMonitorChannel(t *testing.T) {

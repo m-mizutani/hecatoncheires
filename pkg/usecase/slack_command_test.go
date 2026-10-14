@@ -28,8 +28,9 @@ type commandTestSlackService struct {
 }
 
 type commandTestPostedMessage struct {
-	ChannelID string
-	Text      string
+	ChannelID  string
+	Text       string
+	Attachment goslack.Attachment
 }
 
 func (m *commandTestSlackService) OpenView(_ context.Context, triggerID string, view goslack.ModalViewRequest) error {
@@ -51,10 +52,11 @@ func (m *commandTestSlackService) PostMessage(_ context.Context, channelID strin
 // Action card posts go through this path now, and the slash-command tests
 // assert on "did Slack get *any* post for the action?" regardless of which
 // API method delivered it.
-func (m *commandTestSlackService) PostMessageWithAttachment(_ context.Context, channelID string, text string, _ goslack.Attachment) (string, error) {
+func (m *commandTestSlackService) PostMessageWithAttachment(_ context.Context, channelID string, text string, attachment goslack.Attachment) (string, error) {
 	m.postedMessages = append(m.postedMessages, commandTestPostedMessage{
-		ChannelID: channelID,
-		Text:      text,
+		ChannelID:  channelID,
+		Text:       text,
+		Attachment: attachment,
 	})
 	return "1234567890.123456", nil
 }
@@ -1602,6 +1604,249 @@ func TestBuildFieldOptions_ClampsLongDescription(t *testing.T) {
 		gt.Array(t, got).Length(1).Required()
 		gt.String(t, got[0].Text.Text).Equal("High")
 		gt.String(t, got[0].Value).Equal("high")
+	})
+}
+
+// The confirmation a case-creation submit posts is in the workspace's language
+// over the submitter's locale; without a workspace language it keeps the locale.
+func TestSlackUseCases_HandleCaseCreationSubmit_FollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	ctx := context.Background()
+
+	submit := func(t *testing.T, wsLang i18n.Lang) (string, *model.Case) {
+		t.Helper()
+		repo := memory.New()
+		registry := model.NewWorkspaceRegistry()
+		registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: "risk", Name: "Risk Management"}, Language: wsLang})
+		slackMock := &commandTestSlackService{}
+		slackMock.getUserInfoFn = englishLocale
+		slackUC := usecase.NewSlackUseCases(repo, registry, nil, nil, slackMock)
+		caseUC := usecase.NewCaseUseCase(repo, registry, nil, nil, "")
+		seedSlackUsers(t, repo, "U001")
+
+		meta, err := json.Marshal(map[string]string{"workspace_id": "risk", "channel_id": "C001"})
+		gt.NoError(t, err).Required()
+		callback := &goslack.InteractionCallback{
+			User: goslack.User{ID: "U001"},
+			View: goslack.View{
+				PrivateMetadata: string(meta),
+				State: &goslack.ViewState{Values: map[string]map[string]goslack.BlockAction{
+					"hc_case_title_block": {"hc_case_title": {Value: "Risk Case"}},
+					"hc_case_desc_block":  {"hc_case_desc": {Value: "A risk case"}},
+				}},
+			},
+		}
+		gt.NoError(t, slackUC.HandleCaseCreationSubmit(ctx, caseUC, callback)).Required()
+
+		cases, err := repo.Case().List(ctx, "risk")
+		gt.NoError(t, err).Required()
+		gt.Array(t, cases).Length(1).Required()
+		gt.Array(t, slackMock.postedMessages).Length(1).Required()
+		return slackMock.postedMessages[0].Text, cases[0]
+	}
+
+	text, created := submit(t, i18n.LangJA)
+	gt.String(t, text).Equal(i18n.T(i18n.ContextWithLang(ctx, i18n.LangJA), i18n.MsgCaseCreated, created.ID, created.Title))
+
+	text, created = submit(t, "")
+	gt.String(t, text).Equal(i18n.T(i18n.ContextWithLang(ctx, i18n.LangEN), i18n.MsgCaseCreated, created.ID, created.Title))
+}
+
+// The case-edit submit's confirmation follows the workspace language the same way.
+func TestSlackUseCases_HandleCaseEditSubmit_FollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	ctx := context.Background()
+
+	submit := func(t *testing.T, wsLang i18n.Lang) (string, *model.Case) {
+		t.Helper()
+		repo := memory.New()
+		registry := model.NewWorkspaceRegistry()
+		registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: "risk", Name: "Risk Management"}, Language: wsLang})
+		created, err := repo.Case().Create(ctx, "risk", &model.Case{ReporterID: "U-REPORTER", Title: "Original Title"})
+		gt.NoError(t, err).Required()
+
+		slackMock := &commandTestSlackService{}
+		slackMock.getUserInfoFn = englishLocale
+		slackUC := usecase.NewSlackUseCases(repo, registry, nil, nil, slackMock)
+		caseUC := usecase.NewCaseUseCase(repo, registry, nil, nil, "")
+
+		meta, err := json.Marshal(map[string]any{"workspace_id": "risk", "channel_id": "C-CASE", "case_id": created.ID})
+		gt.NoError(t, err).Required()
+		callback := &goslack.InteractionCallback{
+			User: goslack.User{ID: "U001"},
+			View: goslack.View{
+				PrivateMetadata: string(meta),
+				State: &goslack.ViewState{Values: map[string]map[string]goslack.BlockAction{
+					"hc_case_title_block": {"hc_case_title": {Value: "Updated Title"}},
+					"hc_case_desc_block":  {"hc_case_desc": {Value: "Updated description"}},
+				}},
+			},
+		}
+		gt.NoError(t, slackUC.HandleCaseEditSubmit(ctx, caseUC, callback)).Required()
+		updated, err := repo.Case().Get(ctx, "risk", created.ID)
+		gt.NoError(t, err).Required()
+		gt.Array(t, slackMock.postedMessages).Length(1).Required()
+		return slackMock.postedMessages[0].Text, updated
+	}
+
+	text, updated := submit(t, i18n.LangJA)
+	gt.String(t, text).Equal(i18n.T(i18n.ContextWithLang(ctx, i18n.LangJA), i18n.MsgCaseUpdated, updated.ID, updated.Title))
+
+	text, updated = submit(t, "")
+	gt.String(t, text).Equal(i18n.T(i18n.ContextWithLang(ctx, i18n.LangEN), i18n.MsgCaseUpdated, updated.ID, updated.Title))
+}
+
+// The Action card an Action-creation submit posts carries its status select in
+// the workspace's language; the placeholder is the card's localized copy.
+func TestSlackUseCases_HandleActionCreationSubmit_FollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	ctx := context.Background()
+
+	statusPlaceholder := func(t *testing.T, wsLang i18n.Lang) string {
+		t.Helper()
+		repo := memory.New()
+		registry := model.NewWorkspaceRegistry()
+		registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: "risk", Name: "Risk Management"}, Language: wsLang})
+		caseRecord, err := repo.Case().Create(ctx, "risk", &model.Case{ReporterID: "U-REPORTER", Title: "Parent Case"})
+		gt.NoError(t, err).Required()
+		caseRecord.SlackChannelID = "C-CASE"
+		_, err = repo.Case().Update(ctx, "risk", caseRecord)
+		gt.NoError(t, err).Required()
+
+		slackMock := &commandTestSlackService{}
+		slackMock.getUserInfoFn = englishLocale
+		slackUC := usecase.NewSlackUseCases(repo, registry, nil, nil, slackMock)
+		actionUC := usecase.NewActionUseCase(repo, registry, slackMock, "", nil)
+
+		meta, err := json.Marshal(map[string]any{"workspace_id": "risk", "channel_id": "C-CASE", "case_id": caseRecord.ID})
+		gt.NoError(t, err).Required()
+		callback := &goslack.InteractionCallback{
+			User: goslack.User{ID: "U001"},
+			View: goslack.View{
+				PrivateMetadata: string(meta),
+				State: &goslack.ViewState{Values: map[string]map[string]goslack.BlockAction{
+					usecase.SlackBlockIDActionTitle: {usecase.SlackActionIDActionTitle: {Value: "Investigate alert"}},
+				}},
+			},
+		}
+		gt.NoError(t, slackUC.HandleActionCreationSubmit(ctx, actionUC, callback)).Required()
+
+		gt.Array(t, slackMock.postedMessages).Length(1).Required()
+		for _, block := range slackMock.postedMessages[0].Attachment.Blocks.BlockSet {
+			actionBlock, ok := block.(*goslack.ActionBlock)
+			if !ok {
+				continue
+			}
+			for _, el := range actionBlock.Elements.ElementSet {
+				if sel, ok := el.(*goslack.SelectBlockElement); ok && sel.Type == goslack.OptTypeStatic && sel.Placeholder != nil {
+					return sel.Placeholder.Text
+				}
+			}
+		}
+		gt.Value(t, "no status select on the card").Equal("a status select").Required()
+		return ""
+	}
+
+	gt.String(t, statusPlaceholder(t, i18n.LangJA)).Equal(
+		i18n.T(i18n.ContextWithLang(ctx, i18n.LangJA), i18n.MsgActionStatusPlaceholder))
+	gt.String(t, statusPlaceholder(t, "")).Equal(
+		i18n.T(i18n.ContextWithLang(ctx, i18n.LangEN), i18n.MsgActionStatusPlaceholder))
+}
+
+// The modal that follows the command-choice submit is rendered in the
+// workspace's language over the submitter's locale.
+func TestSlackUseCases_HandleCommandChoiceSubmit_FollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	ctx := context.Background()
+	repo := memory.New()
+	registry := model.NewWorkspaceRegistry()
+	registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: "risk", Name: "Risk Management"}, Language: i18n.LangJA})
+	caseRecord, err := repo.Case().Create(ctx, "risk", &model.Case{ReporterID: "U-REPORTER", Title: "Parent Case"})
+	gt.NoError(t, err).Required()
+
+	slackMock := &commandTestSlackService{}
+	slackMock.getUserInfoFn = englishLocale
+	uc := usecase.NewSlackUseCases(repo, registry, nil, nil, slackMock)
+
+	meta, err := json.Marshal(map[string]any{"workspace_id": "risk", "channel_id": "C-CASE", "case_id": caseRecord.ID})
+	gt.NoError(t, err).Required()
+	callback := &goslack.InteractionCallback{
+		User: goslack.User{ID: "U-REPORTER"},
+		View: goslack.View{
+			PrivateMetadata: string(meta),
+			State: &goslack.ViewState{Values: map[string]map[string]goslack.BlockAction{
+				usecase.SlackBlockIDCommandChoice: {
+					usecase.SlackActionIDCommandChoice: {SelectedOption: goslack.OptionBlockObject{Value: "create_action"}},
+				},
+			}},
+		},
+	}
+
+	view, err := uc.HandleCommandChoiceSubmit(ctx, callback)
+	gt.NoError(t, err).Required()
+	gt.Value(t, view).NotNil().Required()
+	gt.String(t, view.Title.Text).Equal(i18n.T(i18n.ContextWithLang(ctx, i18n.LangJA), i18n.MsgModalCreateActionTitle))
+}
+
+// The slash command opens its modal in the workspace's language once it knows
+// the workspace — named in the command, found from the case channel, or the only
+// one the user may use. The workspace picker opens before any workspace is
+// chosen, so it keeps the user's locale.
+func TestSlackUseCases_HandleSlashCommand_FollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	ctx := context.Background()
+	jaCtx := i18n.ContextWithLang(ctx, i18n.LangJA)
+
+	open := func(t *testing.T, langs map[string]i18n.Lang, channelID, workspaceID, text string) goslack.ModalViewRequest {
+		t.Helper()
+		repo := memory.New()
+		registry := model.NewWorkspaceRegistry()
+		for _, id := range []string{"risk", "hr"} {
+			lang, ok := langs[id]
+			if !ok {
+				continue
+			}
+			registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: id, Name: id}, Language: lang})
+		}
+		created, err := repo.Case().Create(ctx, "risk", &model.Case{ReporterID: "U-REPORTER", Title: "Existing Case"})
+		gt.NoError(t, err).Required()
+		created.SlackChannelID = "C-CASE"
+		_, err = repo.Case().Update(ctx, "risk", created)
+		gt.NoError(t, err).Required()
+
+		slackMock := &commandTestSlackService{}
+		slackMock.getUserInfoFn = englishLocale
+		uc := usecase.NewSlackUseCases(repo, registry, nil, nil, slackMock)
+		gt.NoError(t, uc.HandleSlashCommand(ctx, "trigger-1", "U001", channelID, workspaceID, "", text)).Required()
+		gt.Bool(t, slackMock.openViewCalled).True().Required()
+		return slackMock.openViewRequest
+	}
+
+	t.Run("workspace named in the command", func(t *testing.T) {
+		view := open(t, map[string]i18n.Lang{"risk": i18n.LangJA}, "C001", "risk", "")
+		gt.String(t, view.Title.Text).Equal(i18n.T(jaCtx, i18n.MsgModalCreateCaseTitle))
+	})
+
+	t.Run("case channel", func(t *testing.T) {
+		view := open(t, map[string]i18n.Lang{"risk": i18n.LangJA}, "C-CASE", "", "")
+		gt.String(t, view.Title.Text).Equal(i18n.T(jaCtx, i18n.MsgModalCommandChoiceTitle))
+	})
+
+	t.Run("the only workspace the user may use", func(t *testing.T) {
+		view := open(t, map[string]i18n.Lang{"risk": i18n.LangJA}, "C001", "", "")
+		gt.String(t, view.Title.Text).Equal(i18n.T(jaCtx, i18n.MsgModalCreateCaseTitle))
+	})
+
+	t.Run("workspace unset keeps the user's locale", func(t *testing.T) {
+		view := open(t, map[string]i18n.Lang{"risk": ""}, "C001", "risk", "")
+		gt.String(t, view.Title.Text).Equal(i18n.T(i18n.ContextWithLang(ctx, i18n.LangEN), i18n.MsgModalCreateCaseTitle))
+	})
+
+	t.Run("workspace picker keeps the user's locale", func(t *testing.T) {
+		withLang := open(t, map[string]i18n.Lang{"risk": i18n.LangJA, "hr": i18n.LangJA}, "C001", "", "")
+		withoutLang := open(t, map[string]i18n.Lang{"risk": "", "hr": ""}, "C001", "", "")
+		gt.Value(t, withLang.CallbackID).Equal(usecase.SlackCallbackIDSelectWorkspace)
+		gt.String(t, withLang.Title.Text).Equal(withoutLang.Title.Text)
 	})
 }
 

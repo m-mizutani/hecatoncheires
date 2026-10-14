@@ -369,6 +369,9 @@ func (d *DurableRuntime) spawn(ctx context.Context, strategy model.JobStrategy, 
 		// names neither gets.
 		LLMModel: p.job.LLMModel,
 		Budget:   p.job.Budget,
+		// Empty unless the workspace configures a language (Run sets it): an
+		// unconfigured Job keeps the deployment default, as it always has.
+		Lang: string(i18n.LangFromContext(ctx)),
 	}
 	// Both or neither: the scope rejects a half-set pair, and a marker that could
 	// not be posted leaves the run with no thread to report into rather than
@@ -411,10 +414,17 @@ func (d *DurableRuntime) spawn(ctx context.Context, strategy model.JobStrategy, 
 			return "", goerr.Wrap(ktErr, "resolve the job tool palette",
 				goerr.V("job_id", p.key.JobID), goerr.V("run_id", p.runID))
 		}
+		// The language directive is given only when a language was resolved, so a
+		// Job in a workspace that configures none keeps its prompt unchanged.
+		var languageLabel string
+		if scope.Lang != "" {
+			languageLabel = i18n.LanguageLabel(ctx)
+		}
 		pid, err = d.planexec.Spawn(ctx, d.Kernel, planexec.Input{
-			SystemPrompt: p.systemPrompt,
-			UserInput:    p.userPrompt,
-			KnownToolIDs: knownToolIDs,
+			SystemPrompt:  p.systemPrompt,
+			UserInput:     p.userPrompt,
+			KnownToolIDs:  knownToolIDs,
+			LanguageLabel: languageLabel,
 			// The Job's own system prompt already names the case's channel and
 			// thread; its sub-agents get a prompt built from the planner's task text
 			// alone, so without this they hold the Slack tools with no id to call
@@ -731,6 +741,10 @@ func (d *DurableRuntime) postCompletionMarker(ctx context.Context, sc agentkerne
 	// The marker follows the Job's quiet flag, exactly as the in-process path
 	// does; withQuiet is what every post site self-gates on.
 	ctx = withQuiet(ctx, j.Quiet)
+	// The language the run was spawned with, not the registry's current one: a
+	// run started under one configuration is closed out under the same, even
+	// when the instance finishing it has a different one loaded.
+	ctx = i18n.ContextWithWorkspaceLang(ctx, i18n.Lang(sc.Lang))
 	text := i18n.T(ctx, i18n.MsgJobRunCompleted, j.ID)
 	if runErr != nil {
 		text = i18n.T(ctx, i18n.MsgJobRunFailed, j.ID,

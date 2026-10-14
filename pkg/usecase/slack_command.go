@@ -153,6 +153,7 @@ func (uc *SlackUseCases) HandleSlashCommand(ctx context.Context, triggerID, user
 	// Check if the channel is linked to an existing case
 	if channelID != "" {
 		if existingCase, wsID, schema := uc.findCaseByChannelID(ctx, channelID); existingCase != nil {
+			ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(wsID))
 			allowed, err := authorizeSlackActor(ctx, uc.workspaceAccess, uc.ephemeralPoster(), wsID, userID, channelID)
 			if err != nil {
 				return goerr.Wrap(err, "authorize slash command in case channel")
@@ -191,6 +192,7 @@ func (uc *SlackUseCases) HandleSlashCommand(ctx context.Context, triggerID, user
 			return goerr.Wrap(err, "invalid workspace ID",
 				goerr.V("workspace_id", workspaceID))
 		}
+		ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 		allowed, err := authorizeSlackActor(ctx, uc.workspaceAccess, uc.ephemeralPoster(), workspaceID, userID, channelID)
 		if err != nil {
 			return goerr.Wrap(err, "authorize slash command for workspace")
@@ -215,6 +217,7 @@ func (uc *SlackUseCases) HandleSlashCommand(ctx context.Context, triggerID, user
 			goerr.Wrap(ErrNoAccessibleWorkspace, "no workspace is accessible to the slash command user"))
 		return nil
 	case 1:
+		ctx = i18n.ContextWithWorkspaceLang(ctx, entries[0].Language)
 		return uc.openCaseCreationModal(ctx, triggerID, entries[0].Workspace.ID, channelID, sourceTeamID, entries[0].FieldSchema)
 	default:
 		workspaces := make([]model.Workspace, len(entries))
@@ -245,6 +248,7 @@ func (uc *SlackUseCases) HandleWorkspaceSelectSubmit(ctx context.Context, callba
 	}
 
 	workspaceID := radioAction.SelectedOption.Value
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(workspaceID))
 
 	// Extract channel_id from private_metadata
 	var meta commandMetadata
@@ -302,6 +306,7 @@ func (uc *SlackUseCases) HandleCaseCreationSubmit(ctx context.Context, caseUC *C
 	if err := json.Unmarshal([]byte(callback.View.PrivateMetadata), &meta); err != nil {
 		return goerr.Wrap(err, "failed to parse private_metadata")
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(meta.WorkspaceID))
 
 	allowed, err := authorizeSlackActor(ctx, uc.workspaceAccess, uc.ephemeralPoster(), meta.WorkspaceID, callback.User.ID, meta.ChannelID)
 	if err != nil {
@@ -1035,6 +1040,7 @@ func (uc *SlackUseCases) HandleCaseEditSubmit(ctx context.Context, caseUC *CaseU
 	if err := json.Unmarshal([]byte(callback.View.PrivateMetadata), &meta); err != nil {
 		return goerr.Wrap(err, "failed to parse edit private_metadata")
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(meta.WorkspaceID))
 
 	allowed, err := authorizeSlackActor(ctx, uc.workspaceAccess, uc.ephemeralPoster(), meta.WorkspaceID, callback.User.ID, meta.ChannelID)
 	if err != nil {
@@ -1404,6 +1410,7 @@ func (uc *SlackUseCases) HandleCommandChoiceSubmit(ctx context.Context, callback
 	if err := json.Unmarshal([]byte(callback.View.PrivateMetadata), &meta); err != nil {
 		return nil, goerr.Wrap(err, "failed to parse command choice private_metadata")
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(meta.WorkspaceID))
 
 	// Access may have been revoked between opening the modal and submitting it.
 	if denied, err := uc.deniedModalFor(ctx, meta.WorkspaceID, callback.User.ID); err != nil || denied != nil {
@@ -1617,6 +1624,7 @@ func (uc *SlackUseCases) HandleActionCreationSubmit(ctx context.Context, actionU
 	if err := json.Unmarshal([]byte(callback.View.PrivateMetadata), &meta); err != nil {
 		return goerr.Wrap(err, "failed to parse action create private_metadata")
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(meta.WorkspaceID))
 
 	allowed, err := authorizeSlackActor(ctx, uc.workspaceAccess, uc.ephemeralPoster(), meta.WorkspaceID, callback.User.ID, meta.ChannelID)
 	if err != nil {

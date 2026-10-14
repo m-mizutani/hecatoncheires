@@ -66,6 +66,10 @@ The following are recent messages from the Slack conversation (oldest first):
 - Answer questions about this case based on the conversation context and case information above.
 - Be concise and helpful.
 - If you don't have enough information to answer, say so clearly.
+{{- if .Language }}
+- Respond in **{{ .Language }}**, whatever language the user's message is written in. This workspace fixes its language.
+{{- else }}
 - Respond in the same language as the user's message.
+{{- end }}
 
 {{ .SlackFormat }}

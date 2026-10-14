@@ -60,7 +60,7 @@ func newStepTestFixture(t *testing.T, channelUserIDs []string, isPrivate bool) *
 	slackFake := &stepSlackFake{}
 	caseUC := usecase.NewCaseUseCase(repo, nil, slackFake, nil, "")
 	actionUC := usecase.NewActionUseCase(repo, nil, slackFake, "", nil)
-	stepUC := usecase.NewActionStepUseCase(repo, slackFake, nil)
+	stepUC := usecase.NewActionStepUseCase(repo, nil, slackFake, nil)
 
 	caseUserID := "UCASEMEMBER"
 	ctx := auth.ContextWithToken(context.Background(), &auth.Token{Sub: caseUserID})
@@ -98,6 +98,38 @@ func newStepTestFixture(t *testing.T, channelUserIDs []string, isPrivate bool) *
 
 func (f *stepTestFixture) ctx() context.Context {
 	return auth.ContextWithToken(context.Background(), &auth.Token{Sub: f.caseUserID})
+}
+
+// stepAddedText adds one step through a usecase whose workspace configures
+// wsLang, under the deployment default defaultLang, and returns the posted
+// notice. The context carries no user language.
+func stepAddedText(t *testing.T, wsLang, defaultLang i18n.Lang) string {
+	t.Helper()
+	f := newStepTestFixture(t, nil, false)
+	i18n.Init(defaultLang)
+	defer i18n.Init(i18n.LangEN)
+
+	registry := model.NewWorkspaceRegistry()
+	registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: testWorkspaceID}, Language: wsLang})
+	uc := usecase.NewActionStepUseCase(f.repo, registry, f.slack, nil)
+
+	_, err := uc.Add(f.ctx(), usecase.AddActionStepInput{
+		WorkspaceID: testWorkspaceID,
+		ActionID:    f.action.ID,
+		Title:       "collect logs",
+	})
+	gt.NoError(t, err).Required()
+	gt.Array(t, f.slack.calls).Length(1).Required()
+	return f.slack.calls[0].text
+}
+
+func TestActionStepUseCase_NotificationFollowsTheWorkspaceLanguage(t *testing.T) {
+	inJapanese := stepAddedText(t, "", i18n.LangJA)
+	inEnglish := stepAddedText(t, "", i18n.LangEN)
+	gt.String(t, inJapanese).NotEqual(inEnglish)
+
+	gt.String(t, stepAddedText(t, i18n.LangJA, i18n.LangEN)).Equal(inJapanese)
+	gt.String(t, stepAddedText(t, i18n.LangEN, i18n.LangJA)).Equal(inEnglish)
 }
 
 func TestActionStepUseCase_Add(t *testing.T) {

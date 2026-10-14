@@ -5434,6 +5434,78 @@ func assertThreadContextLine(t *testing.T, call threadNotifyCall, wantChannel, w
 	gt.Value(t, textObj.Text).Equal(wantText)
 }
 
+// A workspace that configures a language announces its Case changes in that
+// language even when the caller's context carries none, which is what a web UI
+// request looks like. Every case write that posts to Slack is driven once.
+func TestCaseUseCase_NotificationsFollowTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	const actor = "<@U-ALICE>"
+	ctx := auth.ContextWithToken(context.Background(), &auth.Token{Sub: "U-ALICE"})
+	jaCtx := i18n.ContextWithLang(ctx, i18n.LangJA)
+
+	repo := memory.New()
+	entry := threadModeWorkspace(t)
+	entry.Language = i18n.LangJA
+	registry := model.NewWorkspaceRegistry()
+	registry.Register(entry)
+	slackMock := &threadNotifySlackMock{}
+	uc := usecase.NewCaseUseCase(repo, registry, slackMock, nil, "https://app.example.test")
+	gt.NoError(t, repo.SlackUser().SaveMany(ctx, []*model.SlackUser{
+		{ID: "U-BOB", Name: "bob", RealName: "Bob"},
+	})).Required()
+
+	c, err := uc.CreateCase(ctx, "support", "Suspicious email", "reported by a user", nil, nil, false, false, "", "")
+	gt.NoError(t, err).Required()
+	// The monitored-channel anchor CreateCase posts is the first output.
+	gt.Array(t, slackMock.postedTexts).Length(1).Required()
+	gt.String(t, slackMock.postedTexts[0]).Equal(i18n.T(jaCtx, i18n.MsgReactionCasePlaceholder))
+	slackMock.threadCalls = nil
+
+	title := "Phishing report"
+	_, err = uc.UpdateCase(ctx, "support", c.ID, usecase.CaseUpdate{Title: &title})
+	gt.NoError(t, err).Required()
+	_, err = uc.AssignCase(ctx, "support", c.ID, []string{"U-BOB"})
+	gt.NoError(t, err).Required()
+	_, err = uc.UnassignCase(ctx, "support", c.ID, []string{"U-BOB"})
+	gt.NoError(t, err).Required()
+	_, _, err = uc.UpdateCaseStatus(ctx, "support", c.ID, "done")
+	gt.NoError(t, err).Required()
+	_, err = uc.ArchiveCase(ctx, "support", c.ID)
+	gt.NoError(t, err).Required()
+	_, err = uc.UnarchiveCase(ctx, "support", c.ID)
+	gt.NoError(t, err).Required()
+
+	want := []string{
+		i18n.T(jaCtx, i18n.MsgCaseChangeTitle, actor, "Suspicious email", title),
+		i18n.T(jaCtx, i18n.MsgCaseChangeAssigneeAssigned, actor, "<@U-BOB>"),
+		i18n.T(jaCtx, i18n.MsgCaseChangeAssigneeUnassigned, actor, "<@U-BOB>"),
+		i18n.T(jaCtx, i18n.MsgCaseChangeStatus, actor, "Triage", "Done"),
+		i18n.T(jaCtx, i18n.MsgCaseChangeArchived, actor),
+		i18n.T(jaCtx, i18n.MsgCaseChangeUnarchived, actor),
+	}
+	gt.Array(t, slackMock.threadCalls).Length(len(want)).Required()
+	for i, w := range want {
+		gt.String(t, slackMock.threadCalls[i].text).Equal(w)
+	}
+}
+
+// A channel-mode Case's bookmark title is localized too: it is the one piece of
+// copy activation writes into the new channel.
+func TestCaseUseCase_ChannelBookmarkFollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	ctx := auth.ContextWithToken(context.Background(), &auth.Token{Sub: "U-ALICE"})
+	repo := memory.New()
+	registry := model.NewWorkspaceRegistry()
+	registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: "ws-ja"}, Language: i18n.LangJA})
+	slackMock := &mockSlackService{}
+	uc := usecase.NewCaseUseCase(repo, registry, slackMock, nil, "https://app.example.test")
+
+	_, err := uc.CreateCase(ctx, "ws-ja", "Bookmark case", "", nil, nil, false, false, "", "")
+	gt.NoError(t, err).Required()
+	gt.String(t, slackMock.bookmarkTitle).Equal(
+		i18n.T(i18n.ContextWithLang(ctx, i18n.LangJA), i18n.MsgBookmarkOpenCase))
+}
+
 // TestCaseUseCase_ThreadChangeNotification covers the thread-mode Case change
 // notifications: title, assignees and board status are announced in the Case's
 // Slack thread, and nothing is announced when there is no real change, when the

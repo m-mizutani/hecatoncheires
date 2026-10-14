@@ -332,6 +332,10 @@ func (r *JobRunner) Run(ctx context.Context, j *model.Job, ev Event) error {
 		CaseID:      ev.CaseID,
 		JobID:       j.ID,
 	}
+	// A Job run has no user whose locale could apply, so its posts and the run
+	// it spawns follow the workspace language, or the deployment default when
+	// the workspace configures none.
+	ctx = i18n.ContextWithWorkspaceLang(ctx, r.deps.Registry.Language(ev.WorkspaceID))
 	if err := key.Validate(); err != nil {
 		return goerr.Wrap(err, "invalid job-run key")
 	}

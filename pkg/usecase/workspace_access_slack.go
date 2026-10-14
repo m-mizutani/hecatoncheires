@@ -81,11 +81,13 @@ func (uc *SlackUseCases) deniedModalFor(ctx context.Context, workspaceID, userID
 	return &view, nil
 }
 
-// NotifyWorkspaceAccessDenied posts the denial, in the user's language, for a
-// controller that received model.ErrWorkspaceAccessDenied from a usecase call
-// made on behalf of a Slack user.
-func (uc *SlackUseCases) NotifyWorkspaceAccessDenied(ctx context.Context, channelID, userID string, cause error) {
-	postWorkspaceAccessDenied(uc.contextWithUserLang(ctx, userID), uc.ephemeralPoster(), channelID, userID, cause)
+// NotifyWorkspaceAccessDenied posts the denial for a controller that received
+// model.ErrWorkspaceAccessDenied from a usecase call made on behalf of a Slack
+// user. It is written in the workspace's language when one is configured,
+// otherwise in the user's.
+func (uc *SlackUseCases) NotifyWorkspaceAccessDenied(ctx context.Context, workspaceID, channelID, userID string, cause error) {
+	ctx = i18n.ContextWithWorkspaceLang(uc.contextWithUserLang(ctx, userID), uc.registry.Language(workspaceID))
+	postWorkspaceAccessDenied(ctx, uc.ephemeralPoster(), channelID, userID, cause)
 }
 
 // eventActorAllowed is the check the event dispatcher runs right before it
@@ -103,7 +105,8 @@ func (uc *SlackUseCases) eventActorAllowed(ctx context.Context, workspaceID, use
 	case err == nil:
 		return true
 	case isWorkspaceAccessDenied(err):
-		postWorkspaceAccessDenied(uc.contextWithUserLang(ctx, userID), uc.ephemeralPoster(), channelID, userID, err)
+		denyCtx := i18n.ContextWithWorkspaceLang(uc.contextWithUserLang(ctx, userID), uc.registry.Language(workspaceID))
+		postWorkspaceAccessDenied(denyCtx, uc.ephemeralPoster(), channelID, userID, err)
 	default:
 		errutil.Handle(ctx, goerr.Wrap(err, "decide workspace access for Slack event",
 			goerr.V("workspace_id", workspaceID), goerr.V("user_id", userID)),
@@ -125,7 +128,8 @@ func (uc *MentionProposalUseCase) authorizeDraftActor(ctx context.Context, works
 		if uc.slackService != nil {
 			poster = uc.slackService
 		}
-		postWorkspaceAccessDenied(contextWithSlackUserLang(ctx, uc.slackService, userID), poster, channelID, userID, err)
+		denyCtx := i18n.ContextWithWorkspaceLang(contextWithSlackUserLang(ctx, uc.slackService, userID), uc.registry.Language(workspaceID))
+		postWorkspaceAccessDenied(denyCtx, poster, channelID, userID, err)
 		return false, nil
 	default:
 		return false, goerr.Wrap(err, "decide workspace access for case draft",

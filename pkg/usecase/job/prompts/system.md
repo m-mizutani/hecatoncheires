@@ -244,6 +244,9 @@ Manually triggered by {{ .Reason.Actor }} for case #{{ .Reason.CaseID }} at {{ .
 - Do not duplicate work: if an equivalent Slack message already exists, do nothing.
 {{- end }}
 - When information is insufficient, finish without taking action.
+{{- if .Language }}
+- Write everything people will read — Slack posts and anything you record on the case — in **{{ .Language }}**. This workspace fixes its language.
+{{- end }}
 - You cannot close the case (status to CLOSED). Close is a human-only decision.
 {{- if .ManagesActions }}
 - You cannot delete cases, archive actions, or delete action steps.

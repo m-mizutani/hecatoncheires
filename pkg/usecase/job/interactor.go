@@ -495,9 +495,11 @@ func (r *JobRunner) HandleQuestionSubmit(ctx context.Context, callback *goslack.
 	key := model.JobRunKey{WorkspaceID: ref.WorkspaceID, CaseID: ref.CaseID, JobID: ref.JobID}
 	channelID := callback.Channel.ID
 	messageTS := callback.Message.Timestamp
-	// Only the notices addressed to the submitter use their language. The
-	// resumed run keeps ctx, so what it posts to the thread stays in the
-	// deployment default like every other Job run's posts.
+	// The workspace language, when configured, applies to everything this
+	// handler posts. Otherwise only the notices addressed to the submitter use
+	// their language; the resumed run keeps ctx, so what it posts to the thread
+	// stays in the deployment default like every other Job run's posts.
+	ctx = i18n.ContextWithWorkspaceLang(ctx, r.deps.Registry.Language(ref.WorkspaceID))
 	noticeCtx := r.contextWithSubmitterLang(ctx, callback.User.ID)
 
 	if r.deps.WorkspaceAccess == nil {

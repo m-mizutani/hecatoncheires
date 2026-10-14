@@ -136,6 +136,52 @@ func TestThreadCase_Creation(t *testing.T) {
 	gt.Bool(t, foundSummary).True()
 }
 
+// The create turn follows the workspace language even when the caller set only
+// a user language — the eval harness calls this entry point directly, without
+// the Slack dispatcher in front of it.
+func TestThreadCase_CreationFollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	repo := memory.New()
+	reg := newThreadWorkspaceRegistry()
+	entry, err := reg.Get("support")
+	gt.NoError(t, err).Required()
+	entry.Language = i18n.LangJA
+	slackMock := &agentTestSlackService{}
+	caseUC := usecase.NewCaseUseCase(repo, reg, slackMock, nil, "https://app.test")
+	llm := newScriptedClient(nil)
+	agentUC := usecase.NewAgentUseCase(usecase.AgentDeps{
+		Repo:         repo,
+		Registry:     reg,
+		LLM:          llm,
+		HistoryRepo:  agentarchive.NewMemoryHistoryRepository(),
+		TraceRepo:    agentarchive.NewMemoryTraceRepository(),
+		SlackService: slackMock,
+		CaseUC:       caseUC,
+	})
+	k, procs := bindAgentRuntimeWithProcesses(t, agentRuntimeDeps{UC: agentUC, Repo: repo, Registry: reg, LLM: llm})
+
+	const rootTS = "1700000000.000100"
+	msg := slackmodel.NewMessageFromData(
+		rootTS, "C-MONITOR", "", "T1", "U-REPORTER", "alice",
+		"Cannot log in to the portal", rootTS, time.Now(), nil)
+	userCtx := i18n.ContextWithLang(context.Background(), i18n.LangEN)
+	gt.NoError(t, agentUC.HandleThreadCaseCreation(userCtx, msg, entry)).Required()
+	async.Wait()
+
+	turn := threadTurn(t, k, procs, "C-MONITOR", rootTS, rootTS)
+	gt.String(t, turn.Scope.Lang).Equal("ja")
+	gt.String(t, turn.LanguageLabel).Equal("Japanese")
+	// The acknowledgement posted before the spawn is in the workspace language.
+	ack := i18n.T(i18n.ContextWithLang(context.Background(), i18n.LangJA), i18n.MsgThreadCaseCreating)
+	found := false
+	for _, p := range slackMock.posts() {
+		if p.Text == ack {
+			found = true
+		}
+	}
+	gt.Bool(t, found).True()
+}
+
 // A create turn leaves ONE progress message in the thread: the acknowledgement
 // posted before the turn is spawned, which the run then rewrites for every
 // milestone it reaches. The case summary is a separate message; the progress one

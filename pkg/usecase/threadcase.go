@@ -59,6 +59,7 @@ func (uc *AgentUseCase) HandleThreadCaseCreation(ctx context.Context, msg *slack
 	if !uc.threadCaseReady() || uc.deps.CaseUC == nil || entry == nil {
 		return nil
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 	wsID := entry.Workspace.ID
 	channelID := msg.ChannelID()
 	threadTS := msg.ID()
@@ -135,6 +136,7 @@ func (uc *AgentUseCase) HandleThreadCaseMentionCreation(ctx context.Context, msg
 	if !uc.threadCaseReady() || uc.deps.CaseUC == nil || entry == nil {
 		return nil
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 	wsID := entry.Workspace.ID
 	channelID := msg.ChannelID()
 
@@ -549,6 +551,7 @@ func (uc *AgentUseCase) HandleThreadCaseMention(ctx context.Context, msg *slackm
 	if !uc.threadCaseReady() || entry == nil || foundCase == nil {
 		return nil
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 	logger := logging.From(ctx)
 	wsID := entry.Workspace.ID
 	channelID := msg.ChannelID()
