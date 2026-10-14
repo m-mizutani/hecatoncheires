@@ -86,7 +86,7 @@ eval-only keys.
 id          = "thread-initial-login-issue"   # required, unique
 description = "Portal login 503 should be materialized into a case"
 workflow    = "thread_mode_initial"          # required, a registered driver kind
-language    = "en"                            # optional: the agent's conversation language
+language    = "en"                            # optional: the agent's conversation language (a [workspace] language below takes priority, as in production)
 
 # --- system-under-test workspace (standard workspace-config layout) ---
 [workspace]

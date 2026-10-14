@@ -8,16 +8,40 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 )
 
-type ctxKey struct{}
+// The context holds two languages in separate keys. Keeping them apart makes
+// the result independent of write order: several Slack paths set the user's
+// locale again after the workspace was resolved (the access-denied notices,
+// for one), and a single overwritten value would let that write discard the
+// workspace's setting.
+type (
+	userLangKey      struct{}
+	workspaceLangKey struct{}
+)
 
-// ContextWithLang returns a new context with the given language.
+// ContextWithLang sets the language of the person the output is addressed to:
+// the Slack user's locale, or the language an agent run saved at spawn.
 func ContextWithLang(ctx context.Context, lang Lang) context.Context {
-	return context.WithValue(ctx, ctxKey{}, lang)
+	return context.WithValue(ctx, userLangKey{}, lang)
 }
 
-// LangFromContext extracts the language from context, or returns empty string.
+// ContextWithWorkspaceLang sets the workspace's configured language, which
+// LangFromContext prefers over the language set by ContextWithLang. An empty
+// lang returns ctx unchanged, so a caller can pass the value of a workspace
+// that configures none.
+func ContextWithWorkspaceLang(ctx context.Context, lang Lang) context.Context {
+	if lang == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, workspaceLangKey{}, lang)
+}
+
+// LangFromContext returns the workspace language when set, otherwise the
+// language set by ContextWithLang, otherwise an empty string.
 func LangFromContext(ctx context.Context) Lang {
-	if lang, ok := ctx.Value(ctxKey{}).(Lang); ok {
+	if lang, ok := ctx.Value(workspaceLangKey{}).(Lang); ok && lang != "" {
+		return lang
+	}
+	if lang, ok := ctx.Value(userLangKey{}).(Lang); ok {
 		return lang
 	}
 	return ""
@@ -351,6 +375,15 @@ func LanguageLabel(ctx context.Context) string {
 	if lang == "" {
 		lang = DefaultLang()
 	}
+	return LanguageLabelOf(lang)
+}
+
+// LanguageLabelOf returns the English name of lang, the form a prompt's
+// language directive is written with, or an empty string for a language this
+// package does not support. Unlike LanguageLabel it applies no fallback: a
+// host passing a workspace's configured language gets an empty result when the
+// workspace configures none.
+func LanguageLabelOf(lang Lang) string {
 	switch lang {
 	case LangJA:
 		return "Japanese"

@@ -631,6 +631,7 @@ func (uc *ActionUseCase) recordArchiveEvent(ctx context.Context, workspaceID str
 // render) and posts a context-block thread reply describing who archived
 // what. Best-effort throughout.
 func (uc *ActionUseCase) notifyArchiveOnSlack(ctx context.Context, workspaceID string, action *model.Action, caseModel *model.Case, kind types.ActionEventKind, actor ActorRef) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(workspaceID))
 	if uc.slackService == nil || action.SlackMessageTS == "" || caseModel == nil || caseModel.SlackChannelID == "" {
 		return
 	}
@@ -815,6 +816,7 @@ func (uc *ActionUseCase) refreshSlackMessage(ctx context.Context, workspaceID st
 // to see history without opening the WebUI; the ingest path drops these
 // posts so they don't double-count in the ActionEvent feed.
 func (uc *ActionUseCase) postActionChangeNotification(ctx context.Context, workspaceID string, before, after *model.Action, actor ActorRef) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(workspaceID))
 	if uc.slackService == nil || after.SlackMessageTS == "" {
 		return
 	}
@@ -983,6 +985,7 @@ func buildActionCommentWebURL(baseURL, workspaceID string, caseID, actionID int6
 //     carrying the status_select and assignee_select. Both selects share a
 //     single Actions block; their block_id encodes (workspaceID, actionID).
 func (uc *ActionUseCase) buildActionMessagePayload(ctx context.Context, workspaceID string, action *model.Action, actionURL string) (string, goslack.Attachment) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(workspaceID))
 	statusSet := uc.statusSet(workspaceID)
 	// `&`, `<`, `>` are mrkdwn control characters and must be HTML-escaped
 	// or Slack swallows the title (or worse, treats user input as markup).

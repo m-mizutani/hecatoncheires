@@ -47,6 +47,7 @@ func (uc *SlackUseCases) HandleSaveAsDraftClick(ctx context.Context, caseUC *Cas
 	if err := json.Unmarshal([]byte(callback.View.PrivateMetadata), &meta); err != nil {
 		return goerr.Wrap(err, "failed to parse save-as-draft private_metadata")
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(meta.WorkspaceID))
 
 	allowed, err := authorizeSlackActor(ctx, uc.workspaceAccess, uc.ephemeralPoster(), meta.WorkspaceID, callback.User.ID, meta.ChannelID)
 	if err != nil {

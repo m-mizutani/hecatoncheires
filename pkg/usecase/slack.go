@@ -121,6 +121,7 @@ func (uc *SlackUseCases) HandleSlackEvent(ctx context.Context, event *slackevent
 			if uc.agent == nil {
 				return nil
 			}
+			ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(caseWS))
 			if !uc.eventActorAllowed(ctx, caseWS, appMention.User, appMention.BotID, appMention.Channel) {
 				return nil
 			}
@@ -140,6 +141,7 @@ func (uc *SlackUseCases) HandleSlackEvent(ctx context.Context, event *slackevent
 			if uc.agent == nil {
 				return nil
 			}
+			ctx = i18n.ContextWithWorkspaceLang(ctx, wsEntry.Language)
 			if !uc.eventActorAllowed(ctx, wsEntry.Workspace.ID, appMention.User, appMention.BotID, appMention.Channel) {
 				return nil
 			}
@@ -303,6 +305,7 @@ func (uc *SlackUseCases) handleThreadModeEvent(ctx context.Context, event *slack
 	}
 	wsID := entry.Workspace.ID
 	mentionTrigger := entry.CaseTrigger.IsMention()
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 
 	if appMention, ok := event.InnerEvent.Data.(*slackevents.AppMentionEvent); ok {
 		threadTS := appMention.ThreadTimeStamp

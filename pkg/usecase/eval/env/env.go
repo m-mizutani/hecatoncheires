@@ -427,6 +427,7 @@ func buildRegistry(wc *config.WorkspaceConfig) (*model.WorkspaceRegistry, *model
 		CompilePrompt:         wc.CompilePrompt,
 		AssistPrompt:          wc.AssistPrompt,
 		AssistLanguage:        wc.AssistLanguage,
+		Language:              wc.Language,
 		CaseCreatePrompt:      wc.CaseCreatePrompt,
 		Jobs:                  wc.Jobs,
 		CaseMode:              wc.CaseMode,

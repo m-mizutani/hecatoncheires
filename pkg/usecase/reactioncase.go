@@ -11,6 +11,7 @@ import (
 	"github.com/slack-go/slack/slackevents"
 
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/threadcase"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 )
@@ -78,6 +79,7 @@ func (uc *SlackUseCases) handleReactionEvent(ctx context.Context, event *slackev
 		// Not a trigger emoji for any workspace — ignore silently.
 		return nil
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 
 	// Self-loop guard: never react to our own reactions, nor to reactions placed
 	// on our own posts (a case summary, a case root placeholder), which would

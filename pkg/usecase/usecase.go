@@ -286,8 +286,8 @@ func New(repo interfaces.Repository, registry *model.WorkspaceRegistry, opts ...
 	uc.Memo = NewMemoUseCase(repo, registry)
 	uc.Knowledge = NewKnowledgeUseCase(repo, uc.embedClient)
 	uc.Tag = NewTagUseCase(repo)
-	uc.ActionStep = NewActionStepUseCase(repo, uc.slackService, slotCoord)
-	uc.ActionComment = NewActionCommentUseCase(repo, uc.slackService, uc.baseURL, slotCoord)
+	uc.ActionStep = NewActionStepUseCase(repo, registry, uc.slackService, slotCoord)
+	uc.ActionComment = NewActionCommentUseCase(repo, registry, uc.slackService, uc.baseURL, slotCoord)
 
 	// Convert *github.Client to githubAPI interface, preserving nil-ness:
 	// passing a typed nil pointer through an interface parameter would make

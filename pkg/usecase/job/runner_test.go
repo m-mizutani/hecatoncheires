@@ -1729,6 +1729,50 @@ func TestJobRunner_ThreadModeSessionLog(t *testing.T) {
 	gt.String(t, calls[1].text).Equal(i18n.T(ctx, i18n.MsgJobRunCompleted, "triage"))
 }
 
+// A Job run has no user whose locale could apply, so its session log follows the
+// workspace language; a workspace that configures none keeps the deployment
+// default.
+func TestJobRunner_SessionLogFollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	jaCtx := i18n.ContextWithLang(context.Background(), i18n.LangJA)
+	enCtx := i18n.ContextWithLang(context.Background(), i18n.LangEN)
+
+	for _, tc := range []struct {
+		name   string
+		wsLang i18n.Lang
+		want   context.Context
+	}{
+		{name: "workspace ja", wsLang: i18n.LangJA, want: jaCtx},
+		{name: "workspace unset", wsLang: "", want: enCtx},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo, c := setupCaseWithSlack(t, "ws", "C1", "")
+			j := notifyJob("triage")
+			fake := &fakeNotifier{rootTS: "root-123"}
+			registry := model.NewWorkspaceRegistry()
+			registry.Register(&model.WorkspaceEntry{
+				Workspace: model.Workspace{ID: "ws", Name: "WS"},
+				Jobs:      []*model.Job{j},
+				Language:  tc.wsLang,
+			})
+			runner := job.NewJobRunner(job.RunnerDeps{
+				Repo: repo, Registry: registry, LLMClient: inertLLM(),
+				Executors:     map[model.JobStrategy]jobagent.JobExecutor{model.JobStrategySimple: &traceDrivingExecutor{}},
+				SlackNotifier: fake,
+			})
+			gt.NoError(t, runner.Run(context.Background(), j, job.Event{
+				Domain: model.JobEventDomainCase, WorkspaceID: "ws", CaseID: c.ID,
+				Timestamp: time.Now().UTC(), CaseLifecycle: model.CaseLifecycleCreated,
+			})).Required()
+
+			calls := fake.snapshot()
+			gt.Array(t, calls).Length(2).Required()
+			gt.String(t, calls[0].text).Equal(i18n.T(tc.want, i18n.MsgJobRunStarting, "triage"))
+			gt.String(t, calls[1].text).Equal(i18n.T(tc.want, i18n.MsgJobRunCompleted, "triage"))
+		})
+	}
+}
+
 // TestJobRunner_QuietSuppressesSessionLog: quiet=true emits no operational
 // Slack traffic at all, even with a wired notifier.
 func TestJobRunner_QuietSuppressesSessionLog(t *testing.T) {

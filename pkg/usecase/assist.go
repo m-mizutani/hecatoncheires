@@ -19,6 +19,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/async"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/errutil"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/logging"
@@ -194,6 +195,7 @@ func (uc *AssistUseCase) processWorkspace(ctx context.Context, entry *model.Work
 func (uc *AssistUseCase) processCase(ctx context.Context, entry *model.WorkspaceEntry, c *model.Case, opts AssistOption) (agentkit.ProcessID, error) {
 	logger := logging.From(ctx)
 	wsID := entry.Workspace.ID
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 
 	logger.Info("processing case", "workspaceID", wsID, "caseID", c.ID, "caseTitle", c.Title)
 
@@ -211,6 +213,7 @@ func (uc *AssistUseCase) processCase(ctx context.Context, entry *model.Workspace
 		CaseID:      c.ID,
 		ToolSets:    []string{agentkernel.ToolSetsAll},
 		PrivateCase: c.IsPrivate,
+		Lang:        string(i18n.LangFromContext(ctx)),
 	}
 	if err := agentkernel.ValidateSpawn(agentkernel.AgentAssist, scope); err != nil {
 		return "", goerr.Wrap(err, "validate the assist scope", goerr.V("caseID", c.ID))
@@ -364,7 +367,7 @@ func (uc *AssistUseCase) onFinish(ctx context.Context, pid agentkit.ProcessID, r
 
 	language := ""
 	if entry, err := uc.deps.Registry.Get(sc.WorkspaceID); err == nil && entry != nil {
-		language = entry.AssistLanguage
+		language = assistLanguage(entry)
 	}
 
 	if err := uc.saveAssistLog(ctx, sc.WorkspaceID, sc.CaseID, language, res.Output.Text()); err != nil {
@@ -374,6 +377,16 @@ func (uc *AssistUseCase) onFinish(ctx context.Context, pid agentkit.ProcessID, r
 		), "failed to save assist log")
 	}
 	return nil
+}
+
+// assistLanguage is the language name the assist prompt asks for. [assist]
+// language is set for assist alone and so wins; without it the workspace
+// language applies, and without either the prompt carries no directive.
+func assistLanguage(entry *model.WorkspaceEntry) string {
+	if entry.AssistLanguage != "" {
+		return entry.AssistLanguage
+	}
+	return i18n.LanguageLabelOf(entry.Language)
 }
 
 // assistPromptMessage represents a message for the assist system prompt template
@@ -431,7 +444,7 @@ func (uc *AssistUseCase) buildAssistSystemPrompt(ctx context.Context, entry *mod
 		CurrentTime:  time.Now().UTC().Format(time.RFC3339),
 		Case:         c,
 		AssistPrompt: entry.AssistPrompt,
-		Language:     entry.AssistLanguage,
+		Language:     assistLanguage(entry),
 		SlackFormat:  slackfmt.Section(),
 	}
 

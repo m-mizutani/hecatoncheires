@@ -22,6 +22,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/proposal"
@@ -65,7 +66,10 @@ const (
 
 // durableCall records one Host call a finished turn made.
 type durableCall struct {
-	Kind     string // "propose" | "ask" | "fallback"
+	Kind string // "propose" | "ask" | "fallback"
+	// Lang is the language the call's context resolves to, which is what the
+	// host renders its Slack copy in.
+	Lang     i18n.Lang
 	Target   proposal.Target
 	Draft    proposal.MaterializePayload
 	Question proposal.QuestionPayload
@@ -81,8 +85,8 @@ type durableHost struct {
 	askErr error
 }
 
-func (h *durableHost) Propose(_ context.Context, target proposal.Target, m proposal.MaterializePayload) error {
-	h.record(durableCall{Kind: "propose", Target: target, Draft: m})
+func (h *durableHost) Propose(ctx context.Context, target proposal.Target, m proposal.MaterializePayload) error {
+	h.record(durableCall{Kind: "propose", Target: target, Draft: m, Lang: i18n.LangFromContext(ctx)})
 	return nil
 }
 
@@ -224,10 +228,17 @@ type durableHarness struct {
 // spawn, turn lock, redelivery, and what the completion handler delivers.
 func newDurableHarness(t *testing.T, llm gollem.LLMClient) *durableHarness {
 	t.Helper()
+	return newDurableHarnessWith(t, llm, draftWorkspace())
+}
+
+// newDurableHarnessWith is newDurableHarness with the given entry registered as
+// the requester's workspace in place of draftWorkspace.
+func newDurableHarnessWith(t *testing.T, llm gollem.LLMClient, workspace *model.WorkspaceEntry) *durableHarness {
+	t.Helper()
 
 	repo := memory.New()
 	registry := model.NewWorkspaceRegistry()
-	registry.Register(draftWorkspace())
+	registry.Register(workspace)
 	registry.Register(secretWorkspace())
 
 	procRepo := agentprocmemory.New()
@@ -734,6 +745,41 @@ func TestDurableResumeStartsFreshWhenThereIsNothingToInherit(t *testing.T) {
 	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
 	gt.Value(t, proc.InheritedHistory).Nil()
 	gt.Array(t, h.host.kinds()).Equal([]string{"propose"})
+}
+
+// The run picks its workspace only in its terminal output, so the preview is the
+// first output that can follow that workspace's language. The completion handler
+// hands the host a context resolving to it; a workspace with no language leaves
+// the context's language as it was.
+func TestDurablePreviewFollowsTheChosenWorkspaceLanguage(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		wsLang i18n.Lang
+		want   i18n.Lang
+	}{
+		{name: "workspace ja", wsLang: i18n.LangJA, want: i18n.LangJA},
+		{name: "workspace unset", wsLang: "", want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			ws := draftWorkspace()
+			ws.Language = tc.wsLang
+			h := newDurableHarnessWith(t, durableLLM(
+				draftPlan,
+				"read the thread",
+				draftFinalize,
+				`{"workspace_id":"risk","title":"Deploy failure","description":"It failed."}`,
+			), ws)
+			ssn := h.session(t, ctx)
+
+			proc := h.run(t, h.request(ssn, "1700000001.000071"))
+			gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+			calls := h.host.Calls()
+			gt.Array(t, calls).Length(1).Required()
+			gt.String(t, calls[0].Kind).Equal("propose")
+			gt.Value(t, calls[0].Lang).Equal(tc.want)
+		})
+	}
 }
 
 // A question the host could not deliver must NOT leave the thread recorded as

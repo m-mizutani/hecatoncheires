@@ -29,11 +29,14 @@ var (
 	// ErrInvalidWorkspaceEmoji is returned when the [workspace] emoji exceeds
 	// the allowed rune length.
 	ErrInvalidWorkspaceEmoji = goerr.New("invalid workspace emoji")
-	ErrInvalidCaseMode       = goerr.New("invalid case mode")
-	ErrInvalidCaseTrigger    = goerr.New("invalid case trigger")
-	ErrMissingMonitorChannel = goerr.New("thread mode requires [slack] channel")
-	ErrInvalidMonitorChannel = goerr.New("invalid Slack channel ID")
-	ErrMissingCaseStatus     = goerr.New("thread mode requires [case.status]")
+	// ErrInvalidWorkspaceLanguage is returned when the [workspace] language is
+	// not one of the supported language codes ("en", "ja").
+	ErrInvalidWorkspaceLanguage = goerr.New("invalid workspace language")
+	ErrInvalidCaseMode          = goerr.New("invalid case mode")
+	ErrInvalidCaseTrigger       = goerr.New("invalid case trigger")
+	ErrMissingMonitorChannel    = goerr.New("thread mode requires [slack] channel")
+	ErrInvalidMonitorChannel    = goerr.New("invalid Slack channel ID")
+	ErrMissingCaseStatus        = goerr.New("thread mode requires [case.status]")
 	// ErrReactionRequiresThreadMode is returned when [slack] reaction is set on a
 	// workspace that is not in thread mode. Reaction-triggered case creation needs
 	// a destination thread, which only thread mode provides.
@@ -193,6 +196,7 @@ const (
 	WorkspaceColorKey   = "workspace_color"
 	WorkspaceEmojiKey   = "workspace_emoji"
 	WorkspaceEmojiLen   = "workspace_emoji_len"
+	WorkspaceLangKey    = "language"
 	WorkspaceGroupIDKey = "workspace_group_id"
 	GroupMemberKey      = "group_member"
 	ExportDatasetKey    = "dataset"

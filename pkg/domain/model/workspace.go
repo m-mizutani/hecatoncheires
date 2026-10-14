@@ -3,6 +3,7 @@ package model
 import (
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 )
 
 // Workspace represents a workspace's identity
@@ -39,6 +40,9 @@ type WorkspaceEntry struct {
 	CompilePrompt        string
 	AssistPrompt         string
 	AssistLanguage       string
+	// Language is the workspace's output language from [workspace] language.
+	// It takes priority over each Slack user's locale; empty when unset.
+	Language i18n.Lang
 	// CaseCreatePrompt is the workspace-specific additional prompt for the
 	// thread-mode case initialization (create) agent, configured via TOML
 	// [case.prompts].create. Empty when unset; appended to the ModeCreate
@@ -118,6 +122,22 @@ func (r *WorkspaceRegistry) Get(workspaceID string) (*WorkspaceEntry, error) {
 			goerr.V("workspace_id", workspaceID))
 	}
 	return entry, nil
+}
+
+// Language returns the configured output language of the workspace, or an
+// empty string when the workspace sets none or is not registered. It reports
+// no error for an unregistered workspace: looking up the language only picks
+// a language, and each caller's own lookup already reports a missing
+// workspace. A nil registry returns an empty string.
+func (r *WorkspaceRegistry) Language(workspaceID string) i18n.Lang {
+	if r == nil {
+		return ""
+	}
+	entry, ok := r.entries[workspaceID]
+	if !ok {
+		return ""
+	}
+	return entry.Language
 }
 
 // FindByMonitorChannel returns the thread-mode workspace entry whose monitored

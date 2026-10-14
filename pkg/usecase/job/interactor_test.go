@@ -203,6 +203,13 @@ type freeTextRunFixture struct {
 
 func newFreeTextRunFixture(t *testing.T, poster *fakeQuestionPoster) *freeTextRunFixture {
 	t.Helper()
+	return newFreeTextRunFixtureInLanguage(t, poster, "")
+}
+
+// newFreeTextRunFixtureInLanguage is newFreeTextRunFixture for a workspace that
+// configures wsLang as its language.
+func newFreeTextRunFixtureInLanguage(t *testing.T, poster *fakeQuestionPoster, wsLang i18n.Lang) *freeTextRunFixture {
+	t.Helper()
 	ctx := context.Background()
 	wsID := "ws-unanswered"
 	now := time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC)
@@ -218,7 +225,7 @@ func newFreeTextRunFixture(t *testing.T, poster *fakeQuestionPoster) *freeTextRu
 	}
 	gt.NoError(t, j.Validate()).Required()
 	registry := model.NewWorkspaceRegistry()
-	registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: wsID, Name: "WS"}, Jobs: []*model.Job{j}})
+	registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: wsID, Name: "WS"}, Jobs: []*model.Job{j}, Language: wsLang})
 
 	exec := &freeTextQuestionExecutor{}
 	runner := job.NewJobRunner(job.RunnerDeps{
@@ -368,6 +375,21 @@ func TestHandleQuestionSubmit_UnansweredQuestions(t *testing.T) {
 func TestHandleQuestionSubmit_UnansweredNoticeUsesSubmitterLanguage(t *testing.T) {
 	poster := &fakeQuestionPoster{returnTS: "FORM-TS-1", locales: map[string]string{"U-ANSWERER": "ja-JP"}}
 	f := newFreeTextRunFixture(t, poster)
+
+	f.submit(t, context.Background(), onlyChoiceAnswered())
+
+	gt.Array(t, poster.ephemerals).Length(1).Required()
+	jaCtx := i18n.ContextWithLang(context.Background(), i18n.LangJA)
+	gt.String(t, poster.ephemerals[0].text).Equal(
+		i18n.T(jaCtx, i18n.MsgQuestionFormUnanswered, "• Anything else? (optional)"))
+}
+
+// A workspace that configures a language overrides the submitter's locale: an
+// English-locale user answering in a Japanese workspace is told in Japanese.
+func TestHandleQuestionSubmit_UnansweredNoticeUsesWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	poster := &fakeQuestionPoster{returnTS: "FORM-TS-1", locales: map[string]string{"U-ANSWERER": "en-US"}}
+	f := newFreeTextRunFixtureInLanguage(t, poster, i18n.LangJA)
 
 	f.submit(t, context.Background(), onlyChoiceAnswered())
 

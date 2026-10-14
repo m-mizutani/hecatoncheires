@@ -2,6 +2,7 @@ package usecase_test
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"sync"
@@ -324,6 +325,14 @@ func startAgentRuntime(t *testing.T, d agentRuntimeDeps) {
 // agent that would otherwise be finishing the run at the same time.
 func bindAgentRuntimeWithoutWorker(t *testing.T, d agentRuntimeDeps) *agentkit.Kernel {
 	t.Helper()
+	k, _ := bindAgentRuntimeWithProcesses(t, d)
+	return k
+}
+
+// bindAgentRuntimeWithProcesses is bindAgentRuntimeWithoutWorker that also
+// returns the process store, so a test can read back what a host spawned.
+func bindAgentRuntimeWithProcesses(t *testing.T, d agentRuntimeDeps) (*agentkit.Kernel, agentkit.Repository) {
+	t.Helper()
 
 	procRepo := agentprocmemory.New()
 	history := agentarchive.NewMemoryHistoryStore()
@@ -353,7 +362,37 @@ func bindAgentRuntimeWithoutWorker(t *testing.T, d agentRuntimeDeps) *agentkit.K
 	})
 	gt.NoError(t, err).Required()
 	d.UC.BindAgentKernel(k, nil)
-	return k
+	return k, procRepo
+}
+
+// spawnedTurn is what a Slack-thread host recorded when it spawned the turn
+// for one thread: the run's scope and the language directive of its input.
+type spawnedTurn struct {
+	Scope         agentkernel.Scope
+	LanguageLabel string
+}
+
+// threadTurn reads back the Process a Slack-thread host spawned for the
+// trigger (channelID, threadTS, triggerTS). Every such host spawns with
+// agentkernel.TriggerKey as its idempotency key, which is what finds it here.
+func threadTurn(t *testing.T, k *agentkit.Kernel, procs agentkit.Repository, channelID, threadTS, triggerTS string) spawnedTurn {
+	t.Helper()
+	ctx := context.Background()
+	locator, err := agentkernel.NewLocator(procs)
+	gt.NoError(t, err).Required()
+	pid, err := locator.ByTrigger(ctx, agentkernel.TriggerKey(channelID, threadTS, triggerTS))
+	gt.NoError(t, err).Required()
+	gt.String(t, string(pid)).NotEqual("").Required()
+	proc, err := k.GetProcess(ctx, pid)
+	gt.NoError(t, err).Required()
+
+	var state struct {
+		Input struct {
+			LanguageLabel string `json:"language_label"`
+		} `json:"input"`
+	}
+	gt.NoError(t, json.Unmarshal(proc.State, &state)).Required()
+	return spawnedTurn{Scope: agentkernel.ScopeFrom(proc.Metadata), LanguageLabel: state.Input.LanguageLabel}
 }
 
 // waitForLLMFlag blocks until a probe LLM has been asked for a session, which is
@@ -772,12 +811,43 @@ func TestAgentUseCase_HandleSessionInfoRequest(t *testing.T) {
 			SlackService: mockWithCapture,
 		})
 
-		err := agentUC.HandleSessionInfoRequest(t.Context(), "trigger-123", "test-session-id")
+		err := agentUC.HandleSessionInfoRequest(t.Context(), "trigger-123", "test-session-id", "", "")
 		gt.NoError(t, err)
 
 		gt.Value(t, mockWithCapture.openViewCalled).Equal(true)
 		gt.Value(t, mockWithCapture.openViewTriggerID).Equal("trigger-123")
 		gt.Value(t, mockWithCapture.openViewRequest.Title.Text).Equal("Session Info")
+	})
+
+	// The modal is written in the language of the workspace the thread's Session
+	// belongs to; a thread whose Session is a different one leaves it alone.
+	t.Run("follows the workspace language of the thread's session", func(t *testing.T) {
+		i18n.Init(i18n.LangEN)
+		open := func(t *testing.T, sessionID string) string {
+			t.Helper()
+			repo := memory.New()
+			registry := model.NewWorkspaceRegistry()
+			registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: "ws-ja"}, Language: i18n.LangJA})
+			gt.NoError(t, repo.Session().Put(t.Context(), &model.Session{
+				ID: "ssn-info", ChannelID: "C-INFO", ThreadTS: "1700000000.000100", WorkspaceID: "ws-ja",
+				CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+			})).Required()
+			mock := &agentTestSlackServiceWithOpenView{agentTestSlackService: &agentTestSlackService{}}
+			agentUC := usecase.NewAgentUseCase(usecase.AgentDeps{
+				Repo:         repo,
+				Registry:     registry,
+				LLM:          &mockLLMClient{},
+				HistoryRepo:  agentarchive.NewMemoryHistoryRepository(),
+				TraceRepo:    agentarchive.NewMemoryTraceRepository(),
+				SlackService: mock,
+			})
+			gt.NoError(t, agentUC.HandleSessionInfoRequest(t.Context(), "trigger-1", sessionID, "C-INFO", "1700000000.000100")).Required()
+			return mock.openViewRequest.Title.Text
+		}
+
+		gt.String(t, open(t, "ssn-info")).Equal(
+			i18n.T(i18n.ContextWithLang(context.Background(), i18n.LangJA), i18n.MsgAgentSessionInfo))
+		gt.String(t, open(t, "another-session")).Equal("Session Info")
 	})
 }
 

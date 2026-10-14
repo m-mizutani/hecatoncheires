@@ -247,6 +247,7 @@ func (uc *AgentUseCase) HandleAgentMention(ctx context.Context, msg *slackmodel.
 		logger.Debug("no case found for channel, skipping agent response", "channel_id", msg.ChannelID())
 		return nil
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 
 	// Determine thread parent TS. Slack stores thread replies under their
 	// parent's `ts`; for a top-level mention we treat the mention itself as
@@ -655,8 +656,11 @@ func (uc *AgentUseCase) postSessionStart(ctx context.Context, channelID, threadT
 	return nil
 }
 
-// HandleSessionInfoRequest opens a modal displaying the session ID
-func (uc *AgentUseCase) HandleSessionInfoRequest(ctx context.Context, triggerID, sessionID string) error {
+// HandleSessionInfoRequest opens a modal displaying the session ID. channelID
+// and threadTS locate the thread the request came from; the Session recorded
+// for it names the workspace whose language the modal is written in.
+func (uc *AgentUseCase) HandleSessionInfoRequest(ctx context.Context, triggerID, sessionID, channelID, threadTS string) error {
+	ctx = uc.contextWithSessionWorkspaceLang(ctx, sessionID, channelID, threadTS)
 	view := goslack.ModalViewRequest{
 		Type:  goslack.VTModal,
 		Title: goslack.NewTextBlockObject(goslack.PlainTextType, i18n.T(ctx, i18n.MsgAgentSessionInfo), false, false),
@@ -675,6 +679,28 @@ func (uc *AgentUseCase) HandleSessionInfoRequest(ctx context.Context, triggerID,
 		return goerr.Wrap(err, "failed to open session info modal")
 	}
 	return nil
+}
+
+// contextWithSessionWorkspaceLang writes the language of the workspace the
+// thread's Session belongs to. The modal is still worth opening without it, so
+// a failed lookup is reported and the context is left as it was; a Session that
+// is missing, belongs to another session id, or names no workspace changes
+// nothing either.
+func (uc *AgentUseCase) contextWithSessionWorkspaceLang(ctx context.Context, sessionID, channelID, threadTS string) context.Context {
+	if channelID == "" || threadTS == "" {
+		return ctx
+	}
+	ssn, err := uc.deps.Repo.Session().GetByThread(ctx, channelID, threadTS)
+	if err != nil {
+		errutil.Handle(ctx, goerr.Wrap(err, "look up the session for the session info modal",
+			goerr.V("channel_id", channelID), goerr.V("thread_ts", threadTS)),
+			"look up the session for the session info modal")
+		return ctx
+	}
+	if ssn == nil || ssn.ID != sessionID {
+		return ctx
+	}
+	return i18n.ContextWithWorkspaceLang(ctx, uc.deps.Registry.Language(ssn.WorkspaceID))
 }
 
 // findCaseByChannel searches for a case associated with the given channel ID across all workspaces

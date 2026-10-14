@@ -162,6 +162,28 @@ func TestHandleQuestionSubmit_UnansweredQuestions(t *testing.T) {
 		}
 	})
 
+	t.Run("the notice follows the language of the workspace the draft names", func(t *testing.T) {
+		i18n.Init(i18n.LangEN)
+		f := setup(t)
+		entry, err := f.registry.Get("ws-1")
+		gt.NoError(t, err).Required()
+		entry.Language = i18n.LangJA
+		ssn, err := f.repo.Session().GetByThread(context.Background(), f.channelID, f.threadTS)
+		gt.NoError(t, err).Required()
+		d, err := f.repo.CaseProposal().Get(context.Background(), ssn.ProposalID)
+		gt.NoError(t, err).Required()
+		d.SelectedWorkspaceID = "ws-1"
+		gt.NoError(t, f.repo.CaseProposal().Save(context.Background(), d)).Required()
+
+		submit(t, i18n.ContextWithLang(context.Background(), i18n.LangEN), f)
+
+		eph := f.slackMock.ephemerals()
+		gt.Array(t, eph).Length(1).Required()
+		jaCtx := i18n.ContextWithLang(context.Background(), i18n.LangJA)
+		gt.String(t, eph[0].Text).Equal(i18n.T(jaCtx, i18n.MsgQuestionFormUnanswered, "• Anything else? (optional)"))
+		assertStillPending(t, f)
+	})
+
 	t.Run("a failed notice does not change the rejection", func(t *testing.T) {
 		f := setup(t)
 		f.slackMock.ephemeralErr = errors.New("slack is down")

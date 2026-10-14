@@ -126,6 +126,66 @@ func TestActionUseCase_CreateAction(t *testing.T) {
 // A Slack actor the workspace's policy denies cannot update an action (the
 // Slack status / assignee selects reach UpdateAction without the GraphQL
 // field middleware), while a system actor is not checked.
+// actionChangeTexts drives a status change and an archive on one Action and
+// returns the thread notifications they posted. wsLang is the workspace's
+// configured language and defaultLang the deployment default; the context
+// carries no user language, as a web UI request does not.
+func actionChangeTexts(t *testing.T, wsLang, defaultLang i18n.Lang) []string {
+	t.Helper()
+	i18n.Init(defaultLang)
+	defer i18n.Init(i18n.LangEN)
+
+	repo := memory.New()
+	registry := model.NewWorkspaceRegistry()
+	registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: testWorkspaceID}, Language: wsLang})
+	slackFake := &stepSlackFake{}
+	caseUC := usecase.NewCaseUseCase(repo, registry, slackFake, nil, "")
+	actionUC := usecase.NewActionUseCase(repo, registry, slackFake, "", nil)
+	ctx := auth.ContextWithToken(context.Background(), &auth.Token{Sub: "UCASEMEMBER"})
+
+	c, err := caseUC.CreateCase(ctx, testWorkspaceID, "Lang Case", "", nil, nil, false, false, "", "")
+	gt.NoError(t, err).Required()
+	stored, err := repo.Case().Get(ctx, testWorkspaceID, c.ID)
+	gt.NoError(t, err).Required()
+	stored.SlackChannelID = "CLANG"
+	stored.ChannelUserIDs = []string{"UCASEMEMBER"}
+	_, err = repo.Case().Update(ctx, testWorkspaceID, stored)
+	gt.NoError(t, err).Required()
+
+	action, err := actionUC.CreateAction(ctx, testWorkspaceID, c.ID, "Lang Action", "", "", "1700000000.000100", types.ActionStatusTodo, nil)
+	gt.NoError(t, err).Required()
+	async.Wait()
+	slackFake.calls = nil
+
+	actor := usecase.ActorRef{Kind: usecase.ActorKindSlackUser, ID: "UCASEMEMBER"}
+	done := types.ActionStatusCompleted
+	_, err = actionUC.UpdateAction(ctx, testWorkspaceID, usecase.UpdateActionInput{
+		ID: action.ID, Status: &done, Actor: actor,
+	})
+	gt.NoError(t, err).Required()
+	_, err = actionUC.ArchiveAction(ctx, testWorkspaceID, action.ID, actor)
+	gt.NoError(t, err).Required()
+	async.Wait()
+
+	texts := make([]string, 0, len(slackFake.calls))
+	for _, call := range slackFake.calls {
+		texts = append(texts, call.text)
+	}
+	return texts
+}
+
+// The Action change and archive notices follow the workspace language, which
+// wins over the deployment default; without one they keep the default.
+func TestActionUseCase_NotificationsFollowTheWorkspaceLanguage(t *testing.T) {
+	inJapanese := actionChangeTexts(t, "", i18n.LangJA)
+	inEnglish := actionChangeTexts(t, "", i18n.LangEN)
+	gt.Array(t, inJapanese).Length(2).Required()
+	gt.Value(t, inJapanese).NotEqual(inEnglish)
+
+	gt.Value(t, actionChangeTexts(t, i18n.LangJA, i18n.LangEN)).Equal(inJapanese)
+	gt.Value(t, actionChangeTexts(t, i18n.LangEN, i18n.LangJA)).Equal(inEnglish)
+}
+
 func TestActionUseCase_UpdateAction_WorkspaceAccess(t *testing.T) {
 	ctx := context.Background()
 	repo := memory.New()

@@ -81,6 +81,55 @@ func TestT(t *testing.T) {
 	})
 }
 
+// The workspace language must win over the user's locale whatever order the two
+// are written in, because Slack paths set the user's locale both before and
+// after they resolve the workspace.
+func TestLangFromContext(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	jaTitle := i18n.T(i18n.ContextWithLang(context.Background(), i18n.LangJA), i18n.MsgModalCreateCaseTitle)
+
+	t.Run("workspace language alone", func(t *testing.T) {
+		ctx := i18n.ContextWithWorkspaceLang(context.Background(), i18n.LangJA)
+		gt.Value(t, i18n.LangFromContext(ctx)).Equal(i18n.LangJA)
+		gt.String(t, i18n.T(ctx, i18n.MsgModalCreateCaseTitle)).Equal(jaTitle)
+		gt.String(t, i18n.LanguageLabel(ctx)).Equal("Japanese")
+	})
+
+	t.Run("workspace language written after the user's wins", func(t *testing.T) {
+		ctx := i18n.ContextWithLang(context.Background(), i18n.LangEN)
+		ctx = i18n.ContextWithWorkspaceLang(ctx, i18n.LangJA)
+		gt.Value(t, i18n.LangFromContext(ctx)).Equal(i18n.LangJA)
+	})
+
+	t.Run("workspace language written before the user's wins", func(t *testing.T) {
+		ctx := i18n.ContextWithWorkspaceLang(context.Background(), i18n.LangJA)
+		ctx = i18n.ContextWithLang(ctx, i18n.LangEN)
+		gt.Value(t, i18n.LangFromContext(ctx)).Equal(i18n.LangJA)
+		gt.String(t, i18n.T(ctx, i18n.MsgModalCreateCaseTitle)).Equal(jaTitle)
+	})
+
+	t.Run("user language alone", func(t *testing.T) {
+		ctx := i18n.ContextWithLang(context.Background(), i18n.LangEN)
+		gt.Value(t, i18n.LangFromContext(ctx)).Equal(i18n.LangEN)
+	})
+
+	t.Run("an empty workspace language leaves the context unchanged", func(t *testing.T) {
+		base := i18n.ContextWithLang(context.Background(), i18n.LangEN)
+		ctx := i18n.ContextWithWorkspaceLang(base, "")
+		gt.Value(t, ctx).Equal(base)
+		gt.Value(t, i18n.LangFromContext(ctx)).Equal(i18n.LangEN)
+	})
+
+	t.Run("neither falls back to the default language", func(t *testing.T) {
+		i18n.Init(i18n.LangJA)
+		defer i18n.Init(i18n.LangEN)
+		ctx := context.Background()
+		gt.Value(t, i18n.LangFromContext(ctx)).Equal(i18n.Lang(""))
+		gt.String(t, i18n.T(ctx, i18n.MsgModalCreateCaseTitle)).Equal(jaTitle)
+		gt.String(t, i18n.LanguageLabel(ctx)).Equal("Japanese")
+	})
+}
+
 func TestDefaultLang(t *testing.T) {
 	t.Run("returns configured default", func(t *testing.T) {
 		i18n.Init(i18n.LangJA)
@@ -115,6 +164,16 @@ func TestLanguageLabel(t *testing.T) {
 		gt.Value(t, i18n.LanguageLabel(i18n.ContextWithLang(context.Background(), i18n.Lang("fr")))).
 			Equal("")
 	})
+}
+
+func TestLanguageLabelOf(t *testing.T) {
+	gt.Value(t, i18n.LanguageLabelOf(i18n.LangJA)).Equal("Japanese")
+	gt.Value(t, i18n.LanguageLabelOf(i18n.LangEN)).Equal("English")
+	// No fallback to the default language: an unset language has no name.
+	i18n.Init(i18n.LangJA)
+	defer i18n.Init(i18n.LangEN)
+	gt.Value(t, i18n.LanguageLabelOf("")).Equal("")
+	gt.Value(t, i18n.LanguageLabelOf(i18n.Lang("fr"))).Equal("")
 }
 
 func TestDetectLang(t *testing.T) {

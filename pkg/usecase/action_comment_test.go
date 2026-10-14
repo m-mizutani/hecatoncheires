@@ -147,7 +147,7 @@ func newCommentTestFixture(t *testing.T, opts commentFixtureOptions) *commentTes
 	if !opts.noSlack {
 		slackForUC = slackFake
 	}
-	commentUC := usecase.NewActionCommentUseCase(repo, slackForUC, opts.baseURL, slotCoord)
+	commentUC := usecase.NewActionCommentUseCase(repo, nil, slackForUC, opts.baseURL, slotCoord)
 
 	// Drop the setup posts so assertions only see comment-driven calls.
 	slackFake.threadCalls = nil
@@ -172,6 +172,41 @@ func (f *commentTestFixture) ctx() context.Context {
 
 func (f *commentTestFixture) ctxAs(userID string) context.Context {
 	return auth.ContextWithToken(context.Background(), &auth.Token{Sub: userID})
+}
+
+// commentCreatedText posts one comment through a usecase whose workspace
+// configures wsLang, under the deployment default defaultLang, and returns the
+// thread notice. The context carries no user language.
+func commentCreatedText(t *testing.T, registeredID string, wsLang, defaultLang i18n.Lang) string {
+	t.Helper()
+	f := newCommentTestFixture(t, commentFixtureOptions{})
+	i18n.Init(defaultLang)
+	defer i18n.Init(i18n.LangEN)
+
+	registry := model.NewWorkspaceRegistry()
+	registry.Register(&model.WorkspaceEntry{Workspace: model.Workspace{ID: registeredID}, Language: wsLang})
+	uc := usecase.NewActionCommentUseCase(f.repo, registry, f.slack, "", nil)
+
+	_, err := uc.Create(f.ctx(), usecase.CreateActionCommentInput{
+		WorkspaceID: testWorkspaceID,
+		ActionID:    f.action.ID,
+		Body:        "looks like maintenance",
+	})
+	gt.NoError(t, err).Required()
+	gt.Array(t, f.slack.threadCalls).Length(1).Required()
+	return f.slack.threadCalls[0].text
+}
+
+func TestActionCommentUseCase_NotificationFollowsTheWorkspaceLanguage(t *testing.T) {
+	inJapanese := commentCreatedText(t, testWorkspaceID, "", i18n.LangJA)
+	inEnglish := commentCreatedText(t, testWorkspaceID, "", i18n.LangEN)
+	gt.String(t, inJapanese).NotEqual(inEnglish)
+
+	gt.String(t, commentCreatedText(t, testWorkspaceID, i18n.LangJA, i18n.LangEN)).Equal(inJapanese)
+	gt.String(t, commentCreatedText(t, testWorkspaceID, i18n.LangEN, i18n.LangJA)).Equal(inEnglish)
+	// A workspace missing from the registry has no language: the notice keeps
+	// the deployment default and the comment is still created.
+	gt.String(t, commentCreatedText(t, "another-workspace", i18n.LangJA, i18n.LangEN)).Equal(inEnglish)
 }
 
 func TestActionCommentUseCase_Create(t *testing.T) {
@@ -333,7 +368,7 @@ func TestActionCommentUseCase_Create(t *testing.T) {
 			Repository: f.repo,
 			comments:   &failingActionCommentRepository{ActionCommentRepository: f.repo.ActionComment()},
 		}
-		uc := usecase.NewActionCommentUseCase(broken, f.slack, "https://app.example.com", nil)
+		uc := usecase.NewActionCommentUseCase(broken, nil, f.slack, "https://app.example.com", nil)
 
 		_, err := uc.Create(f.ctx(), usecase.CreateActionCommentInput{
 			WorkspaceID: testWorkspaceID,
@@ -478,7 +513,7 @@ func TestActionCommentUseCase_Update(t *testing.T) {
 			Repository: f.repo,
 			comments:   &brokenGetActionCommentRepository{ActionCommentRepository: f.repo.ActionComment()},
 		}
-		uc := usecase.NewActionCommentUseCase(broken, f.slack, "", nil)
+		uc := usecase.NewActionCommentUseCase(broken, nil, f.slack, "", nil)
 
 		_, err := uc.Update(f.ctx(), usecase.UpdateActionCommentInput{
 			WorkspaceID: testWorkspaceID,

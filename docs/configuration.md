@@ -54,6 +54,7 @@ The `[workspace]` section defines the workspace's identity and is **required** i
 id = "risk"
 name = "Risk Management"
 emoji = "🛡️"   # optional; mutually exclusive with color
+language = "ja"  # optional; "en" or "ja"
 ```
 
 ### Properties
@@ -64,6 +65,40 @@ emoji = "🛡️"   # optional; mutually exclusive with color
 | `name` | string | No | Display name for the workspace. Defaults to `id` if omitted |
 | `emoji` | string | No | Badge glyph shown in the workspace selector and switcher. Mutually exclusive with `color`. Up to 16 runes |
 | `color` | string | No | Badge background color as a `#RRGGBB` hex code (6-digit only). Mutually exclusive with `emoji` |
+| `language` | string | No | Output language of this workspace's Slack messages and agent replies: `en` or `ja`. Takes priority over each Slack user's locale. Unset keeps the per-user locale. See [Workspace Language](#workspace-language) |
+
+### Workspace Language
+
+`language` fixes the language of everything the workspace writes to Slack:
+messages, modals and ephemeral notices, the language the agents are told to
+answer in, and the output of Jobs and `assist`. The language is chosen in this
+order:
+
+| Order | Source | Used when |
+|-------|--------|-----------|
+| 1 | `[workspace] language` | The workspace sets it. The Slack user's locale is not consulted |
+| 2 | The Slack user's locale (`users.info`) | The workspace sets no `language` |
+| 3 | `--default-lang` / `HECATONCHEIRES_DEFAULT_LANG` | Neither of the above is available, e.g. a scheduled Job with no workspace `language` |
+
+For example, with `language = "ja"` a user whose Slack locale is `en-US` gets
+Japanese replies; with `language` unset the same user gets English.
+
+- **Accepted values** are the language codes `en` and `ja`, case-sensitive.
+  `""` is the same as leaving the key out. Any other value (`"JA"`, `"ja-JP"`,
+  `"Japanese"`, `"fr"`) fails configuration loading with
+  `workspace language must be one of: en, ja`; `serve` does not start, and
+  `validate` and `POST /api/validate/db` report the same error.
+- **Not the same format as `[assist] language`.** That key takes a free-form
+  language name (`"Japanese"`) and is used only in the assist prompt. When both
+  are set, `[assist] language` decides the assist prompt's language; when only
+  `[workspace] language` is set, the assist prompt follows it.
+- **Before a workspace is known** the user's locale still applies: the
+  workspace picker of the slash command, and a mention-created case draft until
+  its agent has chosen a workspace.
+- **The web UI is not affected.** It follows the browser's language, and pages
+  such as the dashboard span several workspaces.
+- A change takes effect on restart, like every other workspace setting. An
+  agent run keeps the language it started with.
 
 ### Workspace Badge (emoji / color)
 
@@ -911,7 +946,7 @@ language = "Japanese"
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
 | `prompt` | string | No | Custom prompt for the AI assistant when analyzing cases |
-| `language` | string | No | Preferred language for AI responses (e.g., "Japanese", "English") |
+| `language` | string | No | Preferred language for AI responses as a free-form name (e.g., "Japanese", "English"). Overrides `[workspace] language` for the assist prompt only; when unset, the assist prompt follows `[workspace] language` |
 
 The `assist` command runs an AI agent that periodically reviews open cases and provides insights, reminders, and suggestions via Slack.
 

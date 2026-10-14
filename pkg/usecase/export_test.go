@@ -114,6 +114,10 @@ var ParseCaseThreadValueForTest = parseCaseThreadValue
 // BuildAssistSystemPrompt is exported for testing
 var BuildAssistSystemPrompt = (*AssistUseCase).buildAssistSystemPrompt
 
+// ProcessAssistCaseForTest spawns the assist run for one case and returns its
+// Process id, so a test can read back what the run was spawned with.
+var ProcessAssistCaseForTest = (*AssistUseCase).processCase
+
 // SetAssistServeOptionsForTest overrides the Serve options the assist drain
 // uses, so a test that drives a deliberately failing run does not have to wait
 // out agentkit's default retry schedule.

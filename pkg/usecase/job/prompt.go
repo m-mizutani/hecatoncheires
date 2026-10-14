@@ -18,6 +18,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/slack"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 )
 
 //go:embed prompts/system.md
@@ -125,6 +126,11 @@ type systemPromptData struct {
 	// (slackfmt.Section()). A Job reaches Slack only through
 	// slack__post_to_case_channel, and it composes that text itself.
 	SlackFormat string
+	// Language is the English name of the workspace's configured language,
+	// empty when the workspace configures none. The template then gives no
+	// language instruction, which is how a Job ran before workspaces could
+	// fix one.
+	Language string
 }
 
 // recentMessageTruncateRunes bounds how many runes of each Slack message body
@@ -331,6 +337,9 @@ func BuildSystemPrompt(in PromptInputs) (string, error) {
 
 func buildSystemPromptData(in PromptInputs) systemPromptData {
 	data := systemPromptData{SlackFormat: slackfmt.Section()}
+	if in.Workspace != nil {
+		data.Language = i18n.LanguageLabelOf(in.Workspace.Language)
+	}
 
 	// Thread-mode workspaces manage no Actions; the Job agent gets no action
 	// tools there, so the prompt must not advertise an Actions section or

@@ -12,6 +12,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
 	"github.com/m-mizutani/hecatoncheires/pkg/service/slack"
@@ -210,6 +211,41 @@ func TestReaction_WorkspaceAccessDenied(t *testing.T) {
 	gt.Array(t, eph).Length(1).Required()
 	gt.Value(t, eph[0].ChannelID).Equal("C-OTHER")
 	gt.Value(t, eph[0].UserID).Equal("U-DENIED")
+}
+
+// The reaction path writes the workspace language as soon as the emoji names a
+// workspace, so even its earliest output — the denial — follows it over the
+// reactor's own locale.
+func TestReaction_WorkspaceAccessDeniedFollowsTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	repo := memory.New()
+	reg := newReactionWorkspaceRegistry()
+	entry, err := reg.Get("support")
+	gt.NoError(t, err).Required()
+	entry.Language = i18n.LangJA
+	slackMock := &agentTestSlackService{}
+	slackMock.getUserInfoFn = englishLocale
+	caseUC := usecase.NewCaseUseCase(repo, reg, slackMock, nil, "https://app.test")
+	llm := newScriptedClient([]string{})
+	agentUC := usecase.NewAgentUseCase(usecase.AgentDeps{
+		Repo: repo, Registry: reg, LLM: llm,
+		HistoryRepo:  agentarchive.NewMemoryHistoryRepository(),
+		TraceRepo:    agentarchive.NewMemoryTraceRepository(),
+		SlackService: slackMock, CaseUC: caseUC,
+	})
+	bindAgentRuntimeWithoutWorker(t, agentRuntimeDeps{UC: agentUC, Repo: repo, Registry: reg, LLM: llm})
+	slackUC := usecase.NewSlackUseCases(repo, reg, agentUC, nil, slackMock)
+	usecase.SetSlackWorkspaceAccessForTest(slackUC, denyingAccess(t, reg, "support"))
+	ctx := context.Background()
+
+	ev := reactionEvent("incident", "U-DENIED", "U-AUTHOR", "C-OTHER", "1700000000.000700")
+	gt.NoError(t, slackUC.HandleSlackEvent(ctx, ev)).Required()
+	async.Wait()
+
+	eph := slackMock.ephemerals()
+	gt.Array(t, eph).Length(1).Required()
+	gt.String(t, eph[0].Text).Contains(
+		i18n.T(i18n.ContextWithLang(ctx, i18n.LangJA), i18n.MsgUIErrWorkspaceAccessDeniedWhat))
 }
 
 // B6: our own reaction, or a reaction on our own message, never triggers.

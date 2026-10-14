@@ -21,6 +21,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/auth"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/agentarchive"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
 	"github.com/m-mizutani/hecatoncheires/pkg/service/slack"
@@ -197,12 +198,89 @@ func TestAssistUseCase_BuildAssistSystemPrompt_Language(t *testing.T) {
 	})
 }
 
+// [assist] language is written for assist alone and wins; without it the prompt
+// asks for the workspace's language.
+func TestAssistUseCase_BuildAssistSystemPrompt_WorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	prompt := func(t *testing.T, assistLang string, wsLang i18n.Lang) string {
+		t.Helper()
+		repo := memory.New()
+		caseUC := usecase.NewCaseUseCase(repo, nil, nil, nil, "")
+		ctx := auth.ContextWithToken(context.Background(), &auth.Token{Sub: "UTESTUSER"})
+		c, err := caseUC.CreateCase(ctx, testWorkspaceID, "Test Case", "Desc", []string{}, nil, false, false, "", "")
+		gt.NoError(t, err).Required()
+
+		registry := model.NewWorkspaceRegistry()
+		registry.Register(&model.WorkspaceEntry{
+			Workspace:      model.Workspace{ID: testWorkspaceID, Name: "Test"},
+			AssistPrompt:   "Check deadlines.",
+			AssistLanguage: assistLang,
+			Language:       wsLang,
+		})
+		assistUC := usecase.NewAssistUseCase(usecase.AssistDeps{Repo: repo, Registry: registry})
+		entry, err := registry.Get(testWorkspaceID)
+		gt.NoError(t, err).Required()
+		out, err := usecase.BuildAssistSystemPrompt(assistUC, ctx, entry, c, usecase.AssistOption{LogCount: 7, MessageCount: 50})
+		gt.NoError(t, err).Required()
+		return out
+	}
+
+	gt.String(t, prompt(t, "", i18n.LangJA)).Contains("You MUST respond and write all messages in Japanese.")
+	gt.String(t, prompt(t, "English", i18n.LangJA)).Contains("You MUST respond and write all messages in English.")
+	gt.Bool(t, strings.Contains(prompt(t, "", ""), "## Language")).False()
+}
+
+// An assist run is spawned in the workspace's language, which its claim then
+// applies to every Slack post the run makes.
+func TestAssistUseCase_RunAssistCarriesTheWorkspaceLanguage(t *testing.T) {
+	i18n.Init(i18n.LangEN)
+	ctx := auth.ContextWithToken(context.Background(), &auth.Token{Sub: "UTESTUSER"})
+
+	for _, tc := range []struct {
+		name   string
+		wsLang i18n.Lang
+		want   string
+	}{
+		{name: "workspace ja", wsLang: i18n.LangJA, want: "ja"},
+		{name: "workspace unset", wsLang: "", want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := memory.New()
+			caseUC := usecase.NewCaseUseCase(repo, nil, nil, nil, "")
+			created, err := caseUC.CreateCase(ctx, testWorkspaceID, "Assist target", "needs help", []string{}, nil, false, false, "", "")
+			gt.NoError(t, err).Required()
+
+			registry := model.NewWorkspaceRegistry()
+			registry.Register(&model.WorkspaceEntry{
+				Workspace:    model.Workspace{ID: testWorkspaceID, Name: "Test Workspace"},
+				AssistPrompt: "Check deadlines.",
+				Language:     tc.wsLang,
+			})
+			llm := assistLLM("I reviewed the case and nothing is overdue.",
+				`{"summary":"reviewed the case","actions":"","reasoning":"nothing overdue","next_steps":""}`)
+			assistUC := usecase.NewAssistUseCase(usecase.AssistDeps{Repo: repo, Registry: registry, LLM: llm})
+			k := wireAssistRuntime(t, assistUC, repo, registry, llm, nil)
+
+			entry, err := registry.Get(testWorkspaceID)
+			gt.NoError(t, err).Required()
+			c, err := repo.Case().Get(ctx, testWorkspaceID, created.ID)
+			gt.NoError(t, err).Required()
+			pid, err := usecase.ProcessAssistCaseForTest(assistUC, ctx, entry, c, usecase.AssistOption{LogCount: 7, MessageCount: 50})
+			gt.NoError(t, err).Required()
+
+			proc, err := k.GetProcess(ctx, pid)
+			gt.NoError(t, err).Required()
+			gt.String(t, agentkernel.ScopeFrom(proc.Metadata).Lang).Equal(tc.want)
+		})
+	}
+}
+
 // wireAssistRuntime reproduces cmdAssist's wiring order — register, build, bind —
 // so RunAssist has an agent runtime to spawn onto. The Process store is
 // in-process, like the real command's.
 func wireAssistRuntime(t *testing.T, assistUC *usecase.AssistUseCase, repo interfaces.Repository,
 	registry *model.WorkspaceRegistry, llm gollem.LLMClient, bot slack.Service,
-) {
+) *agentkit.Kernel {
 	t.Helper()
 	history := agentarchive.NewMemoryHistoryStore()
 	reg := agentkit.NewRegistry()
@@ -221,6 +299,7 @@ func wireAssistRuntime(t *testing.T, assistUC *usecase.AssistUseCase, repo inter
 	})
 	gt.NoError(t, err).Required()
 	assistUC.Bind(k)
+	return k
 }
 
 // assistLLM answers the agent turn with agentText and the summary turn with the

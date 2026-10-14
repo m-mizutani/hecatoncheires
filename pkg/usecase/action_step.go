@@ -22,16 +22,20 @@ import (
 // ActionEvent, and post a thread context-block notification to Slack.
 type ActionStepUseCase struct {
 	repo         interfaces.Repository
+	registry     *model.WorkspaceRegistry
 	slackService slack.Service
 	slotCoord    *notificationSlotCoordinator
 }
 
-// NewActionStepUseCase constructs the ActionStepUseCase. slotCoord may be
+// NewActionStepUseCase constructs the ActionStepUseCase. registry supplies
+// the workspace's output language for the step notifications and may be nil
+// (the notifications then follow the context's language). slotCoord may be
 // nil; when nil (or its slotDuration is non-positive), step change
 // notifications fall back to the legacy reply_broadcast path.
-func NewActionStepUseCase(repo interfaces.Repository, slackService slack.Service, slotCoord *notificationSlotCoordinator) *ActionStepUseCase {
+func NewActionStepUseCase(repo interfaces.Repository, registry *model.WorkspaceRegistry, slackService slack.Service, slotCoord *notificationSlotCoordinator) *ActionStepUseCase {
 	return &ActionStepUseCase{
 		repo:         repo,
+		registry:     registry,
 		slackService: slackService,
 		slotCoord:    slotCoord,
 	}
@@ -129,6 +133,7 @@ func (uc *ActionStepUseCase) canRead(ctx context.Context, workspaceID string, ac
 
 // Add creates a new ActionStep under the given Action.
 func (uc *ActionStepUseCase) Add(ctx context.Context, in AddActionStepInput) (*model.ActionStep, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(in.WorkspaceID))
 	title := strings.TrimSpace(in.Title)
 	if title == "" {
 		return nil, goerr.New("action step title is required")
@@ -164,6 +169,7 @@ func (uc *ActionStepUseCase) Add(ctx context.Context, in AddActionStepInput) (*m
 // SetDone toggles the step's done state. No-op (returns the existing step
 // untouched) if the requested state is already in effect.
 func (uc *ActionStepUseCase) SetDone(ctx context.Context, in SetActionStepDoneInput) (*model.ActionStep, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(in.WorkspaceID))
 	action, parentCase, err := uc.loadActionForStepMutation(ctx, in.WorkspaceID, in.ActionID, in.Actor)
 	if err != nil {
 		return nil, err
@@ -210,6 +216,7 @@ func (uc *ActionStepUseCase) SetDone(ctx context.Context, in SetActionStepDoneIn
 // untouched) when the trimmed title equals the current one — no
 // ActionEvent is recorded and no Slack notification is sent in that case.
 func (uc *ActionStepUseCase) Rename(ctx context.Context, in RenameActionStepInput) (*model.ActionStep, error) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(in.WorkspaceID))
 	title := strings.TrimSpace(in.Title)
 	if title == "" {
 		return nil, goerr.New("action step title is required")
@@ -249,6 +256,7 @@ func (uc *ActionStepUseCase) Rename(ctx context.Context, in RenameActionStepInpu
 // Delete removes a step. Returns nil even if the step did not exist
 // (idempotent) but only after access control is satisfied.
 func (uc *ActionStepUseCase) Delete(ctx context.Context, in DeleteActionStepInput) error {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(in.WorkspaceID))
 	action, parentCase, err := uc.loadActionForStepMutation(ctx, in.WorkspaceID, in.ActionID, in.Actor)
 	if err != nil {
 		return err

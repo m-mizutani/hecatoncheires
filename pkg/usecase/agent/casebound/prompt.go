@@ -11,6 +11,7 @@ import (
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/semantic"
+	"github.com/m-mizutani/hecatoncheires/pkg/i18n"
 )
 
 //go:embed prompts/system.md
@@ -109,6 +110,10 @@ type promptData struct {
 	// SlackFormat is the shared Slack message formatting section
 	// (slackfmt.Section()). This agent's answer is posted to the thread verbatim.
 	SlackFormat string
+	// Language is the English name of the workspace's configured language.
+	// Empty when the workspace configures none, in which case the agent
+	// answers in the language of the user's message.
+	Language string
 }
 
 // buildSystemPrompt renders the casebound system prompt.
@@ -125,6 +130,9 @@ func buildSystemPrompt(c *model.Case, entry *model.WorkspaceEntry, channelID, th
 		Now:         now.UTC().Format(time.RFC3339),
 		Case:        c,
 		SlackFormat: slackfmt.Section(),
+	}
+	if entry != nil {
+		data.Language = i18n.LanguageLabelOf(entry.Language)
 	}
 
 	if entry != nil && entry.FieldSchema != nil && len(c.FieldValues) > 0 {

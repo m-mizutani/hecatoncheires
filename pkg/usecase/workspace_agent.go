@@ -29,6 +29,7 @@ func (uc *AgentUseCase) HandleWorkspaceAgentMention(ctx context.Context, msg *sl
 	if msg == nil || entry == nil {
 		return goerr.New("msg and entry are required")
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 	logger := logging.From(ctx)
 	if uc.durableWorkspaceAgent == nil {
 		logger.Debug("workspace agent not configured; skipping workspace channel mention")

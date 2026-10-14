@@ -34,6 +34,7 @@ const commentExcerptMaxRunes = 100
 // not become a second copy of the conversation.
 type ActionCommentUseCase struct {
 	repo         interfaces.Repository
+	registry     *model.WorkspaceRegistry
 	slackService slack.Service
 	slotCoord    *notificationSlotCoordinator
 	baseURL      string
@@ -44,14 +45,18 @@ type ActionCommentUseCase struct {
 // entirely, and when slotCoord is nil (or its slotDuration is non-positive) the
 // channel-side notification falls back to reply_broadcast on the thread post.
 // baseURL may be empty, in which case the notification omits the deep link.
+// registry supplies the workspace's output language for the notification and
+// may be nil (the notification then follows the context's language).
 func NewActionCommentUseCase(
 	repo interfaces.Repository,
+	registry *model.WorkspaceRegistry,
 	slackService slack.Service,
 	baseURL string,
 	slotCoord *notificationSlotCoordinator,
 ) *ActionCommentUseCase {
 	return &ActionCommentUseCase{
 		repo:         repo,
+		registry:     registry,
 		slackService: slackService,
 		slotCoord:    slotCoord,
 		baseURL:      baseURL,
@@ -345,6 +350,7 @@ func (uc *ActionCommentUseCase) canRead(ctx context.Context, workspaceID string,
 // comment and folds the channel-side line into the active notification slot.
 // Best-effort throughout: a failure here never rolls back the comment.
 func (uc *ActionCommentUseCase) notifyCommentCreated(ctx context.Context, workspaceID string, action *model.Action, caseModel *model.Case, comment *model.ActionComment) {
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(workspaceID))
 	if uc.slackService == nil || action.SlackMessageTS == "" || caseModel == nil || caseModel.SlackChannelID == "" {
 		return
 	}

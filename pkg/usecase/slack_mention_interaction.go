@@ -75,6 +75,7 @@ func (uc *MentionProposalUseCase) HandleSelectWorkspace(ctx context.Context, cal
 	if err != nil {
 		return goerr.Wrap(err, "selected workspace not found")
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 	// The selector only lists accessible workspaces, but access may have been
 	// revoked since the preview was posted.
 	if allowed, err := uc.authorizeDraftActor(ctx, newWorkspaceID, callback.User.ID, callback.Channel.ID); err != nil || !allowed {
@@ -185,6 +186,7 @@ func (uc *MentionProposalUseCase) HandleSubmit(ctx context.Context, caseUC *Case
 	if draft.Materialization == nil {
 		return goerr.New("draft has no materialization to submit", goerr.V("proposal_id", draft.ID))
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(draft.SelectedWorkspaceID))
 	if allowed, err := uc.authorizeDraftActor(ctx, draft.SelectedWorkspaceID, callback.User.ID, callback.Channel.ID); err != nil || !allowed {
 		return err
 	}
@@ -257,6 +259,7 @@ func (uc *MentionProposalUseCase) HandleEdit(ctx context.Context, callback *gosl
 	if err != nil {
 		return goerr.Wrap(err, "selected workspace not found for Edit")
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, entry.Language)
 	if allowed, err := uc.authorizeDraftActor(ctx, draft.SelectedWorkspaceID, callback.User.ID, callback.Channel.ID); err != nil || !allowed {
 		return err
 	}
@@ -294,6 +297,7 @@ func (uc *MentionProposalUseCase) HandleCancel(ctx context.Context, callback *go
 		_ = uc.appendCanceledTail(ctx, callback, "", "")
 		return nil
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(draft.SelectedWorkspaceID))
 
 	if err := uc.appendCanceledTail(ctx, callback, draft.EphemeralChannelID, draft.EphemeralMessageTS); err != nil {
 		errutil.Handle(ctx, err, "failed to render canceled tail")
@@ -345,6 +349,7 @@ func (uc *MentionProposalUseCase) HandleEditSubmit(ctx context.Context, caseUC *
 	if err := json.Unmarshal([]byte(callback.View.PrivateMetadata), &meta); err != nil {
 		return goerr.Wrap(err, "failed to parse edit metadata")
 	}
+	ctx = i18n.ContextWithWorkspaceLang(ctx, uc.registry.Language(meta.WorkspaceID))
 	// A view_submission carries no channel; the denial goes to the thread the
 	// preview lives in.
 	if allowed, err := uc.authorizeDraftActor(ctx, meta.WorkspaceID, callback.User.ID, meta.EphemeralChannelID); err != nil || !allowed {
