@@ -38,8 +38,9 @@ name = "Description"
 type = "text"
 required = false
 
-# Markdown custom field on Cases: sidebar shows a clamped raw preview,
-# a modal renders it, and its editor offers a Write/Preview toggle.
+# Markdown custom field on Cases: rendered as its own section in the case
+# detail main column (below the description), edited in place with a
+# Write/Preview toggle.
 [[fields]]
 id = "runbook"
 name = "Runbook"

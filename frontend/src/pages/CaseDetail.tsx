@@ -23,6 +23,7 @@ import { GET_CASE_LATEST_JOB_RUN } from '../graphql/caseAgent'
 import { GET_MEMO_CONFIGURATION } from '../graphql/memo'
 import MemoTab from '../components/memo/MemoTab'
 import CustomFieldHelpRow from '../components/fields/CustomFieldHelpRow'
+import CaseMarkdownFieldSection from '../components/fields/CaseMarkdownFieldSection'
 import InlineText from '../components/inline/InlineText'
 import InlineLongText from '../components/inline/InlineLongText'
 import InlineUserSelect from '../components/inline/InlineUserSelect'
@@ -324,6 +325,10 @@ export default function CaseDetail() {
 
   const caseLabel = configData?.fieldConfiguration?.labels?.case || 'Case'
   const fields = configData?.fieldConfiguration?.fields || []
+  // MARKDOWN fields often hold long text, so they get their own sections in
+  // the main column below the description instead of a cramped sidebar row.
+  const markdownFields = fields.filter((f: any) => f.type === 'MARKDOWN')
+  const sidebarFields = fields.filter((f: any) => f.type !== 'MARKDOWN')
 
   const handleClose = async () => {
     await closeCase({ variables: { workspaceId: currentWorkspace!.id, id: caseId } })
@@ -650,6 +655,17 @@ export default function CaseDetail() {
               renderMarkdown
             />
           </section>
+
+          {markdownFields.map((f: any) => (
+            <CaseMarkdownFieldSection
+              key={f.id}
+              field={f}
+              value={c.fields?.find((x: any) => x.fieldId === f.id)?.value}
+              disabled={updating}
+              onSave={(v) => handleFieldChange(f.id, v)}
+              testId={`case-field-${f.id}`}
+            />
+          ))}
 
           {/* Related Actions only exist for activated channel-mode cases.
               Drafts have no actions yet, and thread-mode workspaces never
@@ -1004,13 +1020,13 @@ export default function CaseDetail() {
             </section>
           )}
 
-          {fields.length > 0 && (
+          {sidebarFields.length > 0 && (
             <section className="h-aside-section" data-testid="case-fields-inline">
               <div className="h-aside-h">
                 <span className="h-aside-title">{t('sectionFields')}</span>
               </div>
               <div className="kv-list">
-                {fields.map((f: any) => {
+                {sidebarFields.map((f: any) => {
                   const fv = c.fields?.find((x: any) => x.fieldId === f.id)
                   return (
                     <CustomFieldHelpRow

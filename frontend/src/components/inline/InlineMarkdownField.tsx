@@ -16,8 +16,10 @@ interface Props {
   testId?: string
 }
 
-// Case-detail sidebar renderer for a Markdown field. The sidebar cell is too
-// narrow to render Markdown, so it shows the raw source clamped to a few lines;
+// Compact renderer for a Markdown field in a narrow cell (the case detail page
+// itself renders Markdown fields full-width via CaseMarkdownFieldSection). A
+// narrow cell is too small to render Markdown, so it shows the raw source
+// clamped to a few lines;
 // clicking opens a modal that renders the Markdown read-only, and an Edit
 // button switches the modal to a Write/Preview editor. This keeps the long-form
 // reading/editing experience out of the cramped sidebar.
