@@ -156,7 +156,7 @@ func TestParseReplanResult_Finalize(t *testing.T) {
 	// An explicit finalize is the ONLY way to terminate; it carries an optional
 	// reason and leaves tasks / question empty. The input puts `message` before
 	// `finalize` because that is the order Claude's structured outputs emit once
-	// the schema marks `message` Required (see TestSchemas_OnlyMessageIsRequired).
+	// the schema marks `message` Required (see TestSchemas_RequiredPropertiesAndActions).
 	raw := []byte(`{"message":"done","finalize":{"reason":"goal met"}}`)
 	r, err := planexec.ParseReplanResultForTest(raw, knownTools, true, nil)
 	gt.NoError(t, err).Required()
@@ -194,6 +194,154 @@ func TestParseReplanResult_MultipleActionsRejected(t *testing.T) {
 	}`)
 	_, err := planexec.ParseReplanResultForTest(raw, knownTools, true, nil)
 	gt.Error(t, err)
+}
+
+// Round 1 can end the turn: a Job told "if nothing changed, do nothing" had no
+// way to say so, was rejected until it escaped through a tool call, and posted
+// the placeholder it called the tool with.
+func TestParsePlanResult_Finalize(t *testing.T) {
+	t.Run("declared, with no payload", func(t *testing.T) {
+		p, err := planexec.ParsePlanResultForTest(
+			[]byte(`{"message":"thread unchanged","next_action":"finalize"}`), knownTools, true, nil)
+		gt.NoError(t, err).Required()
+		gt.String(t, p.NextAction).Equal("finalize")
+		gt.Value(t, p.Finalize).NotNil()
+		gt.Array(t, p.Tasks).Length(0)
+		gt.Value(t, p.Direct).Nil()
+	})
+
+	t.Run("declared, with the payloads of other actions left over", func(t *testing.T) {
+		// The declaration is the stated intent; a sibling the model filled as well
+		// is dropped rather than run.
+		p, err := planexec.ParsePlanResultForTest([]byte(`{"message":"nothing to do","next_action":"finalize",
+			"finalize":{"reason":"no change"},
+			"tasks":[{"id":"t-1","title":"T","description":"d","acceptance_criteria":"a","tools":["slack_ro"]}]}`),
+			knownTools, true, nil)
+		gt.NoError(t, err).Required()
+		gt.String(t, p.NextAction).Equal("finalize")
+		gt.Value(t, p.Finalize).NotNil().Required()
+		gt.String(t, p.Finalize.Reason).Equal("no change")
+		gt.Array(t, p.Tasks).Length(0)
+	})
+
+	t.Run("inferred from the payload when undeclared", func(t *testing.T) {
+		p, err := planexec.ParsePlanResultForTest(
+			[]byte(`{"finalize":{"reason":"no change"}}`), knownTools, false, nil)
+		gt.NoError(t, err).Required()
+		gt.String(t, p.NextAction).Equal("finalize")
+	})
+}
+
+// A declared action decides the result, and only that action's payload is kept.
+func TestParsePlanResult_NextActionSelectsThePayload(t *testing.T) {
+	task := `[{"id":"t-1","title":"T","description":"d","acceptance_criteria":"a","tools":["slack_ro"]}]`
+
+	t.Run("tasks", func(t *testing.T) {
+		p, err := planexec.ParsePlanResultForTest([]byte(`{"next_action":"tasks","tasks":`+task+`,"direct":{}}`),
+			knownTools, true, nil)
+		gt.NoError(t, err).Required()
+		gt.String(t, p.NextAction).Equal("tasks")
+		gt.Array(t, p.Tasks).Length(1)
+		gt.Value(t, p.Direct).Nil()
+		gt.Value(t, p.Finalize).Nil()
+	})
+
+	t.Run("direct", func(t *testing.T) {
+		p, err := planexec.ParsePlanResultForTest([]byte(`{"next_action":"direct","direct":{"tools":["notion"]},"tasks":`+task+`}`),
+			knownTools, true, nil)
+		gt.NoError(t, err).Required()
+		gt.String(t, p.NextAction).Equal("direct")
+		gt.Value(t, p.Direct).NotNil().Required()
+		gt.Value(t, p.Direct.Tools).Equal([]string{"notion"})
+		gt.Array(t, p.Tasks).Length(0)
+	})
+
+	t.Run("undeclared tasks are read as before", func(t *testing.T) {
+		p, err := planexec.ParsePlanResultForTest([]byte(`{"tasks":`+task+`}`), knownTools, false, nil)
+		gt.NoError(t, err).Required()
+		gt.String(t, p.NextAction).Equal("tasks")
+	})
+}
+
+// Every rejection a planner with nothing to do can hit points it at finalize,
+// and a declaration naming an action the round does not offer is refused with
+// the actions it does.
+func TestParsePlanResult_RejectionsSayWhatToEmit(t *testing.T) {
+	for name, tc := range map[string]struct {
+		raw         string
+		allowDirect bool
+		want        string
+	}{
+		"declared tasks, none given": {
+			raw:  `{"message":"nothing changed","next_action":"tasks","tasks":[]}`,
+			want: `set next_action to "finalize"`,
+		},
+		"nothing declared or given": {
+			raw:  `{"message":"nothing changed"}`,
+			want: `if there is nothing to investigate or do, set it to "finalize"`,
+		},
+		"direct declared but not offered": {
+			raw:  `{"next_action":"direct","direct":{}}`,
+			want: `set it to one of "tasks", "finalize"`,
+		},
+		"direct given but not offered": {
+			raw:  `{"direct":{}}`,
+			want: `"direct" is not available here`,
+		},
+		"question is never a round-1 action": {
+			raw:         `{"next_action":"question"}`,
+			allowDirect: true,
+			want:        `set it to one of "tasks", "direct", "finalize"`,
+		},
+		"direct declared without its payload": {
+			raw:         `{"next_action":"direct"}`,
+			allowDirect: true,
+			want:        `the "direct" payload is missing`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := planexec.ParsePlanResultForTest([]byte(tc.raw), knownTools, tc.allowDirect, nil)
+			gt.Value(t, err).NotNil().Required()
+			gt.String(t, err.Error()).Contains(tc.want)
+		})
+	}
+}
+
+func TestParseReplanResult_NextAction(t *testing.T) {
+	t.Run("finalize declared with no payload", func(t *testing.T) {
+		r, err := planexec.ParseReplanResultForTest(
+			[]byte(`{"message":"done","next_action":"finalize"}`), knownTools, true, nil)
+		gt.NoError(t, err).Required()
+		gt.String(t, r.NextAction).Equal("finalize")
+		gt.Value(t, r.Finalize).NotNil()
+		gt.Value(t, r.Question).Nil()
+		gt.Array(t, r.Tasks).Length(0)
+	})
+
+	t.Run("a placeholder question is dropped when finalize is declared", func(t *testing.T) {
+		// The shape production planners emitted before: an intent to finish, and a
+		// filler question in an optional sibling. The declaration wins.
+		r, err := planexec.ParseReplanResultForTest([]byte(`{"message":"acceptance criteria met","next_action":"finalize",
+			"question":{"reason":"x","items":[{"id":"q","text":"x","type":"select","options":["a","b"]}]}}`),
+			knownTools, true, nil)
+		gt.NoError(t, err).Required()
+		gt.String(t, r.NextAction).Equal("finalize")
+		gt.Value(t, r.Question).Nil()
+	})
+
+	t.Run("question declared when the host allows none", func(t *testing.T) {
+		_, err := planexec.ParseReplanResultForTest([]byte(`{"next_action":"question",
+			"question":{"reason":"r","items":[{"id":"q","text":"t","type":"free_text"}]}}`),
+			knownTools, false, nil)
+		gt.Value(t, err).NotNil().Required()
+		gt.String(t, err.Error()).Contains(`set it to one of "tasks", "finalize"`)
+	})
+
+	t.Run("tasks declared, none given", func(t *testing.T) {
+		_, err := planexec.ParseReplanResultForTest([]byte(`{"next_action":"tasks"}`), knownTools, true, nil)
+		gt.Value(t, err).NotNil().Required()
+		gt.String(t, err.Error()).Contains(`set next_action to "finalize"`)
+	})
 }
 
 func TestParseReplanResult_QuestionAllowed(t *testing.T) {
@@ -615,21 +763,34 @@ func TestSchemas_DescribeMessageAsInternalButKept(t *testing.T) {
 // every top-level property optional, `finalize` and `direct` came before
 // `message`, so a planner that had written its rationale could no longer choose
 // them, and a replan filled `question` with placeholder values instead.
-// Requiring `message` alone puts it first and keeps every action reachable;
-// requiring an action as well would make the planner fill it every time, which
-// breaks "set exactly one".
-func TestSchemas_OnlyMessageIsRequired(t *testing.T) {
+//
+// So exactly two properties are required: `message`, and `next_action`, which
+// sorts after it and declares the action. Requiring an action payload as well
+// would make the planner fill it every time, which breaks "set exactly one".
+// `next_action` is what makes "no action" impossible to emit; its enum holds
+// exactly the actions the round offers, with `finalize` on every round so that
+// "nothing to do" always has a value — including round 1, which had none, so a
+// Job with nothing to do was rejected until it escaped through a tool call.
+func TestSchemas_RequiredPropertiesAndActions(t *testing.T) {
 	for name, tc := range map[string]struct {
 		raw     any
 		actions []string
 	}{
-		"plan": {
+		"plan with direct": {
 			raw:     planexec.PlanSchemaForTest(knownTools, false, true, true),
-			actions: []string{"direct", "tasks"},
+			actions: []string{"tasks", "direct", "finalize"},
 		},
-		"replan": {
+		"plan without direct": {
+			raw:     planexec.PlanSchemaForTest(knownTools, false, false, true),
+			actions: []string{"tasks", "finalize"},
+		},
+		"replan with question": {
 			raw:     planexec.ReplanSchemaForTest(knownTools, true, true),
-			actions: []string{"finalize", "question", "tasks"},
+			actions: []string{"tasks", "question", "finalize"},
+		},
+		"replan without question": {
+			raw:     planexec.ReplanSchemaForTest(knownTools, false, true),
+			actions: []string{"tasks", "finalize"},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -637,10 +798,17 @@ func TestSchemas_OnlyMessageIsRequired(t *testing.T) {
 			gt.Bool(t, ok).True().Required()
 			// Every top-level property is covered below, so a new one must be
 			// classified here too.
-			gt.Number(t, len(schema.Properties)).Equal(len(tc.actions) + 1).Required()
+			gt.Number(t, len(schema.Properties)).Equal(len(tc.actions) + 2).Required()
+
 			msg, has := schema.Properties["message"]
 			gt.Bool(t, has).True().Required()
 			gt.Bool(t, msg.Required).True()
+
+			next, has := schema.Properties["next_action"]
+			gt.Bool(t, has).True().Required()
+			gt.Bool(t, next.Required).True()
+			gt.Value(t, next.Enum).Equal(tc.actions)
+
 			for _, action := range tc.actions {
 				p, has := schema.Properties[action]
 				gt.Bool(t, has).True().Required()

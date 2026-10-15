@@ -97,6 +97,9 @@ exempt_name := {
 	"LLMRequestFromTrace",
 	"LLMResponseFromTrace",
 	"ToolCallFromTrace",
+	# maps a toolset-id palette to its read half: a pure []string -> []string
+	# transform the kernel calls while expanding a planner's palette. No I/O.
+	"PlannerToolSets",
 	# in-memory counters (mutex-guarded, no external I/O)
 	"Next",
 	# agent-runtime startup wiring. These run once at process start, before any

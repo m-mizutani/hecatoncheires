@@ -88,12 +88,19 @@ func (d *ToolDeps) Validate() error {
 	return nil
 }
 
-// defaultToolSets is the full palette each agent kind is entitled to. It is
-// what Scope.ToolSets == ["*"] expands to.
+// defaultToolSets is the palette each agent kind's OWN Process gets. It is what
+// Scope.ToolSets == ["*"] expands to.
 //
-// A sub-agent carries an explicit subset instead, chosen by the planner from
-// the same vocabulary, so this table is also the ceiling on what any task in a
-// run can ask for.
+// A sub-agent carries an explicit subset instead, chosen by the planner from the
+// host's planner vocabulary (the KnownToolIDs the host spawned with), so what a
+// task may ask for is decided there and not by this table.
+//
+// A plan-execute PLANNER (Job, thread mention, workspace channel) is narrowed to
+// the read half of its palette by agent.PlannerToolSets: it may look things up
+// before it decides, while every write goes into a task. The thread-create and
+// case-draft planners are not wrapped because their palettes hold no writer. The
+// simple-strategy Job is a single ReAct loop with no sub-agents to delegate to,
+// so it keeps the full Job palette.
 //
 // An agent kind whose palette has not been established yet is an error rather
 // than a fallback. The Job and assist tool sets are deliberately NARROWER than
@@ -107,14 +114,16 @@ func defaultToolSets(name agentkit.AgentName) ([]string, error) {
 	case AgentCaseChannel:
 		return agent.KnownToolSetIDsCaseChannel, nil
 	case AgentCaseThread:
-		return agent.KnownToolSetIDsThreadWrite, nil
+		return agent.PlannerToolSets(agent.KnownToolSetIDsThreadWrite), nil
 	case AgentCaseThreadCreate:
 		return agent.KnownToolSetIDsNoCore, nil
 	case AgentWorkspace:
-		return agent.KnownToolSetIDsWorkspaceChannel, nil
+		return agent.PlannerToolSets(agent.KnownToolSetIDsWorkspaceChannel), nil
 	case AgentAssist:
 		return agent.KnownToolSetIDsAssist, nil
-	case AgentJob, AgentJobSimple:
+	case AgentJob:
+		return agent.PlannerToolSets(agent.KnownToolSetIDsJob), nil
+	case AgentJobSimple:
 		return agent.KnownToolSetIDsJob, nil
 	case AgentProposal:
 		return agent.KnownToolSetIDsProposal, nil

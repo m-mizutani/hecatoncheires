@@ -350,11 +350,26 @@ back rather than being fed to the model, which cannot repair an infrastructure
 error by re-emitting JSON. A finalizer must be side-effect-free because a retried
 attempt re-runs it. See `.claude/rules/planexec.md` for the create-path wiring.
 
-**Explicit termination.** The loop terminates ONLY when a replan round emits an
-explicit `finalize` action. A replan must set exactly one of `tasks` /
-`question` / `finalize`; setting none is rejected and folded back into another
-replan round (the old "empty tasks = done" implicit termination is gone, so a
+**Explicit termination.** The loop terminates ONLY when the planner takes the
+explicit `finalize` action, and it may do so on ANY round, round 1 included.
+Every planner output declares its action in the required `next_action` enum
+(`tasks` / `direct` / `question` / `finalize`, limited to what the round
+offers) and fills that action's field; an output naming no action is rejected
+and re-planned (the old "empty tasks = done" implicit termination is gone, so a
 planner that merely forgot to emit tasks can no longer silently terminate).
+Two properties a change here must preserve:
+
+- **"Nothing to do" must always be expressible.** Round 1 once had no
+  `finalize`, so a Job whose instructions said "if nothing changed, do nothing"
+  was rejected until it escaped the response schema the only way structured
+  outputs leave open — a tool call — with placeholder arguments. When that call
+  was `slack__post_to_case_channel`, "x" / "noop" / "dummy" reached customer
+  threads, followed by an apology post.
+- **`next_action` is Required and sorts after `message`.** Claude emits required
+  properties first in alphabetical order, so the planner writes its rationale,
+  then commits to an action, and every action's payload is still ahead of it.
+  Requiring the payloads instead would make the planner fill all of them. See
+  `nextActionSchema` and `messageSchema` in `planexec/plan.go`.
 
 **Direct mode (round-1 fast path).** When the host sets
 `Input.AllowDirect`, the planner may answer a *genuinely trivial*

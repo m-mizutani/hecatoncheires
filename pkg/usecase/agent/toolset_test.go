@@ -429,6 +429,61 @@ func TestToolSetResolver_Memo(t *testing.T) {
 	})
 }
 
+// PlannerToolSets is the read half of a palette. Each writer maps to its read
+// counterpart (or is dropped when it has none), read-only sets pass through,
+// and the caller's order is kept with duplicates folded.
+func TestPlannerToolSets(t *testing.T) {
+	t.Run("job palette", func(t *testing.T) {
+		gt.Value(t, agent.PlannerToolSets(agent.KnownToolSetIDsJob)).Equal([]string{
+			agent.ToolSetCoreRO, agent.ToolSetSlackRO, agent.ToolSetNotion,
+			agent.ToolSetWebFetch, agent.ToolSetJira, "memo_ro",
+		})
+	})
+
+	t.Run("thread mention palette", func(t *testing.T) {
+		gt.Value(t, agent.PlannerToolSets(agent.KnownToolSetIDsThreadWrite)).Equal(agent.KnownToolSetIDsNoCore)
+	})
+
+	t.Run("workspace channel palette", func(t *testing.T) {
+		gt.Value(t, agent.PlannerToolSets(agent.KnownToolSetIDsWorkspaceChannel)).Equal([]string{
+			"case_multi_ro", agent.ToolSetSlackRO, agent.ToolSetNotion,
+			agent.ToolSetGitHub, agent.ToolSetWebFetch, agent.ToolSetJira,
+		})
+	})
+
+	t.Run("two writers sharing a read half yield it once", func(t *testing.T) {
+		gt.Value(t, agent.PlannerToolSets([]string{
+			agent.ToolSetCore, agent.ToolSetSlackWrite, agent.ToolSetCoreJob, agent.ToolSetSlackPost, agent.ToolSetSlackRO,
+		})).Equal([]string{agent.ToolSetCoreRO, agent.ToolSetSlackRO})
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		gt.Array(t, agent.PlannerToolSets(nil)).Length(0)
+	})
+
+	// The read halves are internal: they must never become a task vocabulary.
+	t.Run("read halves are not known task ids", func(t *testing.T) {
+		gt.Bool(t, agent.IsKnownToolSetID("memo_ro")).False()
+		gt.Bool(t, agent.IsKnownToolSetID("case_multi_ro")).False()
+	})
+}
+
+// The memo read half resolves to the list / get tools and nothing that writes,
+// from the same deps the full set is built from.
+func TestToolSetResolver_MemoReadHalf(t *testing.T) {
+	r := agent.NewToolSetResolver(agent.ToolSetDeps{
+		Memo: memotool.Deps{
+			WorkspaceID: "ws", CaseID: 1,
+			MemoUC: stubMemoMutator{}, Schema: &config.FieldSchema{},
+		},
+	})
+	ids := agent.PlannerToolSets([]string{agent.ToolSetMemo})
+	gt.Bool(t, r.Has(ids[0])).True()
+	names := toolNames(r.Resolve(ids))
+	sort.Strings(names)
+	gt.Value(t, names).Equal([]string{"memo__get_memo", "memo__list_memos"})
+}
+
 // TestToolSetResolver_Knowledge pins the read/write split: the read tools are
 // always offered, and requesting the knowledge id REPLACES them with the
 // read+write set rather than offering the read tools twice.

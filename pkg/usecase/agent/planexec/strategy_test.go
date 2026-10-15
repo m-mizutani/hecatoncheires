@@ -612,6 +612,29 @@ func TestDirectPathAnswersWithoutInvestigating(t *testing.T) {
 	gt.Number(t, len(planner.seen())).Equal(2)
 }
 
+// Round 1 can end the turn without investigating anything. A Job whose
+// instructions say "if nothing changed, do nothing" has no task to plan; before
+// round 1 offered finalize, its planner was rejected over and over, escaped
+// through a tool call with placeholder arguments, and posted the placeholder.
+func TestAFirstRoundFinalizeEndsTheTurnWithoutInvestigating(t *testing.T) {
+	planner := &scriptedPlanner{replies: []string{
+		`{"message":"the thread has not moved since the last run","next_action":"finalize","finalize":{"reason":"nothing to do"}}`,
+		`Nothing changed; no action taken.`,
+	}}
+	rt := newTextRuntime(t, planner.client(), generousBudget(), nil, nil)
+
+	proc := rt.run(t, textInput(), nil)
+
+	gt.Value(t, proc.Status).Equal(agentkit.ProcessSucceeded)
+	out := decodeText(t, proc.Output)
+	gt.Value(t, out.Kind).Equal(planexec.OutputFinal)
+	gt.String(t, out.Text).Equal("Nothing changed; no action taken.")
+	gt.Array(t, out.Observations).Length(0)
+	// One planning call and the terminal call: no sub-agent ran (its call would
+	// have consumed a scripted reply) and no replan happened.
+	gt.Number(t, len(planner.seen())).Equal(2)
+}
+
 // A direct reply reaches the user in full. Every other child's text is a summary
 // fed back into the planner's context and is bounded at subAgentSummaryMaxBytes
 // (8 KiB) with an "…[truncated]" marker appended; this one is the reply itself, so
