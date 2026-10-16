@@ -229,11 +229,12 @@ A `text` field may set `semantic` to say what its value refers to; see
 
 Multi-line Markdown text. Stored as a plain string like `text`, but the Web UI
 renders it as Markdown when displaying it, and the editor offers a Write /
-Preview toggle. In the Case detail sidebar the value is shown as a short
-clamped preview of the raw source; clicking it opens a modal that renders the
-Markdown and offers an editor. In Slack modals a Markdown field is edited as a
-multi-line plain-text input (raw Markdown source — Slack has no preview
-element). Available for both Case fields (`[[fields]]`) and memo fields
+Preview toggle. On the Case detail page a Markdown field is not listed in the
+sidebar: it gets its own section in the main column, below the description,
+headed by the field name, where the value is rendered as Markdown and edited in
+place (click to edit) — long text stays readable at full width. In Slack
+modals a Markdown field is edited as a multi-line plain-text input (raw
+Markdown source — Slack has no preview element). Available for both Case fields (`[[fields]]`) and memo fields
 (`[[memo.fields]]`).
 
 ```toml

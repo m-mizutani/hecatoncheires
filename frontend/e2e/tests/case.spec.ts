@@ -741,7 +741,7 @@ test.describe('Case Management', () => {
     expect(existsInOpen).toBeTruthy();
   });
 
-  test('should edit a markdown field via the sidebar cell -> view modal -> editor', async ({ page }) => {
+  test('should show and edit a markdown field in the main column below the description', async ({ page }) => {
     const caseListPage = new CaseListPage(page);
     const caseFormPage = new CaseFormPage(page);
     const caseDetailPage = new CaseDetailPage(page);
@@ -754,36 +754,31 @@ test.describe('Case Management', () => {
     await caseListPage.clickCaseByTitle(title);
     await caseDetailPage.waitForPageLoad();
 
-    // The sidebar cell for the (empty) markdown 'runbook' field is clickable.
-    const cell = page.getByTestId('field-runbook');
-    await expect(cell).toBeVisible();
+    // The markdown 'runbook' field has its own section in the main column,
+    // not a row in the sidebar Fields list.
+    const section = page.getByTestId('case-field-runbook');
+    await expect(section).toBeVisible();
+    await expect(section).toContainText('Runbook');
+    await expect(page.locator('aside').getByTestId('case-field-runbook')).toHaveCount(0);
+    await expect(page.getByTestId('case-fields-inline')).not.toContainText('Runbook');
 
-    // Clicking opens the view modal; with no value yet there is no rendered heading.
-    await cell.click();
-    await expect(page.getByTestId('field-runbook-edit')).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2, name: 'Steps' })).toHaveCount(0);
-
-    // Edit -> type markdown -> Save.
-    await page.getByTestId('field-runbook-edit').click();
+    // Click the (empty) value to edit in place, type markdown.
+    await page.getByTestId('field-runbook').click();
     const source = '## Steps\n\n1. first\n2. second';
-    await page.getByTestId('field-runbook-md-textarea').fill(source);
+    await page.getByTestId('field-runbook-input').fill(source);
 
     // The editor's Preview tab renders it.
-    await page.getByTestId('field-runbook-md-tab-preview').click();
-    await expect(page.getByTestId('field-runbook-md-preview').locator('h2')).toHaveText('Steps');
+    await page.getByTestId('field-runbook-tab-preview').click();
+    await expect(page.getByTestId('field-runbook-preview').locator('h2')).toHaveText('Steps');
 
-    // Back to Write and Save.
-    await page.getByTestId('field-runbook-md-tab-write').click();
+    // Save; the section renders the saved markdown inline.
     await page.getByTestId('field-runbook-save').click();
+    await expect(section.getByRole('heading', { level: 2, name: 'Steps' })).toBeVisible();
 
-    // The modal returns to view mode and renders the saved markdown.
-    await expect(page.getByRole('heading', { level: 2, name: 'Steps' })).toBeVisible();
-
-    // Reload and re-open to confirm the value round-tripped to the backend.
+    // Reload to confirm the value round-tripped to the backend.
     await page.reload();
     await caseDetailPage.waitForPageLoad();
-    await page.getByTestId('field-runbook').click();
-    await expect(page.getByRole('heading', { level: 2, name: 'Steps' })).toBeVisible();
+    await expect(page.getByTestId('case-field-runbook').getByRole('heading', { level: 2, name: 'Steps' })).toBeVisible();
   });
 
   // Archiving takes a CLOSED case out of the Closed tab and the board without

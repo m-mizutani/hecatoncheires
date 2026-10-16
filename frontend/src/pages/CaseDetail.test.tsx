@@ -33,7 +33,7 @@ vi.mock('../hooks/useAssigneeCandidates', () => ({
   useAssigneeCandidates: () => ({ users: [], loading: false }),
 }))
 
-function caseResult(status: 'OPEN' | 'CLOSED', archivedAt: string | null) {
+function caseResult(status: 'OPEN' | 'CLOSED', archivedAt: string | null, fields: unknown[] = []) {
   return {
     __typename: 'Case',
     id: CASE_ID,
@@ -55,14 +55,14 @@ function caseResult(status: 'OPEN' | 'CLOSED', archivedAt: string | null) {
     boardStatus: null,
     createdAt: '2026-05-01T00:00:00Z',
     updatedAt: '2026-05-01T00:00:00Z',
-    fields: [],
+    fields,
     channelUserCount: 0,
     slackChannelURL: null,
     actions: [],
   }
 }
 
-function getCaseMock(status: 'OPEN' | 'CLOSED', archivedAt: string | null): MockedResponse {
+function getCaseMock(status: 'OPEN' | 'CLOSED', archivedAt: string | null, fields: unknown[] = []): MockedResponse {
   return {
     request: {
       query: GET_CASE,
@@ -71,11 +71,11 @@ function getCaseMock(status: 'OPEN' | 'CLOSED', archivedAt: string | null): Mock
     // maxUsageCount lets the post-mutation refetch reuse the same shape when a
     // test does not care about the refreshed value.
     maxUsageCount: 10,
-    result: { data: { case: caseResult(status, archivedAt) } },
+    result: { data: { case: caseResult(status, archivedAt, fields) } },
   }
 }
 
-function supportingMocks(): MockedResponse[] {
+function supportingMocks(fieldDefs: unknown[] = []): MockedResponse[] {
   return [
     {
       request: { query: GET_FIELD_CONFIGURATION, variables: { workspaceId: WORKSPACE } },
@@ -84,7 +84,7 @@ function supportingMocks(): MockedResponse[] {
         data: {
           fieldConfiguration: {
             __typename: 'FieldConfiguration',
-            fields: [],
+            fields: fieldDefs,
             labels: { __typename: 'FieldLabels', case: 'Case' },
             actionConfig: {
               __typename: 'ActionConfig',
@@ -237,5 +237,37 @@ describe('CaseDetail returning to a filtered list', () => {
     await screen.findByText('Suspicious login')
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByTestId('case-list-stub')).toHaveTextContent(`/ws/risk/cases?field.category=it&field.category=sales&field.priority=high&status=${tab}&page=3`)
+  })
+})
+
+describe('CaseDetail custom field placement', () => {
+  const fieldDefs = [
+    { id: 'owner_team', name: 'Owner team', type: 'TEXT', required: false, description: null, referenceWorkspaceId: null, options: null },
+    { id: 'runbook', name: 'Runbook', type: 'MARKDOWN', required: false, description: null, referenceWorkspaceId: null, options: null },
+  ]
+  const values = [
+    { fieldId: 'owner_team', value: 'infra', display: null },
+    { fieldId: 'runbook', value: '## Steps\n\n1. first', display: null },
+  ]
+
+  it('renders MARKDOWN fields in the main column below the description, not in the sidebar', async () => {
+    renderDetail([getCaseMock('OPEN', null, values), ...supportingMocks(fieldDefs)])
+    const section = await screen.findByTestId('case-field-runbook')
+
+    expect(section.closest('aside')).toBeNull()
+    expect(screen.getByRole('heading', { level: 2, name: 'Steps' })).toBeInTheDocument()
+    const description = screen.getByTestId('case-description')
+    expect(description.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    const sidebarFields = screen.getByTestId('case-fields-inline')
+    expect(sidebarFields.closest('aside')).not.toBeNull()
+    expect(sidebarFields).toHaveTextContent('Owner team')
+    expect(sidebarFields).not.toHaveTextContent('Runbook')
+  })
+
+  it('omits the sidebar Fields section when every field is MARKDOWN', async () => {
+    renderDetail([getCaseMock('OPEN', null, values.slice(1)), ...supportingMocks(fieldDefs.slice(1))])
+    await screen.findByTestId('case-field-runbook')
+    expect(screen.queryByTestId('case-fields-inline')).toBeNull()
   })
 })
