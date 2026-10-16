@@ -13,6 +13,7 @@ import (
 	"github.com/m-mizutani/gt"
 
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/casemulti"
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/casewriter"
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/core"
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slackpost"
@@ -120,6 +121,17 @@ type stubActionMutator struct {
 
 type stubCaseMutator struct {
 	casewriter.CaseMutator
+}
+
+// stubCaseMultiUC and stubCaseMultiActionUC stand in for the cross-case
+// usecases the workspace-channel toolset is built from, on the same terms as the
+// stubs above.
+type stubCaseMultiUC struct {
+	casemulti.CaseUsecase
+}
+
+type stubCaseMultiActionUC struct {
+	casemulti.ActionUsecase
 }
 
 func newProcess(name agentkit.AgentName, sc kernel.Scope) *agentkit.Process {
@@ -319,28 +331,118 @@ func TestToolFactoryBuildsTheJobPalette(t *testing.T) {
 	// No actor: a Job is unattended, which RequiresActor excludes precisely so
 	// this resolves to a palette rather than to nothing.
 	sc := kernel.Scope{WorkspaceID: "ws-1", CaseID: 1, ToolSets: []string{kernel.ToolSetsAll}}
-	for _, name := range []agentkit.AgentName{kernel.AgentJob, kernel.AgentJobSimple} {
-		t.Run(string(name), func(t *testing.T) {
-			tools, err := factory(ctx, newProcess(name, sc))
-			gt.NoError(t, err).Required()
-			names := toolNames(tools)
 
-			// Reads and the non-destructive writes.
-			gt.Bool(t, slices.Contains(names, "core__list_actions")).True()
-			gt.Bool(t, slices.Contains(names, "core__create_action")).True()
-			gt.Bool(t, slices.Contains(names, "core__update_action_status")).True()
-			// The three an unattended run must not have.
-			gt.Bool(t, slices.Contains(names, "core__archive_action")).False()
-			gt.Bool(t, slices.Contains(names, "core__unarchive_action")).False()
-			gt.Bool(t, slices.Contains(names, "core__delete_action_step")).False()
-			// Case edits, the channel-pinned poster, and Slack reads.
-			gt.Bool(t, slices.Contains(names, "case__update_case")).True()
-			gt.Bool(t, slices.Contains(names, "slack__post_to_case_channel")).True()
-			gt.Bool(t, slices.Contains(names, "slack__get_messages")).True()
-			// A Job has never had GitHub.
-			gt.Bool(t, hasPrefixIn(names, "github__")).False()
+	// The simple strategy is a single ReAct loop: it has no sub-agent to hand a
+	// write to, so it holds the whole unattended palette itself.
+	t.Run("simple", func(t *testing.T) {
+		tools, err := factory(ctx, newProcess(kernel.AgentJobSimple, sc))
+		gt.NoError(t, err).Required()
+		names := toolNames(tools)
+
+		// Reads and the non-destructive writes.
+		gt.Bool(t, slices.Contains(names, "core__list_actions")).True()
+		gt.Bool(t, slices.Contains(names, "core__create_action")).True()
+		gt.Bool(t, slices.Contains(names, "core__update_action_status")).True()
+		// The three an unattended run must not have.
+		gt.Bool(t, slices.Contains(names, "core__archive_action")).False()
+		gt.Bool(t, slices.Contains(names, "core__unarchive_action")).False()
+		gt.Bool(t, slices.Contains(names, "core__delete_action_step")).False()
+		// Case edits, the channel-pinned poster, and Slack reads.
+		gt.Bool(t, slices.Contains(names, "case__update_case")).True()
+		gt.Bool(t, slices.Contains(names, "slack__post_to_case_channel")).True()
+		gt.Bool(t, slices.Contains(names, "slack__get_messages")).True()
+		// A Job has never had GitHub.
+		gt.Bool(t, hasPrefixIn(names, "github__")).False()
+	})
+
+	// The planexec planner may only look things up. A planner holding the poster
+	// called it with placeholder text ("x", "noop") whenever it could not express
+	// its decision, and the placeholder reached a customer thread.
+	t.Run("planexec planner", func(t *testing.T) {
+		tools, err := factory(ctx, newProcess(kernel.AgentJob, sc))
+		gt.NoError(t, err).Required()
+		names := toolNames(tools)
+
+		gt.Bool(t, slices.Contains(names, "core__list_actions")).True()
+		gt.Bool(t, slices.Contains(names, "slack__get_messages")).True()
+		for _, write := range []string{
+			"core__create_action", "core__update_action_status",
+			"case__update_case", "case__assign",
+			"slack__post_to_case_channel",
+		} {
+			gt.Bool(t, slices.Contains(names, write)).False()
+		}
+	})
+
+	// The writers did not go away: a task the planner spawns with them gets them.
+	// planexec spawns each child with the toolset ids the planner chose, so
+	// narrowing the planner's own palette must not narrow its children.
+	t.Run("task spawned with write toolsets", func(t *testing.T) {
+		child := sc
+		child.ToolSets = []string{agent.ToolSetCoreJob, agent.ToolSetCaseWrite, agent.ToolSetSlackPost}
+		tools, err := factory(ctx, newProcess(kernel.AgentTask, child))
+		gt.NoError(t, err).Required()
+		names := toolNames(tools)
+
+		for _, write := range []string{
+			"core__create_action", "case__update_case", "slack__post_to_case_channel",
+		} {
+			gt.Bool(t, slices.Contains(names, write)).True()
+		}
+	})
+}
+
+// The other two planners that hold writers are narrowed the same way as the Job
+// one: a thread-mode mention planner keeps the Slack reads and loses the case
+// writer, and a workspace-channel planner keeps the cross-case lookups and loses
+// the cross-case writes.
+func TestToolFactoryNarrowsPlannersToReads(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("thread mention", func(t *testing.T) {
+		repo := memory.New()
+		ctx := seedCase(t, ctx, repo, &model.Case{
+			Title: "thread case", SlackChannelID: "C-THREAD", SlackThreadTS: "1700000000.000100",
 		})
-	}
+		factory, err := kernel.NewToolFactory(kernel.ToolDeps{
+			Repo:     repo,
+			Registry: testRegistry(threadWorkspace()),
+			SlackBot: stubSlackBot{},
+			CaseUC:   stubCaseMutator{},
+		})
+		gt.NoError(t, err).Required()
+
+		sc := kernel.Scope{WorkspaceID: "ws-1", CaseID: 1, ActorUserID: "U1", ToolSets: []string{kernel.ToolSetsAll}}
+		tools, err := factory(ctx, newProcess(kernel.AgentCaseThread, sc))
+		gt.NoError(t, err).Required()
+		names := toolNames(tools)
+
+		gt.Bool(t, slices.Contains(names, "slack__get_messages")).True()
+		gt.Bool(t, hasPrefixIn(names, "case__")).False()
+	})
+
+	t.Run("workspace channel", func(t *testing.T) {
+		factory, err := kernel.NewToolFactory(kernel.ToolDeps{
+			Repo:              memory.New(),
+			Registry:          testRegistry(channelWorkspace()),
+			SlackBot:          stubSlackBot{},
+			CaseMultiUC:       stubCaseMultiUC{},
+			CaseMultiActionUC: stubCaseMultiActionUC{},
+		})
+		gt.NoError(t, err).Required()
+
+		sc := kernel.Scope{WorkspaceID: "ws-1", ActorUserID: "U1", ToolSets: []string{kernel.ToolSetsAll}}
+		tools, err := factory(ctx, newProcess(kernel.AgentWorkspace, sc))
+		gt.NoError(t, err).Required()
+		names := toolNames(tools)
+
+		for _, read := range []string{"case__list_cases", "case__get_case", "case__list_actions", "case__get_action"} {
+			gt.Bool(t, slices.Contains(names, read)).True()
+		}
+		for _, write := range []string{"case__create_case", "case__update_case", "case__create_action"} {
+			gt.Bool(t, slices.Contains(names, write)).False()
+		}
+	})
 }
 
 // The case-draft agent is the one that has NOT chosen a workspace yet, so it is

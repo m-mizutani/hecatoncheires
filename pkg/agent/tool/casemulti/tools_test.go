@@ -334,6 +334,33 @@ func TestNew_CaseAndAction(t *testing.T) {
 	}
 }
 
+// NewReadOnly is what a planner gets: the lookups and none of the writes.
+func TestNewReadOnly(t *testing.T) {
+	t.Run("NilCaseUCBuildsNothing", func(t *testing.T) {
+		gt.Array(t, casemulti.NewReadOnly(casemulti.Deps{WorkspaceID: "ws"})).Length(0)
+	})
+
+	t.Run("CaseOnly", func(t *testing.T) {
+		tools := casemulti.NewReadOnly(casemulti.Deps{WorkspaceID: "ws", CaseUC: &fakeCaseUC{}, StatusSet: testStatusSet(t)})
+		names := make([]string, 0, len(tools))
+		for _, tl := range tools {
+			names = append(names, tl.Spec().Name)
+		}
+		gt.Value(t, names).Equal([]string{"case__list_cases", "case__get_case"})
+	})
+
+	t.Run("CaseAndAction", func(t *testing.T) {
+		tools := casemulti.NewReadOnly(casemulti.Deps{WorkspaceID: "ws", CaseUC: &fakeCaseUC{}, ActionUC: &fakeActionUC{}})
+		names := make([]string, 0, len(tools))
+		for _, tl := range tools {
+			names = append(names, tl.Spec().Name)
+		}
+		gt.Value(t, names).Equal([]string{
+			"case__list_cases", "case__get_case", "case__list_actions", "case__get_action",
+		})
+	})
+}
+
 // ---------------------------------------------------------------------------
 // case__list_cases
 // ---------------------------------------------------------------------------

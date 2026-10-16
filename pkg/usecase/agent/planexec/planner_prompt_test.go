@@ -105,6 +105,30 @@ func TestPlannerPrompt_SubAgentWritesEnabled(t *testing.T) {
 	gt.String(t, got).Contains("self-evident")
 	gt.String(t, got).Contains("same phase")
 	gt.String(t, got).Contains("final response cannot perform actions")
+	// The planner holds no write tool of its own, and is told so.
+	gt.String(t, got).Contains("the write tools are not among the tools you can call")
+}
+
+// Every host's planner is told that each response names its action, that round 1
+// may finalize when there is nothing to do, that placeholders are not a way to
+// satisfy the schema, and that its own tools only look things up. Planners
+// without these answered "nothing to do" with placeholder tool calls, one of
+// which posted "noop" to a customer thread.
+func TestPlannerPrompt_NextActionAndNothingToDo(t *testing.T) {
+	for name, in := range map[string]planexec.PlannerPromptInputForTest{
+		"job":    {HostPrompt: "Run scheduled job analysis.", KnownToolIDs: []string{"slack_ro"}, AllowSubAgentWrites: true},
+		"thread": {HostPrompt: "You are the thread planner.", KnownToolIDs: []string{"slack_ro"}, AllowQuestion: true, AllowDirect: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := planexec.RenderPlannerPromptForTest(in)
+			gt.NoError(t, err).Required()
+			gt.String(t, got).Contains("Every response names the ONE action it takes in `next_action`")
+			gt.String(t, got).Contains("there is nothing to investigate and nothing to do, so the turn ends here")
+			gt.String(t, got).Contains("Never fill a field with placeholder content")
+			gt.String(t, got).Contains("The tools you can call yourself are for looking things up before you decide.")
+			gt.String(t, got).Contains("`next_action` is always set")
+		})
+	}
 }
 
 func TestPlannerPrompt_SubAgentWritesDisabled(t *testing.T) {

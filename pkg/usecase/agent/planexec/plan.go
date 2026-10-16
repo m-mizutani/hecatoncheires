@@ -5,15 +5,16 @@
 // vocabulary established by secmon-lab/warren's `pkg/usecase/chat/bluebell`:
 // the planner emits a `Plan` (a list of `TaskPlan` to run in parallel), the
 // sub-agents fan out via `executePhase`, and the planner is asked again
-// (`replan`) with the observations. The loop exits when replan returns no
-// further tasks and no question, after which the runtime invokes
-// `generateFinalResponse` for the host-visible terminal output. No
-// "terminal action" discriminator is involved.
+// (`replan`) with the observations. Every planner output declares its action in
+// `next_action` (tasks / direct / question / finalize); the loop exits when the
+// planner takes `finalize` — on any round, round 1 included — after which the
+// runtime makes the terminal call for the host-visible output.
 package planexec
 
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -49,14 +50,30 @@ const (
 // substantive rather than a placeholder.
 const rationaleDescription = "1-2 sentence rationale for this decision. NOT shown to the user — never put the user's answer here — but it is kept in this run's record, so state the reason plainly enough that someone reading the run later understands the decision."
 
+// The values of `next_action`, the planner's declaration of which action its
+// output takes. See nextActionSchema.
+const (
+	nextActionTasks    = "tasks"
+	nextActionDirect   = "direct"
+	nextActionQuestion = "question"
+	nextActionFinalize = "finalize"
+)
+
 // PlanResult is the parsed shape of the first planner-round JSON output.
-// The planner must choose exactly one of two shapes:
+// The planner chooses exactly one action, named by NextAction:
 //   - Tasks: the parallel investigation phase (the default path). At least
-//     one task is required; if the host wants the planner to terminate after
-//     a phase, that is a replan-round concern.
+//     one task is required.
 //   - Direct: skip investigation entirely and answer the user directly
 //     (round-1 fast path). Only valid when the host set
 //     RunRequest.AllowDirect.
+//   - Finalize: there is nothing to investigate or do, so the turn goes
+//     straight to its terminal output. This is how a Job whose instructions say
+//     "if nothing changed, do nothing" does nothing: without it round 1 had no
+//     way to end, and a planner that had decided to do nothing was rejected
+//     until it escaped through a tool call (see nextActionSchema).
+//
+// parsePlanResult normalises the result: NextAction names the chosen action and
+// only that action's payload is left set (Finalize is non-nil for a finalize).
 type PlanResult struct {
 	// Message is a 1-2 sentence rationale for the decision. No code reads it, and
 	// that is not a reason to remove it: the planner reply carrying it is committed
@@ -73,6 +90,10 @@ type PlanResult struct {
 	// The schema marks it Required (see messageSchema, which explains why), but
 	// the parser does not: an output with no `message` is accepted as before.
 	Message string `json:"message,omitempty"`
+	// NextAction names the action this output takes. The schema marks it
+	// Required; the parser infers it from the payloads when it is absent, so an
+	// output from a provider that ignored the schema is read as before.
+	NextAction string `json:"next_action,omitempty"`
 	// Tasks is the parallel investigation phase emitted by the planner.
 	// Empty / omitted when Direct is set — the two are mutually exclusive.
 	Tasks []TaskPlan `json:"tasks,omitempty"`
@@ -81,6 +102,8 @@ type PlanResult struct {
 	// common case) means "investigate via Tasks". Mutually exclusive with
 	// Tasks; rejected unless RunRequest.AllowDirect is true.
 	Direct *DirectPlan `json:"direct,omitempty"`
+	// Finalize ends the turn on round 1 with nothing investigated.
+	Finalize *FinalizePlan `json:"finalize,omitempty"`
 }
 
 // DirectPlan is the round-1 "answer directly" payload. It carries only the
@@ -101,20 +124,25 @@ type DirectPlan struct {
 //   - Question: ask the user (only when the host allows it).
 //   - Finalize: declare completion and produce the final output.
 //
-// An output that sets none of the three is rejected (parseReplanResult) and
-// folded back into another replan round. This is deliberate: the previous
-// design treated "empty tasks + no question" as an implicit completion signal,
-// so a planner that merely forgot to emit tasks would silently terminate (and,
-// in structured hosts, commit) a half-finished turn. Completion is now an
-// explicit act.
+// The action is named by NextAction. An output that takes no action is rejected
+// (parseReplanResult) and folded back into another replan round. This is
+// deliberate: the previous design treated "empty tasks + no question" as an
+// implicit completion signal, so a planner that merely forgot to emit tasks would
+// silently terminate (and, in structured hosts, commit) a half-finished turn.
+// Completion is an explicit act — `next_action: "finalize"` — and the schema now
+// makes "no action" impossible to emit rather than merely rejected.
+//
+// parseReplanResult normalises the result the same way parsePlanResult does.
 type ReplanResult struct {
 	// Message is the replan round's counterpart of PlanResult.Message, kept for the
 	// same reason and carrying the same warning: no code reads it, it survives in
 	// the run's record, and it is not user-facing.
-	Message  string        `json:"message,omitempty"`
-	Tasks    []TaskPlan    `json:"tasks,omitempty"`
-	Question *Question     `json:"question,omitempty"`
-	Finalize *FinalizePlan `json:"finalize,omitempty"`
+	Message string `json:"message,omitempty"`
+	// NextAction is PlanResult.NextAction's counterpart.
+	NextAction string        `json:"next_action,omitempty"`
+	Tasks      []TaskPlan    `json:"tasks,omitempty"`
+	Question   *Question     `json:"question,omitempty"`
+	Finalize   *FinalizePlan `json:"finalize,omitempty"`
 }
 
 // FinalizePlan is the planner's explicit "I'm done" declaration. It carries an
@@ -326,16 +354,17 @@ func (i *QuestionItem) Validate() error {
 	return nil
 }
 
-// parsePlanResult decodes and validates a first-round planner JSON. The
-// planner returns one of two shapes:
-//   - Direct (fast path): only honoured when allowDirect is true and Tasks
-//     is empty. The direct.tools list is validated against knownToolIDs.
+// parsePlanResult decodes and validates a first-round planner JSON. The planner
+// takes one of the actions planActions offers:
 //   - Tasks (default): non-empty within bounds; every TaskPlan is validated
 //     against knownToolIDs.
+//   - Direct (fast path): only offered when allowDirect is true. The
+//     direct.tools list is validated against knownToolIDs.
+//   - Finalize: nothing to investigate or do; the turn goes to its terminal
+//     output.
 //
-// allowDirect=false (e.g. a host that has not opted in) rejects a direct
-// payload outright; the system prompt / schema should have suppressed the
-// option but the parser double-checks.
+// The action is read from `next_action` (see chooseAction), and the result is
+// normalised so only the chosen action's payload is left set.
 func parsePlanResult(raw []byte, knownToolIDs []string, allowDirect bool,
 	remaining *pricing.NanoUSD,
 ) (*PlanResult, error) {
@@ -344,37 +373,46 @@ func parsePlanResult(raw []byte, knownToolIDs []string, allowDirect bool,
 	if err := json.Unmarshal(body, &p); err != nil {
 		return nil, goerr.Wrap(err, "decode plan json")
 	}
-	if p.Direct != nil {
-		if !allowDirect {
-			return nil, goerr.New("plan produced a direct payload but AllowDirect is false")
-		}
-		if len(p.Tasks) > 0 {
-			return nil, goerr.New("plan sets both tasks and direct; they are mutually exclusive")
-		}
+	action, err := chooseAction(p.NextAction, planActions(allowDirect), map[string]bool{
+		nextActionTasks:    len(p.Tasks) > 0,
+		nextActionDirect:   p.Direct != nil,
+		nextActionFinalize: p.Finalize != nil,
+	})
+	if err != nil {
+		return nil, goerr.Wrap(err, "plan rejected")
+	}
+	p.NextAction = action
+
+	switch action {
+	case nextActionDirect:
 		if err := p.Direct.Validate(knownToolIDs); err != nil {
 			return nil, goerr.Wrap(err, "direct plan invalid")
 		}
-		return &p, nil
-	}
-	if err := validateTaskList(p.Tasks, knownToolIDs, remaining); err != nil {
-		return nil, err
+		p.Tasks, p.Finalize = nil, nil
+	case nextActionFinalize:
+		if p.Finalize == nil {
+			p.Finalize = &FinalizePlan{}
+		}
+		p.Tasks, p.Direct = nil, nil
+	default:
+		if err := validateTaskList(p.Tasks, knownToolIDs, remaining); err != nil {
+			return nil, err
+		}
+		p.Direct, p.Finalize = nil, nil
 	}
 	return &p, nil
 }
 
 // parseReplanResult decodes and validates a subsequent-round planner JSON. The
-// replan round must set EXACTLY ONE of three actions:
+// replan round takes EXACTLY ONE of the actions replanActions offers:
 //   - Tasks (continuation): another phase runs
-//   - Question: the host asks the user
+//   - Question: the host asks the user (only offered when allowQuestion)
 //   - Finalize: the planner declares completion → the final output is produced
 //
-// Setting none is rejected (the caller folds it back into another replan round)
+// Taking none is rejected (the caller folds it back into another replan round)
 // so a planner that merely omitted tasks cannot silently terminate the turn.
-// Setting more than one is rejected as ambiguous — the schema cannot express a
-// oneOf, so the parser is the enforcement point.
-//
-// allowQuestion=false (job host) rejects a question payload outright; the
-// system prompt should have suppressed the option but the parser double-checks.
+// The action is read from `next_action` (see chooseAction), and the result is
+// normalised so only the chosen action's payload is left set.
 func parseReplanResult(raw []byte, knownToolIDs []string, allowQuestion bool,
 	remaining *pricing.NanoUSD,
 ) (*ReplanResult, error) {
@@ -383,44 +421,104 @@ func parseReplanResult(raw []byte, knownToolIDs []string, allowQuestion bool,
 	if err := json.Unmarshal(body, &r); err != nil {
 		return nil, goerr.Wrap(err, "decode replan json")
 	}
-
-	hasTasks := len(r.Tasks) > 0
-	hasQuestion := r.Question != nil
-	hasFinalize := r.Finalize != nil
-
-	set := 0
-	for _, on := range []bool{hasTasks, hasQuestion, hasFinalize} {
-		if on {
-			set++
-		}
+	action, err := chooseAction(r.NextAction, replanActions(allowQuestion), map[string]bool{
+		nextActionTasks:    len(r.Tasks) > 0,
+		nextActionQuestion: r.Question != nil,
+		nextActionFinalize: r.Finalize != nil,
+	})
+	if err != nil {
+		return nil, goerr.Wrap(err, "replan rejected")
 	}
-	switch set {
-	case 0:
-		return nil, goerr.New("replan set no action: provide exactly one of tasks, question, or finalize")
-	case 1:
-		// ok
-	default:
-		return nil, goerr.New("replan set multiple actions: provide exactly one of tasks, question, or finalize",
-			goerr.V("has_tasks", hasTasks),
-			goerr.V("has_question", hasQuestion),
-			goerr.V("has_finalize", hasFinalize))
-	}
+	r.NextAction = action
 
-	if hasQuestion {
-		if !allowQuestion {
-			return nil, goerr.New("replan produced a question but AllowQuestion is false")
-		}
+	switch action {
+	case nextActionQuestion:
 		if err := r.Question.Validate(); err != nil {
 			return nil, goerr.Wrap(err, "replan question invalid")
 		}
-		return &r, nil
-	}
-	if hasTasks {
+		r.Tasks, r.Finalize = nil, nil
+	case nextActionFinalize:
+		if r.Finalize == nil {
+			r.Finalize = &FinalizePlan{}
+		}
+		r.Tasks, r.Question = nil, nil
+	default:
 		if err := validateTaskList(r.Tasks, knownToolIDs, remaining); err != nil {
 			return nil, err
 		}
+		r.Question, r.Finalize = nil, nil
 	}
 	return &r, nil
+}
+
+// planActions is what round 1 may do, in the order the schema lists it.
+func planActions(allowDirect bool) []string {
+	if allowDirect {
+		return []string{nextActionTasks, nextActionDirect, nextActionFinalize}
+	}
+	return []string{nextActionTasks, nextActionFinalize}
+}
+
+// replanActions is what every later round may do, in the order the schema
+// lists it.
+func replanActions(allowQuestion bool) []string {
+	if allowQuestion {
+		return []string{nextActionTasks, nextActionQuestion, nextActionFinalize}
+	}
+	return []string{nextActionTasks, nextActionFinalize}
+}
+
+// chooseAction decides which action a planner output takes.
+//
+// A declared `next_action` decides it. It must be one of offered, and an action
+// that carries a payload (tasks / direct / question) must have that payload;
+// payloads of the actions NOT chosen are ignored, because the declaration is the
+// planner's stated intent and the schema cannot stop a model from filling an
+// optional sibling as well.
+//
+// With no declaration — a provider that did not honour the schema, or a test
+// fixture written before the field existed — the action is inferred from which
+// payloads are set, and exactly one must be.
+//
+// Every message is written for the planner, which is shown it verbatim
+// (planRetryInput): each one says what to emit instead, and the ones a planner
+// that has decided to do nothing would hit point it at finalize. Rejections that
+// only said "provide exactly one of tasks, question, or finalize" were what a
+// planner with nothing to do kept hitting until it escaped through a tool call.
+func chooseAction(declared string, offered []string, present map[string]bool) (string, error) {
+	choices := `"` + strings.Join(offered, `", "`) + `"`
+	if declared != "" {
+		if !slices.Contains(offered, declared) {
+			return "", goerr.New(fmt.Sprintf("next_action %q is not available here; set it to one of %s", declared, choices))
+		}
+		if declared == nextActionFinalize || present[declared] {
+			return declared, nil
+		}
+		if declared == nextActionTasks {
+			return "", goerr.New(`next_action is "tasks" but tasks is empty; if there is nothing to investigate or do, set next_action to "finalize" instead`)
+		}
+		return "", goerr.New(fmt.Sprintf("next_action is %q but the %q payload is missing; fill it, or choose another action", declared, declared))
+	}
+
+	var set []string
+	for _, a := range offered {
+		if present[a] {
+			set = append(set, a)
+		}
+	}
+	for a, on := range present {
+		if on && !slices.Contains(offered, a) {
+			return "", goerr.New(fmt.Sprintf("%q is not available here; set next_action to one of %s", a, choices))
+		}
+	}
+	switch len(set) {
+	case 1:
+		return set[0], nil
+	case 0:
+		return "", goerr.New(fmt.Sprintf(`no action was taken; set next_action to one of %s — if there is nothing to investigate or do, set it to "finalize"`, choices))
+	default:
+		return "", goerr.New(fmt.Sprintf("more than one action was set (%s); set next_action to exactly one of them", strings.Join(set, ", ")))
+	}
 }
 
 // validateTaskList checks one round's tasks.
@@ -580,24 +678,27 @@ type schemaOptions struct {
 }
 
 // planSchema returns the gollem.Parameter applied to the planner LLM's
-// JSON output for the FIRST round. `tasks` is always offered; `direct` is
-// added only when the host opted in (allowDirect). The schema cannot express
-// the tasks/direct mutual exclusion (gollem has no oneOf), so that, plus the
-// task-count bounds, is enforced Go-side in parsePlanResult.
+// JSON output for the FIRST round. `tasks` and `finalize` are always offered;
+// `direct` is added only when the host opted in (allowDirect). Which one the
+// output takes is declared by the required `next_action`; the payload checks and
+// the task-count bounds are enforced Go-side in parsePlanResult.
 func planSchema(opts schemaOptions) *gollem.Parameter {
+	actions := planActions(opts.allowDirect)
 	props := map[string]*gollem.Parameter{
-		"message": messageSchema(),
-		"tasks":   tasksSchema(opts.knownToolIDs, opts.withBudget),
+		"message":     messageSchema(),
+		"next_action": nextActionSchema(actions),
+		"tasks":       tasksSchema(opts.knownToolIDs, opts.withBudget),
+		"finalize":    finalizeSchema(),
 	}
-	desc := "Initial planner output: parallel investigation tasks for round 1."
 	if opts.allowDirect {
 		props["direct"] = directSchema(opts.knownToolIDs)
-		desc = "Initial planner output: either parallel investigation `tasks`, or a `direct` answer (round 1 only). Set exactly one."
 	}
 	return &gollem.Parameter{
-		Type:        gollem.TypeObject,
-		Description: desc,
-		Properties:  props,
+		Type: gollem.TypeObject,
+		Description: "Initial planner output. Set `next_action` to the action you take (" +
+			strings.Join(actions, " / ") + ") and fill that action's field. " +
+			"`finalize` means there is nothing to investigate or do.",
+		Properties: props,
 	}
 }
 
@@ -625,18 +726,53 @@ func directSchema(knownToolIDs []string) *gollem.Parameter {
 // JSON output for every round AFTER the first. May include `question`
 // when the host enabled it.
 func replanSchema(opts schemaOptions) *gollem.Parameter {
+	actions := replanActions(opts.allowQuestion)
 	props := map[string]*gollem.Parameter{
-		"message":  messageSchema(),
-		"tasks":    tasksSchema(opts.knownToolIDs, opts.withBudget),
-		"finalize": finalizeSchema(),
+		"message":     messageSchema(),
+		"next_action": nextActionSchema(actions),
+		"tasks":       tasksSchema(opts.knownToolIDs, opts.withBudget),
+		"finalize":    finalizeSchema(),
 	}
 	if opts.allowQuestion {
 		props["question"] = questionSchema()
 	}
 	return &gollem.Parameter{
-		Type:        gollem.TypeObject,
-		Description: "Replan output: set EXACTLY ONE of `tasks` (run another phase), `question` (ask the user), or `finalize` (declare completion). Leaving all unset is rejected — completion must be explicit via `finalize`.",
-		Properties:  props,
+		Type: gollem.TypeObject,
+		Description: "Replan output. Set `next_action` to the ONE action you take (" +
+			strings.Join(actions, " / ") + ") and fill that action's field: `tasks` runs another " +
+			"phase, `question` asks the user, `finalize` declares the turn complete.",
+		Properties: props,
+	}
+}
+
+// nextActionSchema is the `next_action` property: the planner's declaration of
+// which action its output takes, from the actions this round offers.
+//
+// It is Required, and that is the whole point of it. The actions themselves are
+// optional siblings (requiring them would make the planner fill every one), so
+// with only those a structured output could emit NO action — and a planner that
+// had decided there was nothing to do had no action that said so on round 1.
+// Those outputs were rejected and re-asked, and under structured outputs the one
+// way out of the schema is a tool call: production planners answered the
+// rejections with tool calls carrying placeholder arguments ("x", "noop",
+// "dummy", tools named notion__none), and when the call they reached for was
+// slack__post_to_case_channel the placeholder was posted to a customer thread. A
+// required enum makes "no action" impossible to emit, and `finalize` is in the
+// enum on every round, so "nothing to do" always has a value.
+//
+// The name sorts after `message`, which matters for the reason messageSchema
+// gives: Claude emits required properties first, in schema (alphabetical) order,
+// so the planner writes its rationale and THEN commits to an action, and every
+// action's payload still follows. Only offered actions are in the enum — one the
+// parser would reject must not be emittable.
+func nextActionSchema(actions []string) *gollem.Parameter {
+	return &gollem.Parameter{
+		Type: gollem.TypeString,
+		Description: "The action this output takes. Fill the field of the same name (except for " +
+			"`finalize`, whose field is optional). Choose `finalize` when there is nothing (more) " +
+			"to investigate or do.",
+		Required: true,
+		Enum:     actions,
 	}
 }
 
@@ -654,8 +790,10 @@ func replanSchema(opts schemaOptions) *gollem.Parameter {
 // "a" / "b") that Question.Validate accepts and the host posts to the thread.
 // Required puts `message` first, so every action is still reachable after it.
 //
-// Only `message` is Required. The actions stay optional: requiring them would
-// make the planner fill every one of them, which breaks "set exactly one".
+// The actions stay optional: requiring them would make the planner fill every
+// one of them, which breaks "set exactly one". Which one is set is declared by
+// the other required property, `next_action` (see nextActionSchema), which sorts
+// after `message` so this ordering argument still holds.
 func messageSchema() *gollem.Parameter {
 	return &gollem.Parameter{
 		Type:        gollem.TypeString,
@@ -669,7 +807,7 @@ func messageSchema() *gollem.Parameter {
 func finalizeSchema() *gollem.Parameter {
 	return &gollem.Parameter{
 		Type:        gollem.TypeObject,
-		Description: "Declare the turn complete and produce the final output. Set this (instead of `tasks`) when the goal is met — an empty `tasks` list alone does NOT signal completion.",
+		Description: "Optional rationale when `next_action` is `finalize`: the turn is complete (or there was nothing to do) and the final output is produced next. An empty `tasks` list alone does NOT signal completion.",
 		Properties: map[string]*gollem.Parameter{
 			"reason": {
 				Type:        gollem.TypeString,

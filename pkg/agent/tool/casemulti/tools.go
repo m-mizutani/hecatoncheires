@@ -248,6 +248,27 @@ func New(deps Deps) []gollem.Tool {
 	return tools
 }
 
+// NewReadOnly returns the read half of New: the case and action lookups, none of
+// the writes. It exists for a plan-execute planner, which may look things up
+// before it decides but must leave every write to a sub-agent task. Returns nil
+// when CaseUC == nil, like New.
+func NewReadOnly(deps Deps) []gollem.Tool {
+	if deps.CaseUC == nil {
+		return nil
+	}
+	tools := []gollem.Tool{
+		&listCasesTool{deps: deps},
+		&getCaseTool{deps: deps},
+	}
+	if deps.ActionUC != nil {
+		tools = append(tools,
+			&listActionsTool{deps: deps},
+			&getActionTool{deps: deps},
+		)
+	}
+	return tools
+}
+
 // loadAccessibleCase fetches the Case and turns an AccessDenied result into a
 // tool error instead of returning the stripped fields, matching
 // case__get_case's contract. Used directly by case__get_case and as the

@@ -80,7 +80,63 @@ const (
 	// that flow is not pinned to one workspace, so it must read the candidates'
 	// field schemas and configured sources before it can propose anything.
 	ToolSetWSMeta = "wsmeta"
+
+	// toolSetMemoRO and toolSetCaseMultiRO are the read halves of memo and
+	// case_multi. They exist only for PlannerToolSets and are never offered as a
+	// task vocabulary: a task that needs memos or other cases asks for the full
+	// set, so no KnownToolSetIDs* list may carry them.
+	toolSetMemoRO      = "memo_ro"
+	toolSetCaseMultiRO = "case_multi_ro"
 )
+
+// PlannerToolSets maps an agent's palette to the toolsets its plan-execute
+// PLANNER may call itself: the read half of each set, nothing that writes.
+//
+// The planner may look things up before it decides, but a write is a sub-agent's
+// job — it goes into a task, so it happens after the observations it depends on
+// and is reported back for the next round to confirm. A planner that held the
+// writers could call them directly, and did: when a planner could not express
+// what it had decided (a Job with nothing to do had no way to end round 1), it
+// called a tool instead of answering, with placeholder arguments, and when the
+// tool it reached for was slack__post_to_case_channel the placeholder ("x",
+// "noop", "dummy") was posted to a customer thread, followed by an apology.
+//
+// The mapping is by toolset, not by tool, because the read/write split already
+// exists at that level:
+//   - core / core_job → core_ro; slack_post / slack_write → slack_ro.
+//   - memo / case_multi → their read halves (toolSetMemoRO / toolSetCaseMultiRO).
+//   - case_write has no read half (the case itself is in the system prompt) and
+//     knowledge's read tools are always included by Resolve, so both are dropped.
+//   - every other set is read-only already and passes through.
+//
+// The result is deduplicated and keeps the caller's order. It changes nothing a
+// task may ask for: children are spawned with the ids the planner chose, not
+// with this list.
+func PlannerToolSets(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	add := func(id string) {
+		if !slices.Contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	for _, id := range ids {
+		switch id {
+		case ToolSetCore, ToolSetCoreJob:
+			add(ToolSetCoreRO)
+		case ToolSetSlackPost, ToolSetSlackWrite:
+			add(ToolSetSlackRO)
+		case ToolSetMemo:
+			add(toolSetMemoRO)
+		case ToolSetCaseMulti:
+			add(toolSetCaseMultiRO)
+		case ToolSetCaseWrite, ToolSetKnowledge:
+			// Dropped; see the doc comment.
+		default:
+			add(id)
+		}
+	}
+	return out
+}
 
 // KnownToolSetIDs is the canonical list of identifiers a planner is allowed
 // to request. Anything outside this list is rejected at plan validation.
@@ -204,6 +260,8 @@ type ToolSetResolver struct {
 	slackPost []gollem.Tool
 	// memo is the Case-scoped memo tool set (ToolSetMemo).
 	memo []gollem.Tool
+	// memoRO is memo's read half (toolSetMemoRO), built from the same deps.
+	memoRO []gollem.Tool
 	// knowledgeWrite is the knowledge tool set including create/update
 	// (ToolSetKnowledge). Empty unless a mutator is wired.
 	knowledgeWrite []gollem.Tool
@@ -236,6 +294,8 @@ type ToolSetResolver struct {
 	// gated on the planner requesting ToolSetCaseMulti. Used by the
 	// workspace-channel agent, never the per-case mention / proposal planners.
 	caseMulti []gollem.Tool
+	// caseMultiRO is caseMulti's read half (toolSetCaseMultiRO).
+	caseMultiRO []gollem.Tool
 	// wsmeta is the workspace-metadata read set (ToolSetWSMeta): the registered
 	// workspaces and their field schemas / sources. Empty unless a registry is
 	// wired.
@@ -325,8 +385,10 @@ func NewToolSetResolver(d ToolSetDeps) *ToolSetResolver {
 	// Memo tools need both a mutator and the workspace's memo schema; the schema
 	// drives field coercion in create/update.
 	var memoTools []gollem.Tool
+	var memoRO []gollem.Tool
 	if d.Memo.MemoUC != nil && d.Memo.Schema != nil {
 		memoTools = memotool.New(d.Memo)
+		memoRO = memotool.NewReadOnly(d.Memo)
 	}
 	// The writer tools need a mutator and a concrete case to be pinned to. A
 	// create turn (no case yet) or a host that wires no CaseUC leaves the set
@@ -339,8 +401,10 @@ func NewToolSetResolver(d ToolSetDeps) *ToolSetResolver {
 	// The cross-case toolset is built only when a CaseUsecase is wired (the
 	// workspace-channel host); casemulti.New returns nil otherwise.
 	var caseMulti []gollem.Tool
+	var caseMultiRO []gollem.Tool
 	if d.CaseMulti.CaseUC != nil {
 		caseMulti = casemulti.New(d.CaseMulti)
+		caseMultiRO = casemulti.NewReadOnly(d.CaseMulti)
 	}
 	// The posting tool needs the channel of the case the run is on; NewForAssist
 	// degrades to the read-only set without one. It is built unconditionally so
@@ -365,6 +429,7 @@ func NewToolSetResolver(d ToolSetDeps) *ToolSetResolver {
 		coreJob:        coreJobTools,
 		slackPost:      slackPost,
 		memo:           memoTools,
+		memoRO:         memoRO,
 		knowledgeWrite: knowledgeWrite,
 		slack:          slacktool.NewReadOnly(d.Slack),
 		slackWrite:     slackWrite,
@@ -375,6 +440,7 @@ func NewToolSetResolver(d ToolSetDeps) *ToolSetResolver {
 		caseWrite:      caseWrite,
 		knowledge:      knowledge,
 		caseMulti:      caseMulti,
+		caseMultiRO:    caseMultiRO,
 		wsmeta:         wsmetaTools,
 	}
 }
@@ -492,6 +558,10 @@ func (r *ToolSetResolver) setFor(id string) []gollem.Tool {
 		return r.caseMulti
 	case ToolSetMemo:
 		return r.memo
+	case toolSetMemoRO:
+		return r.memoRO
+	case toolSetCaseMultiRO:
+		return r.caseMultiRO
 	case ToolSetWSMeta:
 		return r.wsmeta
 	default:

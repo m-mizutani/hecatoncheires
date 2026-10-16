@@ -550,10 +550,18 @@ func (s *strategy[T]) stepPlan(ctx context.Context, sys agentkit.Syscalls, st st
 	}
 
 	st.PlannerToolRounds = 0
-	if plan.Direct != nil {
+	switch plan.NextAction {
+	case nextActionDirect:
 		return s.launchDirect(ctx, sys, st, plan.Direct)
+	case nextActionFinalize:
+		// Nothing to investigate or do. The terminal call is still made, so every
+		// host receives the same OutputFinal it gets after a replan finalize — for a
+		// Job that is the no-op its instructions ask for.
+		st.Phase = phaseFinal
+		return st, agentkit.Continue[Output[T]](), nil
+	default:
+		return s.launchRound(ctx, sys, st, plan.Tasks)
 	}
-	return s.launchRound(ctx, sys, st, plan.Tasks)
 }
 
 // plannerInput is the user turn a planning call sends. budgetLine is the
@@ -866,6 +874,8 @@ func (s *strategy[T]) stepReplan(ctx context.Context, sys agentkit.Syscalls, st 
 	}
 
 	st.PlannerToolRounds = 0
+	// parseReplanResult leaves only the chosen action's payload set, so the
+	// payload alone identifies the action here.
 	switch {
 	case rr.Question != nil:
 		st = s.note(ctx, st, "❓ Asked a question")
