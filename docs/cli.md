@@ -95,7 +95,7 @@ The `serve` command (alias: `s`) starts the HTTP server.
 | `--agent-task-max-steps` | `HECATONCHEIRES_AGENT_TASK_MAX_STEPS` | `48` | No | Maximum committed transitions one sub-agent may execute |
 | `--agent-task-max-input-tokens` | `HECATONCHEIRES_AGENT_TASK_MAX_INPUT_TOKENS` | `100000` | No | Maximum input tokens one sub-agent may consume |
 | `--agent-task-max-output-tokens` | `HECATONCHEIRES_AGENT_TASK_MAX_OUTPUT_TOKENS` | `20000` | No | Maximum output tokens one sub-agent may produce |
-| `--agent-budget-notice-ratio` | `HECATONCHEIRES_AGENT_BUDGET_NOTICE_RATIO` | `0.9` | No | Fraction of any ceiling an agent may spend before it is told to conclude. What is left is the reserve it makes its final tool call and writes its output from. Must be greater than 0 and less than 1 |
+| `--agent-budget-notice-ratio` | `HECATONCHEIRES_AGENT_BUDGET_NOTICE_RATIO` | `0.9` | No | Fraction of any ceiling an agent may spend before it is told to conclude. What is left is the reserve it concludes on (see the budget section below for what it does there). Must be greater than 0 and less than 1 |
 | `--agent-worker-concurrency` | `HECATONCHEIRES_AGENT_WORKER_CONCURRENCY` | `8` | No | Maximum agent transitions this instance drives at once |
 | `--agent-worker-poll-concurrency` | `HECATONCHEIRES_AGENT_WORKER_POLL_CONCURRENCY` | `2` | No | Number of parallel poll loops looking for runnable agent processes |
 | `--agent-worker-lease` | `HECATONCHEIRES_AGENT_WORKER_LEASE` | `120s` | No | How long a worker holds a claimed agent process before another instance may reclaim it |
@@ -200,23 +200,32 @@ Because a sub-agent's usage arrives in one addition when it finishes, a run can
 cross a ceiling by a whole sub-agent's worth at once; the reported figure is then
 past the ceiling rather than at it.
 Crossing `--agent-budget-notice-ratio` of the budget or the step ceiling puts the
-run into its **reserve** — by default the last tenth — and the rest of the run is
-two moves. The agent is first told that this turn is its final tool call and that
-it must not write its result yet, because a turn's side effects (updating a case,
-posting a message, recording an action) happen through tools and nowhere else. The
-call that carries that tool's result back tells it the opposite: call nothing more,
-and write its result now, briefly. So the reserve has to cover two generates and
-one tool call.
+run into its **reserve** — by default the last tenth. What the rest of the run is
+depends on the agent's strategy.
 
-The first instruction cannot force the agent to call a tool: an agent that writes
-its result instead simply ends the run there. The second is enforced as well as
-stated: that call is sent to the LLM provider with tool calls disabled. If the
-provider returns a tool call anyway, the call is still run and answered, because
-leaving it unanswered would make the provider reject every later request in the
-run.
+- **An agent that works in a single loop** (the channel-mode case agent, the
+  assist agent, a Job with the simple strategy, and every sub-agent) makes two
+  moves. It is first told that this turn is its final tool call and that it must
+  not write its result yet, because its side effects (updating a case, posting a
+  message, recording an action) happen through its own tool calls and nowhere
+  else. The call that carries that tool's result back tells it the opposite: call
+  nothing more, and write its result now, briefly. So the reserve has to cover two
+  generates and one tool call. The first instruction cannot force the agent to
+  call a tool: an agent that writes its result instead simply ends the run there.
+- **A plan-and-execute agent** (the thread-mode case agent, the workspace agent,
+  the case-draft agent, and a Job with the planexec strategy) starts no further
+  sub-agent and makes one move: it writes its final output from what the run has
+  done so far. Its planner can only read — every write in such a run is done by a
+  sub-agent — so there is no tool call left for it to make, and a new sub-agent
+  could spend more than the reserve holds.
+
+The call that may call no more tools is sent to the LLM provider with tool calls
+disabled. If the provider returns a tool call anyway, the call is still run and
+answered, because leaving it unanswered would make the provider reject every
+later request in the run.
 
 **Spending the budget does not stop the run.** Past the ceiling the agent is told
-that its budget is gone and makes the same two moves; the run then ends itself.
+that its budget is gone and makes the same moves; the run then ends itself.
 This matters because a sub-agent's whole spend is added to its parent in one write
 when the sub-agent finishes: a run regularly passes from under the notice
 threshold to past the budget in a single jump, with no earlier warning, and
@@ -230,11 +239,11 @@ bound what you are charged.** Three things land on top of it:
   Because of the fold above, the first verdict a run gets about its money can
   already be well past the figure — the run this behaviour was written for
   reported `$2.31` against a `$2.00` budget.
-- the reserve's two calls.
-- everything up to the step or token ceiling, if the model keeps calling tools
-  after the reserve's final tool call. The call after that tool call is sent with
-  tool calls disabled (`tool_choice: none`), so this happens only if the LLM
-  provider returns a tool call despite that setting.
+- the reserve's calls: two for an agent that works in a single loop, one for a
+  plan-and-execute agent.
+- everything up to the step or token ceiling, if the model keeps calling tools on
+  a call sent with tool calls disabled (`tool_choice: none`). This happens only if
+  the LLM provider returns a tool call despite that setting.
 
 **Each sub-agent's share is decided by the planner.** When it plans a round, the
 planner is told what the run has left and states an amount for every task; the

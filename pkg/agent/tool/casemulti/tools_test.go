@@ -335,6 +335,47 @@ func TestNew_CaseAndAction(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// NewReadOnly
+// ---------------------------------------------------------------------------
+
+func toolNames(t *testing.T, tools []gollem.Tool) []string {
+	t.Helper()
+	names := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		names = append(names, tool.Spec().Name)
+	}
+	return names
+}
+
+func TestNewReadOnly(t *testing.T) {
+	t.Run("NilCaseUCGivesNothing", func(t *testing.T) {
+		gt.Array(t, casemulti.NewReadOnly(casemulti.Deps{WorkspaceID: "ws", ActionUC: &fakeActionUC{}})).Length(0)
+	})
+
+	t.Run("CaseOnly", func(t *testing.T) {
+		tools := casemulti.NewReadOnly(casemulti.Deps{WorkspaceID: "ws", CaseUC: &fakeCaseUC{}, StatusSet: testStatusSet(t)})
+		gt.Value(t, toolNames(t, tools)).Equal([]string{"case__list_cases", "case__get_case"})
+	})
+
+	t.Run("CaseAndAction", func(t *testing.T) {
+		tools := casemulti.NewReadOnly(casemulti.Deps{WorkspaceID: "ws", CaseUC: &fakeCaseUC{}, ActionUC: &fakeActionUC{}})
+		gt.Value(t, toolNames(t, tools)).Equal([]string{
+			"case__list_cases", "case__get_case", "case__list_actions", "case__get_action",
+		})
+	})
+
+	// Every read tool is also in the full set, so the two builders cannot offer
+	// different read tools.
+	t.Run("IsASubsetOfNew", func(t *testing.T) {
+		deps := casemulti.Deps{WorkspaceID: "ws", CaseUC: &fakeCaseUC{}, ActionUC: &fakeActionUC{}}
+		full := toolNames(t, casemulti.New(deps))
+		for _, name := range toolNames(t, casemulti.NewReadOnly(deps)) {
+			gt.Array(t, full).Has(name)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
 // case__list_cases
 // ---------------------------------------------------------------------------
 

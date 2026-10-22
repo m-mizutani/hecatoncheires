@@ -287,12 +287,12 @@ type state struct {
 	// It is re-derived from Syscalls.LimitStatus() at the top of every Step, so a
 	// checkpoint written before this field existed (or by a build that names it
 	// differently) costs the run nothing: the same transition sets it again.
+	//
+	// A checkpoint written by a build that also counted the reserve's tool round
+	// (reserve_tool_rounds) decodes as well: the field is ignored, and the run's
+	// next terminal call is sent with tool calls disabled, which is what that
+	// build did on the reserve's second move.
 	Reserve bool `json:"reserve,omitempty"`
-	// ReserveToolRounds counts how many times a call diverted to tools AFTER the
-	// run crossed into the reserve. It is counted separately from
-	// PlannerToolRounds, which is reset at every planning phase and so cannot say
-	// how much of the reserve is left.
-	ReserveToolRounds int `json:"reserve_tool_rounds,omitempty"`
 	// PendingCalls are the tool calls the planner asked for before deciding, and
 	// this run has not made yet. They are consumed one per transition.
 	PendingCalls []*gollem.FunctionCall `json:"pending_calls,omitempty"`
@@ -545,15 +545,25 @@ func (s *strategy[T]) stepPlan(ctx context.Context, sys agentkit.Syscalls, st st
 	plan, perr := parsePlanResult([]byte(strings.Join(res.Texts, "\n")),
 		st.Input.KnownToolIDs, st.Input.AllowDirect, budgetBound(remaining, budgeted))
 	if perr != nil {
-		st = s.carryCorrection(ctx, st, perr, "planexec: planner output rejected")
-		return st, agentkit.Continue[Output[T]](), nil
+		next, err := s.carryCorrection(ctx, st, perr, "planexec: planner output rejected")
+		if err != nil {
+			return st, agentkit.Decision[Output[T]]{}, err
+		}
+		return next, agentkit.Continue[Output[T]](), nil
 	}
 
 	st.PlannerToolRounds = 0
-	if plan.Direct != nil {
+	switch {
+	case plan.Finalize != nil:
+		// The turn ends without a phase, through the same terminal call a
+		// replan's finalize leads to.
+		st.Phase = phaseFinal
+		return st, agentkit.Continue[Output[T]](), nil
+	case plan.Direct != nil:
 		return s.launchDirect(ctx, sys, st, plan.Direct)
+	default:
+		return s.launchRound(ctx, sys, st, plan.Tasks)
 	}
-	return s.launchRound(ctx, sys, st, plan.Tasks)
 }
 
 // plannerInput is the user turn a planning call sends. budgetLine is the
@@ -629,54 +639,6 @@ const plannerContinue = "Continue from what you have so far, and give your next 
 // calls charges, remains the hard stop.
 const plannerToolRoundsMax = 4
 
-// reserveToolRoundsMax is how many tool rounds the budget reserve pays for: one.
-// The reserve is a tenth of the budget by default and has to cover this call, the
-// tool it makes and the terminal output that follows, so a second round would
-// leave nothing to write with.
-//
-// Past it the terminal call is sent with tool calls disabled, for the reason
-// plannerToolRoundsMax gives, and is told nothing beyond what its user turn
-// carries — a call continuing from that tool round sends none. A call made anyway
-// is still answered by divertToTools, because an unanswered function call breaks
-// the conversation for every later request.
-const reserveToolRoundsMax = 1
-
-// reserveInstruction is what the terminal call is told on the first transition
-// after the run crossed into its budget reserve.
-//
-// It names ONE action and offers no alternative. The conditional it replaced
-// ("if something is outstanding call it, otherwise write the output") handed the
-// planner a way to write a terminal output describing work it never performed,
-// which is the exact outcome the reserve exists to prevent.
-//
-// It rides on the terminal call's user turn, after the final prompt, so it reaches
-// only a call that sends one. A terminal call continuing from answered tool calls
-// sends no user turn and is not told: it keeps its tools for one round, and the
-// call after that is sent with tool calls disabled. Only the terminal call ever
-// sees it: stepPlan and stepReplan divert to phaseFinal at their top when
-// st.Reserve is set, without generating.
-const reserveInstruction = "This run has spent its working budget; only a small reserve is left. " +
-	"Do not start another investigation round. THIS turn is your final tool call: make the one call " +
-	"this turn still needs in order to take effect. Do not write the terminal output on this turn — " +
-	"the call's outcome comes back on the next turn, and that is where you write it."
-
-// reserveMovesSpent reports whether the reserve's FIRST move is over, so the
-// terminal call must be asked for the output rather than for a tool call.
-//
-// Three things end it, and all three have to be here because the run only ever
-// gets one more terminal call:
-//
-//   - the tool round was taken (ReserveToolRounds);
-//   - the terminal output was already asked for and rejected (FinalRetries) —
-//     the retry's user turn says "re-emit the output correctly", and adding
-//     reserveInstruction's "do not write the terminal output on this turn"
-//     would ask for two things a model cannot both satisfy;
-//   - the model answered the first move with nothing at all, which stepFinal
-//     records by spending the round (see the empty-body branch there).
-func reserveMovesSpent(st state) bool {
-	return st.ReserveToolRounds >= reserveToolRoundsMax || st.FinalRetries > 0
-}
-
 // divertToTools sends the run to the tool phase when the planner asked for tools
 // instead of deciding, and reports whether it did.
 //
@@ -695,9 +657,6 @@ func (s *strategy[T]) divertToTools(st state, res *agentkit.GenerateResult, from
 	st.PendingCalls = res.FunctionCalls
 	st.AfterTool = from
 	st.PlannerToolRounds++
-	if st.Reserve {
-		st.ReserveToolRounds++
-	}
 	st.Phase = phasePlannerTool
 	// The next planning call continues from the conversation, which by then carries
 	// the tool results; re-sending the original input would ask the same question
@@ -861,8 +820,11 @@ func (s *strategy[T]) stepReplan(ctx context.Context, sys agentkit.Syscalls, st 
 	rr, perr := parseReplanResult([]byte(strings.Join(res.Texts, "\n")),
 		st.Input.KnownToolIDs, st.Input.AllowQuestion, budgetBound(remaining, budgeted))
 	if perr != nil {
-		st = s.carryCorrection(ctx, st, perr, "planexec: replanner output rejected")
-		return st, agentkit.Continue[Output[T]](), nil
+		next, err := s.carryCorrection(ctx, st, perr, "planexec: replanner output rejected")
+		if err != nil {
+			return st, agentkit.Decision[Output[T]]{}, err
+		}
+		return next, agentkit.Continue[Output[T]](), nil
 	}
 
 	st.PlannerToolRounds = 0
@@ -1013,9 +975,9 @@ func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st s
 	//     is the planner's "emit one decision object", and without a schema a reply
 	//     like {"finalize": ...} would be returned as the user-facing text.
 	//
-	// The other branch sends the turn, opened by the allowance line: this is the one
-	// call that may still ask for a tool, so it has to know what is left to spend on
-	// one. A retry carries the rejection reason instead of the final prompt: the
+	// The other branch sends the turn, opened by the allowance line: outside the
+	// budget reserve this call may still ask for a tool, so it has to know what is
+	// left to spend on one. A retry carries the rejection reason instead of the final prompt: the
 	// model already has the request in the conversation.
 	textOutput := s.cfg.TextOnly && st.ToolsAnswered
 	var input []gollem.Input
@@ -1032,11 +994,7 @@ func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st s
 			}
 			userPrompt = rendered
 		}
-		texts := []gollem.Text{gollem.Text(userPrompt)}
-		if st.Reserve && !reserveMovesSpent(st) {
-			texts = append(texts, gollem.Text(reserveInstruction))
-		}
-		input = withBudgetLine(budgetLine(s.remainingBudget(sys)), texts...)
+		input = withBudgetLine(budgetLine(s.remainingBudget(sys)), gollem.Text(userPrompt))
 	}
 
 	opts := []agentkit.GenerateOption{
@@ -1071,7 +1029,14 @@ func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st s
 	body := strings.Join(res.Texts, "\n")
 	if textOutput && strings.TrimSpace(body) != "" {
 		var tr TextResult
-		if err := json.Unmarshal(extractJSONObject([]byte(body)), &tr); err != nil {
+		err := json.Unmarshal(extractJSONObject([]byte(body)), &tr)
+		if err == nil && strings.TrimSpace(tr.Text) == "" {
+			// A JSON object with no text is not an answer. The usual one is a planner
+			// decision ({"finalize": ...}): with no final prompt on this call, the last
+			// instruction the model holds is the planner's.
+			err = goerr.New("the text output has no text")
+		}
+		if err != nil {
 			st.FinalRetries++
 			if st.FinalRetries > finalOutputMaxRetry {
 				return st, agentkit.Done(Output[T]{
@@ -1091,18 +1056,6 @@ func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st s
 		body = tr.Text
 	}
 	if strings.TrimSpace(body) == "" {
-		// On the reserve's FIRST move an empty reply is the model OBEYING: it was
-		// told this turn is its final tool call and that it must not write the
-		// output yet, and it made no call. Ending here would spend the reserve on
-		// nothing and hand the host a fallback — the outcome this whole path exists
-		// to avoid. Spend the round and come back: the next terminal call sends the
-		// final prompt without reserveInstruction, which asks for the output, and is
-		// sent with tool calls disabled. Bounded, because that call is then past
-		// reserveMovesSpent and a second empty reply falls back.
-		if st.Reserve && !reserveMovesSpent(st) {
-			st.ReserveToolRounds = reserveToolRoundsMax
-			return st, agentkit.Continue[Output[T]](), nil
-		}
 		return st, agentkit.Done(Output[T]{
 			Kind:           OutputFallback,
 			FallbackReason: "the final response was empty",
@@ -1136,7 +1089,11 @@ func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st s
 		// transition, not to a loop inside this one.
 		errutil.Handle(ctx, goerr.Wrap(derr, "planexec: final output rejected",
 			goerr.T(errutil.TagBenign)), "planexec: final output rejected")
-		st.NextInput = finalRetryInput(derr)
+		retry, err := renderFinalRetryInput(derr)
+		if err != nil {
+			return st, agentkit.Decision[Output[T]]{}, goerr.Wrap(err, "planexec: build the terminal output correction")
+		}
+		st.NextInput = retry
 		return st, agentkit.Continue[Output[T]](), nil
 	}
 
@@ -1152,10 +1109,14 @@ func (s *strategy[T]) stepFinal(ctx context.Context, sys agentkit.Syscalls, st s
 // one: one transition is one LLM call, so a retry loop here would spend the
 // budget without checkpointing between attempts, and a crash would repeat the
 // whole thing.
-func (s *strategy[T]) carryCorrection(ctx context.Context, st state, cause error, msg string) state {
+func (s *strategy[T]) carryCorrection(ctx context.Context, st state, cause error, msg string) (state, error) {
 	errutil.Handle(ctx, goerr.Wrap(cause, msg, goerr.T(errutil.TagBenign)), msg)
-	st.NextInput = planRetryInput(cause)
-	return st
+	retry, err := renderPlanRetryInput(cause)
+	if err != nil {
+		return st, goerr.Wrap(err, "planexec: build the planner correction")
+	}
+	st.NextInput = retry
+	return st, nil
 }
 
 // runFinalizers applies the host's validators to a decoded terminal output. The
@@ -1506,9 +1467,9 @@ func budgetBound(remaining pricing.NanoUSD, ok bool) *pricing.NanoUSD {
 // (stepFinal).
 //
 // What this guarantees is the system prompt planexec passes to gollem. For a
-// Claude model without structured outputs, gollem appends the response schema to
-// the system prompt it sends, and the plan, replan and terminal schemas differ;
-// that is outside what this function controls.
+// Claude model without structured outputs, gollem states the response schema in
+// a user message and sends the system prompt unchanged, so the differing plan,
+// replan and terminal schemas do not change it on the wire either.
 //
 // AllocatesBudget follows Config.Remaining, the same condition that puts
 // `budget_usd` into the schema, so the instruction and the field it asks for
@@ -1523,6 +1484,7 @@ func (s *strategy[T]) plannerPrompt(st state) (string, error) {
 		StructuredFinal:     !s.cfg.TextOnly,
 		AllowSubAgentWrites: st.Input.AllowSubAgentWrites,
 		AllocatesBudget:     s.cfg.Remaining != nil,
+		PlannerToolRounds:   plannerToolRoundsMax,
 	})
 	if err != nil {
 		return "", goerr.Wrap(err, "planexec: render the planner prompt")
@@ -1544,14 +1506,16 @@ type toolDirective struct {
 // toolDirectiveFor decides a call's toolDirective from the state, in ONE place,
 // so every call made from the same state is sent the same way.
 //
-// Inside the reserve, the reserve's first move keeps its tools even when the
-// planning phase's allowance is spent: it is the one call the turn still needs.
+// Inside the budget reserve every call is the terminal one (stepPlan and
+// stepReplan divert to phaseFinal there), and it may call no tool. The planner
+// is declared only read tools, so a call there could only look something up,
+// and the reserve is spent on writing the output. A write the turn still needs
+// is a task, and the reserve launches none: a sub-agent spends up to its own
+// ceiling, which a tenth of the budget does not cover.
 func toolDirectiveFor(st state) toolDirective {
 	switch {
-	case st.Reserve && reserveMovesSpent(st):
-		return toolDirective{disableToolCalls: true}
 	case st.Reserve:
-		return toolDirective{}
+		return toolDirective{disableToolCalls: true}
 	case st.PlannerToolRounds >= plannerToolRoundsMax:
 		return toolDirective{disableToolCalls: true}
 	default:
@@ -1613,13 +1577,6 @@ func (s *strategy[T]) note(ctx context.Context, st state, line string) state {
 		st.Progress.MessageTS = ts
 	}
 	return st
-}
-
-// planRetryInput is the correction handed to the planner after its output was
-// rejected.
-func planRetryInput(cause error) string {
-	return "Your previous response was rejected: " + cause.Error() +
-		". Emit a single JSON object that matches the schema exactly."
 }
 
 func (s *strategy[T]) EncodeState(st state) ([]byte, error) {

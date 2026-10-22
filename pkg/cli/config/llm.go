@@ -132,8 +132,14 @@ func (x *LLM) NewClientFor(ctx context.Context, def agentkernel.ModelDef) (golle
 				return nil, goerr.New("--llm-gemini-location is required for a claude model on Vertex AI",
 					goerr.V(LLMModelRefKey, def.Ref))
 			}
+			// A response schema is sent as an instruction message instead of
+			// output_config.format. With the grammar in force, a planner whose
+			// round had nothing left to do filled the required decision with
+			// placeholder values ("x" tasks, an empty task list) instead of
+			// choosing an action; with the schema stated in the conversation it
+			// did not. The reply is still decoded and validated by the caller.
 			client, err := claude.NewWithVertex(ctx, x.geminiLocation, x.geminiProjectID,
-				claudeVertexOptions(def)...)
+				append(claudeVertexOptions(def), claude.WithVertexStructuredOutputsDisabled())...)
 			if err != nil {
 				return nil, goerr.Wrap(err, "failed to create Claude (Vertex AI) client",
 					goerr.V(LLMModelRefKey, def.Ref))

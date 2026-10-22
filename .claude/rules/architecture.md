@@ -350,11 +350,28 @@ back rather than being fed to the model, which cannot repair an infrastructure
 error by re-emitting JSON. A finalizer must be side-effect-free because a retried
 attempt re-runs it. See `.claude/rules/planexec.md` for the create-path wiring.
 
-**Explicit termination.** The loop terminates ONLY when a replan round emits an
+**Explicit termination.** The loop terminates ONLY when a planning round emits an
 explicit `finalize` action. A replan must set exactly one of `tasks` /
-`question` / `finalize`; setting none is rejected and folded back into another
-replan round (the old "empty tasks = done" implicit termination is gone, so a
-planner that merely forgot to emit tasks can no longer silently terminate).
+`question` / `finalize`, and round 1 exactly one of `tasks` / `direct` /
+`finalize`; setting none is rejected and folded back into another planning call
+(the old "empty tasks = done" implicit termination is gone, so a planner that
+merely forgot to emit tasks can no longer silently terminate). Round 1 offers
+`finalize` because the planner may look things up itself, and what it finds can
+show that nothing needs to be done: without the option round 1 had no valid
+output there, and the planner re-emitted `tasks: []` until it invented a
+placeholder task to pass validation.
+
+**The planner itself only reads.** Its tools are the READ half of its agent kind's
+palette (`agent.ReadOnlyToolSetIDs`, applied to the root Process of every
+plan-execute agent in `kernel.NewToolFactory`); every write is a task carrying
+the write toolset. A planner that could write called the Slack poster with a
+placeholder text in place of a decision, and the text was posted. See
+`.claude/rules/planexec.md` § "The planner may call tools, and is declared only
+read tools".
+
+The decision object is the only way to end a turn. There is no tool for it: a
+planner in the middle of its own tool calls ends by stopping them and setting
+`finalize`.
 
 **Direct mode (round-1 fast path).** When the host sets
 `Input.AllowDirect`, the planner may answer a *genuinely trivial*
@@ -890,10 +907,9 @@ both repeat on every retry, so a run that hits either produces nothing.
    - **planexec sends no such text at all.** Its system prompt is fixed for the
      whole run (`.claude/rules/planexec.md` § "One run sends ONE system prompt"),
      because Claude checks a thinking block against the system prompt before it.
-     "Call no more tools" — past `plannerToolRoundsMax`, and on the reserve's
-     second move — is carried by `tool_choice: none` alone (`toolDirectiveFor`);
-     `reserveInstruction` rides on the terminal call's user turn when that call
-     sends one; and a terminal call continuing from a tool round sends no final
+     "Call no more tools" — past `plannerToolRoundsMax`, and on every call in the
+     budget reserve — is carried by `tool_choice: none` alone (`toolDirectiveFor`);
+     and a terminal call continuing from a tool round sends no final
      prompt, because every observation trail already reached the conversation as
      a replan user turn and the output's shape is the response schema (`TextResult`'s
      for a text host).
@@ -986,9 +1002,9 @@ Seven properties a change here must preserve:
   call). In a user turn it is part of a conversation that only grows by appending,
   so a falling allowance no longer changes the system prompt. Nothing planexec
   sends changes it within a run (§ "a parallel tool-call turn is answered in ONE
-  call"). What gollem itself still changes, for a Claude model without structured
-  outputs, is the response schema it writes into the system prompt, which differs
-  between the plan and replan schemas. Pinned by
+  call"), and gollem no longer changes it either: for a Claude model without
+  structured outputs it states the response schema in a user message, not in the
+  system prompt. Pinned by
   `TestConsecutivePlannerCallsShareOneSystemPrompt`,
   `TestOneRunSendsOneSystemPrompt` and `TestTheAllowanceIsToldInTheUserTurn`.
 - **A call continuing from answered tool calls is shown NO new figure, and is
@@ -1026,15 +1042,15 @@ and keeps answering it however far past the budget the run lands. Stop is read a
 the transition boundary and fails the Process WITHOUT calling `Step`, so it is the
 one verdict after which a run can do nothing — not the tool call its turn was for,
 not a word about what it already did. What ends a run out of money is the
-STRATEGY reading that notice and making its two reserve moves.
+STRATEGY reading that notice and making its reserve moves.
 
 **A budget bounds what a run may spend before it must conclude; it does not bound
 what the run is charged.** Three things are spent on top of it: the overshoot
 already committed when the notice was first observed (the fold makes that
 routinely large — the run this was written for saw $2.31 of $2.00), the reserve's
-two calls, and — if the model keeps calling tools after the reserve's one tool
-round, which takes a provider returning a call despite `tool_choice: none` —
-everything up to the step or token ceiling.
+calls (two for react, one for planexec), and — if the model keeps calling tools
+on a call sent with `tool_choice: none`, which takes a provider returning a call
+despite it — everything up to the step or token ceiling.
 
 Two things follow:
 
@@ -1067,9 +1083,12 @@ Three properties of the money path a change here must preserve:
 
 `NoticeRatio` is the fraction of the budget or the step ceiling a run may spend
 before it is told to conclude. What is left is the **reserve** — a tenth by
-default — and the rest of the run is TWO moves, because a turn's side effects
-happen through tools and nowhere else: a run cut off before its `case__*` call or
-its post has done nothing, whatever it managed to say.
+default. For a react agent the rest of the run is TWO moves, because that agent's
+side effects happen through its own tool calls and nowhere else: a run cut off
+before its `case__*` call or its post has done nothing, whatever it managed to
+say. For a plan-execute agent it is ONE move, the terminal call with tool calls
+disabled: its planner only reads, and its writes are tasks, which the reserve
+does not launch.
 
 Five consequences to keep in mind:
 
@@ -1086,18 +1105,18 @@ Five consequences to keep in mind:
   the same instruction, arriving at the only moment such a run got. Pinned by
   `TestAnOverspentRunIsNeverStoppedByItsBudget` (budget) and
   `TestASpentBudgetWrapsTheRunUpInsteadOfFailingIt` (planexec).
-- **A Strategy that observes a notice makes two moves.** The first says "THIS turn
-  is your final tool call, do not write your result yet"; the call after it may
-  call no more tools. `react` words both moves (`reserveInstruction` /
-  `reserveSpentInstruction`) in its system prompt. `planexec` words only the first
-  (`reserveInstruction`), on the terminal call's user turn, and only when that
-  call sends one — a terminal call continuing from a tool round is not told,
-  because its system prompt is fixed for the run; its second move is
-  `tool_choice: none` and nothing else. planexec also skips further fan-out:
-  `stepPlan` and `stepReplan` divert to `phaseFinal` at their top without
-  generating.
+- **react makes two moves on a notice; planexec makes one.** react's first move
+  says "THIS turn is your final tool call, do not write your result yet"; the call
+  after it may call no more tools. It words both moves (`reserveInstruction` /
+  `reserveSpentInstruction`) in its system prompt. planexec skips further fan-out
+  (`stepPlan` and `stepReplan` divert to `phaseFinal` at their top without
+  generating) and sends the terminal call with `tool_choice: none`, asked for the
+  output by the final prompt and told nothing else. It has no first move because
+  its planner holds only read tools, and the write a turn still needs would be a
+  task: a sub-agent spends up to its own ceiling, which the reserve does not
+  cover. Pinned by `TestTheReserveTerminalCallCannotCallTools` (planexec).
 
-  Two properties a change here must preserve:
+  Two properties of react's moves a change here must preserve:
 
   - **The first move offers no alternative.** The conditional it replaced ("if
     something is outstanding call it, otherwise answer now") let a model skip
@@ -1119,8 +1138,7 @@ Five consequences to keep in mind:
     tool-call turn is answered in ONE call" gives. Pinned by
     `TestTheReserveFirstMoveIsANudgeNotAGate`,
     `TestTheReserveAllowsOneFinalToolCall` and
-    `TestACallPastTheReserveBoundIsStillAnswered` (react), and
-    `TestTheReserveAllowsATerminalToolCall` (planexec).
+    `TestACallPastTheReserveBoundIsStillAnswered` (react).
 - **The notice never rides on a call answering a tool round** — see § "a
   parallel tool-call turn is answered in ONE call" for why that call sends no
   user turn. react carries it in its system prompt. planexec does not change its

@@ -95,6 +95,10 @@ func (d *ToolDeps) Validate() error {
 // the same vocabulary, so this table is also the ceiling on what any task in a
 // run can ask for.
 //
+// A plan-execute agent's root Process — the planner — is declared only the
+// read half of its entry (agent.ReadOnlyToolSetIDs): its writes go through the
+// tasks it plans.
+//
 // An agent kind whose palette has not been established yet is an error rather
 // than a fallback. The Job and assist tool sets are deliberately NARROWER than
 // the case-channel one — a Job gets core.NewWriterForJob, which withholds
@@ -165,6 +169,17 @@ func NewToolFactory(d ToolDeps) (agentkit.ToolFactory, error) {
 					goerr.V("process", proc.ID))
 			}
 			ids = expanded
+		}
+		// The palette is what the planner hands its tasks; the planner itself
+		// gets only the reads, whichever ids its scope names. A sub-agent is a
+		// different agent kind and keeps the explicit toolsets its task was given.
+		if isPlanner(proc.Agent) {
+			readOnly, rErr := agent.ReadOnlyToolSetIDs(ids)
+			if rErr != nil {
+				return nil, goerr.Wrap(rErr, "narrow the planner palette to its read tools",
+					goerr.V("process", proc.ID), goerr.V("agent", proc.Agent))
+			}
+			ids = readOnly
 		}
 		return resolver.Resolve(ids), nil
 	}, nil
