@@ -97,6 +97,9 @@ exempt_name := {
 	"LLMRequestFromTrace",
 	"LLMResponseFromTrace",
 	"ToolCallFromTrace",
+	# maps toolset ids through a fixed in-package table; no I/O. It stays beside the
+	# ToolSet* constants so that adding one puts its classification in view.
+	"ReadOnlyToolSetIDs",
 	# in-memory counters (mutex-guarded, no external I/O)
 	"Next",
 	# agent-runtime startup wiring. These run once at process start, before any
