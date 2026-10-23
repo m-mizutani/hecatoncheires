@@ -216,8 +216,6 @@ github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek
 github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
 github.com/gollem-dev/agentkit v0.4.1 h1:OOU/+vyNTwQzb9Pxc6VpzKIimHiQkLoDnRhu7PBlu+k=
 github.com/gollem-dev/agentkit v0.4.1/go.mod h1:F5+09AEiODfA/EqF3K9IYfjpSACLanaLlMSW5DSsp1Q=
-github.com/gollem-dev/gollem v0.30.1-0.20261014072838-045b63f17354 h1:ya8gosnAQMo87zAhBiOgb4qrypuzmw8uMQ77dNFuWf4=
-github.com/gollem-dev/gollem v0.30.1-0.20261014072838-045b63f17354/go.mod h1:ivWt47m0GPzlyqBw5T1H3OaQ6aXGhLrRg1Yew+Dlpw0=
 github.com/gollem-dev/gollem v0.30.1-0.20261018073604-ebbf674c9cb1 h1:N4guiB0x048ubAkgviBWBBcEiwZ+Fbyw82gxQFy75NU=
 github.com/gollem-dev/gollem v0.30.1-0.20261018073604-ebbf674c9cb1/go.mod h1:ivWt47m0GPzlyqBw5T1H3OaQ6aXGhLrRg1Yew+Dlpw0=
 github.com/gollem-dev/tools/jira v0.2.0 h1:sqh7K9HFs3N8TTZsWYmOlVx5RS6GJMVEXuDSx7oDdBM=
@@ -276,8 +274,8 @@ github.com/jomei/notionapi v1.13.3 h1:pzEN+pVe1T0FjH85sP9TCqqe58rFRL+Fj+F5yvyBNw
 github.com/jomei/notionapi v1.13.3/go.mod h1:BqzP6JBddpBnXvMSIxiR5dCoCjKngmz5QNl1ONDlDoM=
 github.com/k0kubun/pp/v3 v3.5.2 h1:oBEa3Nft1C/k4/xCtAgv+siTiHJHFXg2FDOdC+y/bWM=
 github.com/k0kubun/pp/v3 v3.5.2/go.mod h1:lNnOiHoLg3XXNPt3mKuR1vx8dmw+RLKYJ1WfnfpNjgI=
-github.com/klauspost/compress v1.18.5 h1:/h1gH5Ce+VWNLSWqPzOVn6XBO+vJbCNGvjoaGBFW2IE=
-github.com/klauspost/compress v1.18.5/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
+github.com/klauspost/compress v1.18.7 h1:aUyZsS4kH3QTKurYhAOwAHxllVPnOthb3vPfnF1Ehjw=
+github.com/klauspost/compress v1.18.7/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
 github.com/klauspost/cpuid/v2 v2.2.11 h1:0OwqZRYI2rFrjS4kvkDnqJkKHdHaRnCm68/DY4OxRzU=
 github.com/klauspost/cpuid/v2 v2.2.11/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
 github.com/klauspost/pgzip v1.2.6 h1:8RXeL5crjEUFnR2/Sn6GJNWtSQ3Dk8pq4CL3jvdDyjU=
