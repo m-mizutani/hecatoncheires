@@ -147,7 +147,7 @@ require (
 	github.com/hashicorp/go-version v1.8.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/k0kubun/pp/v3 v3.5.2 // indirect
-	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.11 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.4 // indirect
