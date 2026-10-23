@@ -11,6 +11,7 @@ import (
 	"github.com/gollem-dev/gollem"
 	"github.com/gollem-dev/gollem/mock"
 	"github.com/m-mizutani/gt"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/casemulti"
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/casewriter"
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/core"
 	knowledgetool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/knowledge"
@@ -478,4 +479,131 @@ func TestKnownToolSetIDsCaseChannel(t *testing.T) {
 		agent.ToolSetMemo,
 		agent.ToolSetKnowledge,
 	})
+}
+
+// allToolSetIDs lists every ToolSet* constant. A constant added to toolset.go
+// belongs here too, which is what makes
+// TestReadOnlyToolSetIDs_ClassifiesEveryToolSet catch an unclassified one.
+var allToolSetIDs = []string{
+	agent.ToolSetCoreRO,
+	agent.ToolSetSlackRO,
+	agent.ToolSetNotion,
+	agent.ToolSetGitHub,
+	agent.ToolSetWebFetch,
+	agent.ToolSetJira,
+	agent.ToolSetCore,
+	agent.ToolSetMemo,
+	agent.ToolSetKnowledge,
+	agent.ToolSetCaseWrite,
+	agent.ToolSetCaseMulti,
+	agent.ToolSetSlackWrite,
+	agent.ToolSetCoreJob,
+	agent.ToolSetSlackPost,
+	agent.ToolSetWSMeta,
+	agent.ToolSetMemoRO,
+	agent.ToolSetCaseMultiRO,
+}
+
+func TestReadOnlyToolSetIDs(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"core sets keep their reads", []string{agent.ToolSetCore}, []string{agent.ToolSetCoreRO}},
+		{"job core set keeps its reads", []string{agent.ToolSetCoreJob}, []string{agent.ToolSetCoreRO}},
+		{"core reads stay", []string{agent.ToolSetCoreRO}, []string{agent.ToolSetCoreRO}},
+		{"slack write keeps its reads", []string{agent.ToolSetSlackWrite}, []string{agent.ToolSetSlackRO}},
+		{"slack reads stay", []string{agent.ToolSetSlackRO}, []string{agent.ToolSetSlackRO}},
+		{"memo keeps its reads", []string{agent.ToolSetMemo}, []string{agent.ToolSetMemoRO}},
+		{"memo reads stay", []string{agent.ToolSetMemoRO}, []string{agent.ToolSetMemoRO}},
+		{"case_multi keeps its reads", []string{agent.ToolSetCaseMulti}, []string{agent.ToolSetCaseMultiRO}},
+		{"case_multi reads stay", []string{agent.ToolSetCaseMultiRO}, []string{agent.ToolSetCaseMultiRO}},
+		{
+			"read-only integrations stay",
+			[]string{agent.ToolSetNotion, agent.ToolSetGitHub, agent.ToolSetWebFetch, agent.ToolSetJira, agent.ToolSetWSMeta},
+			[]string{agent.ToolSetNotion, agent.ToolSetGitHub, agent.ToolSetWebFetch, agent.ToolSetJira, agent.ToolSetWSMeta},
+		},
+		{"write-only sets are dropped", []string{agent.ToolSetSlackPost, agent.ToolSetCaseWrite}, []string{}},
+		{"knowledge is dropped", []string{agent.ToolSetKnowledge}, []string{}},
+		{
+			"the job palette keeps order and drops duplicates",
+			agent.KnownToolSetIDsJob,
+			[]string{
+				agent.ToolSetCoreRO, agent.ToolSetSlackRO, agent.ToolSetNotion,
+				agent.ToolSetWebFetch, agent.ToolSetJira, agent.ToolSetMemoRO,
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := agent.ReadOnlyToolSetIDs(tc.in)
+			gt.NoError(t, err).Required()
+			gt.Array(t, got).Equal(tc.want)
+		})
+	}
+}
+
+func TestReadOnlyToolSetIDs_ClassifiesEveryToolSet(t *testing.T) {
+	for _, id := range allToolSetIDs {
+		t.Run(id, func(t *testing.T) {
+			_, err := agent.ReadOnlyToolSetIDs([]string{id})
+			gt.NoError(t, err)
+		})
+	}
+}
+
+func TestReadOnlyToolSetIDs_RejectsAnUnclassifiedID(t *testing.T) {
+	_, err := agent.ReadOnlyToolSetIDs([]string{agent.ToolSetSlackRO, "not_a_toolset"})
+	gt.Error(t, err)
+}
+
+// stubCaseMultiUC satisfies casemulti.CaseUsecase; the resolver tests never
+// call it.
+type stubCaseMultiUC struct{ casemulti.CaseUsecase }
+
+type stubCaseMultiActionUC struct{ casemulti.ActionUsecase }
+
+// TestReadOnlyToolSets_ResolveNoWriter pins that the read halves of memo and
+// case_multi resolve to the read tools of the full sets and to nothing else.
+func TestReadOnlyToolSets_ResolveNoWriter(t *testing.T) {
+	r := agent.NewToolSetResolver(agent.ToolSetDeps{
+		Memo: memotool.Deps{
+			WorkspaceID: "ws", CaseID: 1,
+			MemoUC: stubMemoMutator{}, Schema: &config.FieldSchema{},
+		},
+		CaseMulti: casemulti.Deps{
+			WorkspaceID: "ws", ActorID: "U1",
+			CaseUC: stubCaseMultiUC{}, ActionUC: stubCaseMultiActionUC{},
+		},
+	})
+
+	gt.Array(t, toolNames(r.Resolve([]string{agent.ToolSetMemoRO}))).
+		Equal([]string{"memo__get_memo", "memo__list_memos"})
+	gt.Array(t, toolNames(r.Resolve([]string{agent.ToolSetCaseMultiRO}))).
+		Equal([]string{"case__get_action", "case__get_case", "case__list_actions", "case__list_cases"})
+
+	// The full sets carry the writers the read halves leave out.
+	gt.Array(t, toolNames(r.Resolve([]string{agent.ToolSetMemo}))).Has("memo__apply_memo_changes")
+	gt.Array(t, toolNames(r.Resolve([]string{agent.ToolSetCaseMulti}))).Has("case__update_case")
+
+	gt.Bool(t, r.Has(agent.ToolSetMemoRO)).True()
+	gt.Bool(t, r.Has(agent.ToolSetCaseMultiRO)).True()
+}
+
+func TestReadOnlyToolSets_AreNotOfferedToPlanners(t *testing.T) {
+	palettes := [][]string{
+		agent.KnownToolSetIDs,
+		agent.KnownToolSetIDsNoCore,
+		agent.KnownToolSetIDsThreadWrite,
+		agent.KnownToolSetIDsWorkspaceChannel,
+		agent.KnownToolSetIDsCaseChannel,
+		agent.KnownToolSetIDsAssist,
+		agent.KnownToolSetIDsJob,
+		agent.KnownToolSetIDsProposal,
+	}
+	for _, palette := range palettes {
+		gt.Bool(t, slices.Contains(palette, agent.ToolSetMemoRO)).False()
+		gt.Bool(t, slices.Contains(palette, agent.ToolSetCaseMultiRO)).False()
+	}
 }

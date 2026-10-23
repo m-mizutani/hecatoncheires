@@ -1,6 +1,7 @@
 package planexec_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/m-mizutani/gt"
@@ -10,11 +11,12 @@ import (
 
 func TestPlannerPrompt_HappyPath(t *testing.T) {
 	got, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
-		HostPrompt:      "You are the proposal planner for case drafts.",
-		Language:        "Japanese",
-		KnownToolIDs:    []string{"slack_ro", "github"},
-		AllowQuestion:   true,
-		StructuredFinal: true,
+		PlannerToolRounds: 4,
+		HostPrompt:        "You are the proposal planner for case drafts.",
+		Language:          "Japanese",
+		KnownToolIDs:      []string{"slack_ro", "github"},
+		AllowQuestion:     true,
+		StructuredFinal:   true,
 	})
 	gt.NoError(t, err).Required()
 	// HostPrompt is prepended verbatim.
@@ -37,10 +39,11 @@ func TestPlannerPrompt_HappyPath(t *testing.T) {
 
 func TestPlannerPrompt_QuestionDisabled(t *testing.T) {
 	got, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
-		HostPrompt:      "Run scheduled job analysis.",
-		KnownToolIDs:    []string{"default"},
-		AllowQuestion:   false,
-		StructuredFinal: false,
+		PlannerToolRounds: 4,
+		HostPrompt:        "Run scheduled job analysis.",
+		KnownToolIDs:      []string{"default"},
+		AllowQuestion:     false,
+		StructuredFinal:   false,
 	})
 	gt.NoError(t, err).Required()
 	// AllowQuestion = false → no "ask the user" section.
@@ -56,9 +59,10 @@ func TestPlannerPrompt_QuestionDisabled(t *testing.T) {
 
 func TestPlannerPrompt_LanguageOmitted(t *testing.T) {
 	got, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
-		HostPrompt:    "x",
-		KnownToolIDs:  []string{"a"},
-		AllowQuestion: false,
+		PlannerToolRounds: 4,
+		HostPrompt:        "x",
+		KnownToolIDs:      []string{"a"},
+		AllowQuestion:     false,
 		// Language: ""
 	})
 	gt.NoError(t, err).Required()
@@ -68,10 +72,11 @@ func TestPlannerPrompt_LanguageOmitted(t *testing.T) {
 
 func TestPlannerPrompt_DirectEnabled(t *testing.T) {
 	got, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
-		HostPrompt:    "You are the thread planner.",
-		KnownToolIDs:  []string{"slack_ro"},
-		AllowQuestion: true,
-		AllowDirect:   true,
+		PlannerToolRounds: 4,
+		HostPrompt:        "You are the thread planner.",
+		KnownToolIDs:      []string{"slack_ro"},
+		AllowQuestion:     true,
+		AllowDirect:       true,
 	})
 	gt.NoError(t, err).Required()
 	// The Direct answer section and its strict guard appear.
@@ -82,9 +87,10 @@ func TestPlannerPrompt_DirectEnabled(t *testing.T) {
 
 func TestPlannerPrompt_DirectDisabled(t *testing.T) {
 	got, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
-		HostPrompt:    "You are the thread planner.",
-		KnownToolIDs:  []string{"slack_ro"},
-		AllowQuestion: true,
+		PlannerToolRounds: 4,
+		HostPrompt:        "You are the thread planner.",
+		KnownToolIDs:      []string{"slack_ro"},
+		AllowQuestion:     true,
 		// AllowDirect: false
 	})
 	gt.NoError(t, err).Required()
@@ -94,6 +100,7 @@ func TestPlannerPrompt_DirectDisabled(t *testing.T) {
 
 func TestPlannerPrompt_SubAgentWritesEnabled(t *testing.T) {
 	got, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
+		PlannerToolRounds:   4,
 		HostPrompt:          "Run scheduled job analysis.",
 		KnownToolIDs:        []string{"default"},
 		AllowSubAgentWrites: true,
@@ -109,8 +116,9 @@ func TestPlannerPrompt_SubAgentWritesEnabled(t *testing.T) {
 
 func TestPlannerPrompt_SubAgentWritesDisabled(t *testing.T) {
 	got, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
-		HostPrompt:   "You are the thread planner.",
-		KnownToolIDs: []string{"slack_ro"},
+		PlannerToolRounds: 4,
+		HostPrompt:        "You are the thread planner.",
+		KnownToolIDs:      []string{"slack_ro"},
 		// AllowSubAgentWrites: false
 	})
 	gt.NoError(t, err).Required()
@@ -132,10 +140,11 @@ func TestPlannerPrompt_SubAgentWritesDisabled(t *testing.T) {
 // reason to emit a placeholder and that record goes empty.
 func TestPlannerPrompt_MessageIsInternalButKeptInTheRunRecord(t *testing.T) {
 	got, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
-		HostPrompt:    "You are the thread planner.",
-		Language:      "Japanese",
-		KnownToolIDs:  []string{"slack_ro"},
-		AllowQuestion: true,
+		PlannerToolRounds: 4,
+		HostPrompt:        "You are the thread planner.",
+		Language:          "Japanese",
+		KnownToolIDs:      []string{"slack_ro"},
+		AllowQuestion:     true,
 	})
 	gt.NoError(t, err).Required()
 	gt.String(t, got).Contains("`message` is NOT shown to the user")
@@ -146,16 +155,68 @@ func TestPlannerPrompt_MessageIsInternalButKeptInTheRunRecord(t *testing.T) {
 	gt.String(t, got).NotContains("the `message` field, ")
 }
 
+// The planner may call tools itself, but it is declared only read tools (see
+// kernel.NewToolFactory). The protocol must say so, together with where writes
+// go — a task carrying the write tool id — so the prompt and the wiring describe
+// the same capability. `finalize` is offered in round 1 for a request whose
+// lookups show there is nothing to do; without it the planner had no valid
+// output there and filled the plan with placeholder tasks to pass validation.
+func TestPlannerPrompt_OwnToolCallsAndRoundOneFinalize(t *testing.T) {
+	got, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
+		PlannerToolRounds:   4,
+		HostPrompt:          "Run scheduled job analysis.",
+		KnownToolIDs:        []string{"slack_ro"},
+		AllowSubAgentWrites: true,
+	})
+	gt.NoError(t, err).Required()
+
+	gt.String(t, got).Contains("## Your own tool calls")
+	gt.String(t, got).Contains("for up to 4 rounds per decision")
+	gt.String(t, got).Contains("The tools declared to you only read.")
+	gt.String(t, got).Contains("Every such write is a task that carries the tool id granting it.")
+	gt.String(t, got).Contains("it is not work this turn has performed")
+	gt.String(t, got).Contains("stop calling tools and set `finalize` in the decision object")
+	gt.String(t, got).NotContains("finalize_turn")
+	gt.String(t, got).NotContains("substitute for a decision")
+
+	// Round 1 offers finalize, not only tasks / direct.
+	round1, _, ok := strings.Cut(got, "**Round 2 and later**")
+	gt.Bool(t, ok).True().Required()
+	gt.String(t, round1).Contains("**`finalize`** — end the turn without running any phase")
+
+	// The final call is described as it behaves: it may still read (stepFinal
+	// answers a lookup it asks for) but changes nothing, and every change a tool
+	// makes goes through a task. A host-applied terminal output (threadcase's
+	// materialize) is not a tool's change, so the sentence leaves it alone.
+	gt.String(t, got).Contains("It performs no action itself")
+	gt.String(t, got).Contains("That call can still look something up with the read tools, but it changes nothing.")
+	gt.String(t, got).NotContains("with no tools")
+	gt.String(t, got).NotContains("generate the user-visible output")
+	gt.String(t, got).NotContains("produces an internal summary only")
+	gt.String(t, got).Contains("Every change a tool makes must have happened before you finalize, through a task carrying the appropriate write tool;")
+	gt.String(t, got).NotContains("your own tool call;")
+}
+
+func TestPlannerPrompt_RejectsNonPositiveToolRounds(t *testing.T) {
+	_, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
+		HostPrompt:   "x",
+		KnownToolIDs: []string{"a"},
+	})
+	gt.Error(t, err)
+}
+
 func TestPlannerPrompt_RejectsEmptyHostPrompt(t *testing.T) {
 	_, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
-		KnownToolIDs: []string{"a"},
+		PlannerToolRounds: 4,
+		KnownToolIDs:      []string{"a"},
 	})
 	gt.Error(t, err)
 }
 
 func TestPlannerPrompt_RejectsEmptyKnownToolIDs(t *testing.T) {
 	_, err := planexec.RenderPlannerPromptForTest(planexec.PlannerPromptInputForTest{
-		HostPrompt: "x",
+		PlannerToolRounds: 4,
+		HostPrompt:        "x",
 	})
 	gt.Error(t, err)
 }

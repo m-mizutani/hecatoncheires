@@ -124,6 +124,20 @@ and the run dies on `unknown tool` — which is exactly what happened when
 When you add a toolset whose tools are conditional, make sure the condition is
 visible to `ToolSetResolver.Has`.
 
+**A planner's own tools only read.** The planner of a plan-execute agent (Jobs
+with the `planexec` strategy, the thread-case agent, the workspace agent, the
+case-draft agent) may call tools itself before it decides, but it is given only
+the read tools of its palette: `core_ro` for the action tools, `slack_ro` for
+Slack, `memo_ro` (`memo__list_memos` / `memo__get_memo`), `case_multi_ro`
+(`case__list_cases` / `case__get_case` and the action reads), the read-only
+integrations, and the knowledge read tools. Every write — a post, a case or
+action edit, a memo or knowledge change — is done by a sub-agent whose task was
+assigned the write toolset. A write the planner calls anyway is answered with
+`unknown tool` and does not run. `memo_ro` and `case_multi_ro` are never offered
+to a planner as task toolsets. When you add a toolset, classify it in
+`agent.ReadOnlyToolSetIDs`: an unclassified id fails the planner's claim rather
+than reaching it with its writers.
+
 **Sub-agents are told the ids their tools are pinned to.** A plan-execute run
 spawns one sub-agent per planned task, and that sub-agent's system prompt is
 built from the planner's task text — not from the host's. Its tools, however,
@@ -271,8 +285,8 @@ workspace it runs in and hands that workspace's schema to its tools directly;
 the draft flow is the one that must choose.
 
 The planner calls them itself, before it decides anything: a plan-execute
-planner may make tool calls, each as its own transition, and only then emits its
-plan. A planned task may also request the `wsmeta` toolset.
+planner may make read-only tool calls, each as its own transition, and only then
+emits its plan. A planned task may also request the `wsmeta` toolset.
 
 | Tool | R/W | Purpose |
 |------|-----|---------|

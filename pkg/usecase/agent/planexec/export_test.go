@@ -91,6 +91,12 @@ type FinalPromptInputForTest = finalPromptInput
 // RenderFinalUserPromptForTest exposes renderFinalUserPrompt.
 var RenderFinalUserPromptForTest = renderFinalUserPrompt
 
+// RenderFinalRetryInputForTest exposes renderFinalRetryInput.
+var RenderFinalRetryInputForTest = renderFinalRetryInput
+
+// RenderPlanRetryInputForTest exposes renderPlanRetryInput.
+var RenderPlanRetryInputForTest = renderPlanRetryInput
+
 // RenderObservationsForFinalForTest exposes renderObservationsForFinal.
 var RenderObservationsForFinalForTest = renderObservationsForFinal
 

@@ -95,6 +95,23 @@ func RequiresActor(name agentkit.AgentName) bool {
 	}
 }
 
+// isPlanner reports whether an agent runs the plan-execute strategy, whose root
+// Process is the planner rather than the agent that does the work.
+//
+// Such a planner is declared only the read tools of its palette (see
+// NewToolFactory). A write it made itself would bypass the task it should have
+// been planned as and the toolsets that task was granted; a planner that called
+// a Slack post with a placeholder text in place of a decision had that text
+// posted.
+func isPlanner(name agentkit.AgentName) bool {
+	switch name {
+	case AgentJob, AgentCaseThread, AgentCaseThreadCreate, AgentWorkspace, AgentProposal:
+		return true
+	default:
+		return false
+	}
+}
+
 // ValidateSpawn checks a scope against the agent it is about to launch. A host
 // calls it before Spawn.
 //

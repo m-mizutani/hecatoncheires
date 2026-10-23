@@ -3,6 +3,7 @@ package planexec_test
 import (
 	"testing"
 
+	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/planexec"
@@ -31,6 +32,13 @@ func TestFinalUserPrompt_StructuredAndLanguage(t *testing.T) {
 	gt.String(t, got).Contains("Emit a single JSON object")
 	gt.String(t, got).Contains("Japanese")
 	gt.Bool(t, containsAny(got, "Emit plain natural-language text")).False()
+}
+
+func TestFinalRetryInput(t *testing.T) {
+	got, err := planexec.RenderFinalRetryInputForTest(goerr.New("title is required"))
+	gt.NoError(t, err).Required()
+	gt.String(t, got).Equal("Your previous final output was rejected: title is required. " +
+		"Please re-emit a JSON object that matches the schema and satisfies every requirement.")
 }
 
 func TestFinalUserPrompt_EmptyObservationsLabel(t *testing.T) {

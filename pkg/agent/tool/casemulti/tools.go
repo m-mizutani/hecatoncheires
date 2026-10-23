@@ -218,14 +218,14 @@ func New(deps Deps) []gollem.Tool {
 		return nil
 	}
 
-	tools := []gollem.Tool{
-		&listCasesTool{deps: deps},
-		&getCaseTool{deps: deps},
+	// The read tools come from NewReadOnly so that a read tool added there is
+	// offered by both builders, not by one of them.
+	tools := append(NewReadOnly(deps),
 		&createCaseTool{deps: deps},
 		&updateCaseTool{deps: deps},
 		&assignCaseTool{deps: deps},
 		&unassignCaseTool{deps: deps},
-	}
+	)
 
 	if deps.StatusSet != nil {
 		tools = append(tools, &updateCaseStatusTool{deps: deps})
@@ -235,8 +235,6 @@ func New(deps Deps) []gollem.Tool {
 
 	if deps.ActionUC != nil {
 		tools = append(tools,
-			&listActionsTool{deps: deps},
-			&getActionTool{deps: deps},
 			&createActionTool{deps: deps},
 			&updateActionTool{deps: deps},
 			&updateActionStatusTool{deps: deps},
@@ -245,6 +243,27 @@ func New(deps Deps) []gollem.Tool {
 		)
 	}
 
+	return tools
+}
+
+// NewReadOnly returns the cross-case read tools: case__list_cases and
+// case__get_case, plus case__list_actions and case__get_action when ActionUC is
+// set. Like New it returns nil when CaseUC == nil.
+func NewReadOnly(deps Deps) []gollem.Tool {
+	if deps.CaseUC == nil {
+		return nil
+	}
+
+	tools := []gollem.Tool{
+		&listCasesTool{deps: deps},
+		&getCaseTool{deps: deps},
+	}
+	if deps.ActionUC != nil {
+		tools = append(tools,
+			&listActionsTool{deps: deps},
+			&getActionTool{deps: deps},
+		)
+	}
 	return tools
 }
 

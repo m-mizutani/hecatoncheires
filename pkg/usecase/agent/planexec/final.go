@@ -29,11 +29,26 @@ type finalPromptInput struct {
 // the step budget is for).
 const finalOutputMaxRetry = 2
 
-// finalRetryInput is the correction message sent to the final-output LLM after
-// a decode / Validate failure.
-func finalRetryInput(cause error) string {
-	return "Your previous final output was rejected: " + cause.Error() +
-		". Please re-emit a JSON object that matches the schema and satisfies every requirement."
+//go:embed prompts/final_retry.md
+var finalRetryTmpl string
+
+var finalRetryTemplate = template.Must(template.New("planexec_final_retry").Parse(finalRetryTmpl))
+
+// retryPromptInput is the typed data passed into prompts/final_retry.md and
+// prompts/plan_retry.md.
+type retryPromptInput struct {
+	// Cause is the rejection reason, as the error renders it.
+	Cause string
+}
+
+// renderFinalRetryInput renders the correction sent to the final-output LLM
+// after a decode / Validate / finalizer failure.
+func renderFinalRetryInput(cause error) (string, error) {
+	var buf bytes.Buffer
+	if err := finalRetryTemplate.Execute(&buf, retryPromptInput{Cause: cause.Error()}); err != nil {
+		return "", goerr.Wrap(err, "render final retry prompt")
+	}
+	return strings.TrimSpace(buf.String()), nil
 }
 
 // renderFinalUserPrompt executes prompts/final.md.

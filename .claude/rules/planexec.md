@@ -16,7 +16,7 @@
 - Case writes are exposed to sub-agents through the `case_write` toolset (`agent.ToolSetResolver`), built from `casewriter.New` — the **full** set: `case__update_case`, `case__assign`, `case__unassign`, and the mode-appropriate `case__update_case_status` / `case__close_case`. `threadcase` advertises it on `ModeMention` turns only (`KnownToolSetIDsThreadWrite` + `AllowSubAgentWrites=true`); `ModeMaterialize` stays read-only and `ModeCreate` has no case yet, so `buildToolResolver` leaves `CaseWrite` zero and builds nothing. So closing / assigning / editing are all sub-agent tool calls inside the loop, never host-applied decisions. (The original bug was that `buildToolResolver` only wired read-only tools, so the planner routed close through a host `Decision` path that swallowed failures. A later one was that only the status tool was wired, so a mention asking the agent to fill the empty assignee field ended with the agent reporting it had no such capability.)
 - **There is deliberately no status-only or assignee-only subset.** Any host granting case writes grants all of them. Restricting a mention agent's write palette below the full set was found to produce exactly one outcome: the agent tells the user it cannot do what it was asked.
 - **Two content paths coexist, and the prompt picks between them.** `case__update_case` (in-loop) and the terminal `materialize` decision both write title / description, and `materialize` is a **full replacement** — so a sub-agent edit followed by a `materialize` in the same turn loses the edit. The threadcase `ModeMention` system prompt instructs the planner to pick one path per turn. That is a prompt-only guardrail, not a code lock.
-- **Termination is an explicit `finalize` action** on a replan round (`ReplanResult.Finalize`). A replan must set exactly one of `tasks` / `question` / `finalize`; none is rejected and re-planned. The old implicit "empty tasks → done" is gone.
+- **Termination is an explicit `finalize` action** on any planning round (`PlanResult.Finalize`, `ReplanResult.Finalize`). A replan must set exactly one of `tasks` / `question` / `finalize`, round 1 exactly one of `tasks` / `direct` / `finalize`; none is rejected and re-planned. The old implicit "empty tasks → done" is gone. A round-1 `finalize` goes straight to the terminal call with no observations — the path a budget notice already took. The schema lists every action as an optional property of one object and cannot express "exactly one", so the parser enforces it. There is no tool that ends a turn (see `.claude/rules/architecture.md` § Explicit termination).
 - **Final output is type-safe.** The strategy decodes the terminal JSON into the host's `Config[T]` type, calls `T.Validate()`, and regenerates on failure (bounded by `finalOutputMaxRetry`). Plain-text hosts use `Config[T]{TextOnly: true}` with `T = TextResult`. The in-process `Runner` and its `Run` / `RunText` / `ResumeText` entry functions no longer exist — `planexec.Register` is the only way in.
 - **Host finalizers validate the final output against host context inside the regeneration loop.** `Run[T]` takes optional variadic `finalizers ...func(*T) error`. Each runs after `T.Validate()` on the decoded final output; a returned error is fed back to the model and the output regenerated (same bound as `Validate()` failures). They exist because `T.Validate()` is a pure method that cannot see host-only context (e.g. a workspace field schema known only to the caller). A finalizer MUST be **side-effect-free** — a later attempt re-runs every one; committing the output happens after the turn, never in a finalizer. planexec stays domain-agnostic — it only calls `func(*T) error`.
   - **ModeCreate** wires a *validation-only* finalizer (`runCreateTurn`): it checks the proposed fields against the workspace schema (a non-RFC3339 `due_date`, a missing required field, an out-of-schema option), so such an error is fed back and the decision regenerated instead of killing the turn with no feedback. This preserves the "no in-loop commit-retry" stance: the case is committed by `Handler.Create` **after** the turn, and a persistence failure there is surfaced and falls back — it is NOT fed back to the model, which cannot repair an infrastructure error (e.g. a write conflict) by re-emitting the same JSON. The field/validation error (model's fault, model-fixable) and the persistence error (infra's fault, not model-fixable) deliberately take different paths.
@@ -32,7 +32,23 @@ Differences worth knowing before changing it:
   `plan` → `collect` → `replan` → `final`, plus `planner_tool` for a tool call the
   planner asked for before deciding. A retry (a rejected plan, a rejected terminal
   output) is a fresh transition, never a loop inside one.
-- **The planner may call tools.** When a planning call returns FunctionCalls
+- **The planner may call tools, and is declared only read tools.** The root
+  Process of every plan-execute agent (`isPlanner` in `pkg/agent/kernel/agents.go`)
+  gets its palette passed through `agent.ReadOnlyToolSetIDs` in
+  `NewToolFactory`: `core` / `core_job` become `core_ro`, `slack_write` becomes
+  `slack_ro`, `memo` and `case_multi` become `memo_ro` and `case_multi_ro`, and
+  `slack_post` / `case_write` / `knowledge` (whose reads are always included) are
+  dropped. A write is a task carrying the write toolset, never the planner's own
+  call. A write the planner made itself bypassed the task it should have been
+  planned as and the toolsets that task was granted: a planner called the Slack
+  poster with a placeholder text in place of a decision, and the text was posted.
+  A write call it still makes names a tool its claim does not hold and is
+  answered with "unknown tool" (`TestAPlannerCallToAnUndeclaredToolIsAnsweredWithoutRunning`).
+  `ReadOnlyToolSetIDs` rejects an id it does not classify, so a new toolset cannot
+  reach a planner with its writers by default; classify it there and in the test's
+  `allToolSetIDs`. Sub-agents are untouched: they carry the explicit toolsets their
+  task was given.
+  When a planning call returns FunctionCalls
   instead of a decision, the run diverts to `planner_tool`, runs ONE of them per
   transition, and comes back. It is bounded by `plannerToolRoundsMax` per planning
   phase, because those calls are free of the round budget — nothing else would stop
@@ -47,10 +63,11 @@ Differences worth knowing before changing it:
   stay declared on the request (withholding them changes the tool list and
   invalidates the whole cached prefix). A call a provider returns anyway is still
   run and answered (dropping it breaks the conversation).
-  The reserve follows the same rule: its first move keeps its tools, since it asks
-  for one call, and `reserveInstruction` rides on the terminal call's user turn
-  when that call sends one (a call continuing from a tool round is not told); its
-  second move is sent with tool calls disabled.
+  The reserve is ONE terminal call sent with tool calls disabled, and nothing in
+  it asks for a call: the planner has only read tools, so a call there could only
+  look something up, and launching a write task from the reserve would let a
+  sub-agent spend up to its own ceiling, which a tenth of the budget does not
+  cover. `TestTheReserveTerminalCallCannotCallTools` pins it.
   Each call is answered in the conversation by `Session().CallTool`, and the
   planning call that follows sends NOTHING — no restated request, no instruction.
 - **One run passes ONE system prompt.** `plannerPrompt` renders it from
@@ -62,10 +79,18 @@ Differences worth knowing before changing it:
   `role: system` message mid-conversation; what differs per call goes in request
   parameters (`tool_choice`, the response schema) or in a user turn the call
   sends anyway. Pinned by `TestOneRunSendsOneSystemPrompt`, which compares what
-  planexec passes, not the request on the wire: for a Claude model without
-  structured outputs, gollem itself appends the response schema to the system
-  prompt it sends, and the plan, replan and terminal schemas differ. That case is
-  not fixed here.
+  planexec passes, not the request on the wire. gollem keeps the wire half: for a
+  Claude model without structured outputs it sends the system prompt unchanged
+  and states the response schema in a user message after the call's inputs
+  (gollem PR #198), so the plan, replan and terminal schemas no longer change it.
+- **Claude on Vertex AI runs without structured outputs**
+  (`claude.WithVertexStructuredOutputsDisabled` in `pkg/cli/config/llm.go`).
+  With the schema enforced as `output_config.format`, a planner with nothing
+  left to do filled the decision with placeholders (`{"message":"x"}`, an `"x"`
+  task, `tasks: []`) instead of choosing `finalize`; with the schema stated in
+  the conversation it did not. The parsers and `T.Validate()` are what check the
+  reply, as before. The Anthropic API client has no public option for this, so a
+  deployment reaching Claude directly still sends `output_config.format`.
   See `.claude/rules/architecture.md` § "a parallel tool-call turn is answered in
   ONE call" for both halves of that rule and the rejections that taught them.
 - **The terminal call may ask for tools too, and is treated the same way.**

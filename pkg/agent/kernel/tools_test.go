@@ -13,11 +13,15 @@ import (
 	"github.com/m-mizutani/gt"
 
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/kernel"
+	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/casemulti"
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/casewriter"
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/core"
+	memotool "github.com/m-mizutani/hecatoncheires/pkg/agent/tool/memo"
 	"github.com/m-mizutani/hecatoncheires/pkg/agent/tool/slackpost"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/interfaces"
 	"github.com/m-mizutani/hecatoncheires/pkg/domain/model"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/model/config"
+	"github.com/m-mizutani/hecatoncheires/pkg/domain/types"
 	"github.com/m-mizutani/hecatoncheires/pkg/repository/memory"
 	slackservice "github.com/m-mizutani/hecatoncheires/pkg/service/slack"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent"
@@ -297,6 +301,10 @@ func TestToolFactoryWithdrawsActionToolsInAThreadModeWorkspace(t *testing.T) {
 // what the pre-agentkit buildJobTools assembled. The three withheld action tools
 // are the point: a Job acts on its own judgement with nobody reviewing it, and a
 // wrong archive is work the team can no longer see.
+//
+// It is checked on the simple-strategy Job, whose root Process does the work
+// itself. A plan-execute Job's root is a planner and is declared only the read
+// half (TestToolFactoryDeclaresAPlannerOnlyItsReadTools).
 func TestToolFactoryBuildsTheJobPalette(t *testing.T) {
 	ctx := context.Background()
 	repo := memory.New()
@@ -319,28 +327,178 @@ func TestToolFactoryBuildsTheJobPalette(t *testing.T) {
 	// No actor: a Job is unattended, which RequiresActor excludes precisely so
 	// this resolves to a palette rather than to nothing.
 	sc := kernel.Scope{WorkspaceID: "ws-1", CaseID: 1, ToolSets: []string{kernel.ToolSetsAll}}
-	for _, name := range []agentkit.AgentName{kernel.AgentJob, kernel.AgentJobSimple} {
-		t.Run(string(name), func(t *testing.T) {
-			tools, err := factory(ctx, newProcess(name, sc))
-			gt.NoError(t, err).Required()
-			names := toolNames(tools)
+	tools, err := factory(ctx, newProcess(kernel.AgentJobSimple, sc))
+	gt.NoError(t, err).Required()
+	names := toolNames(tools)
 
-			// Reads and the non-destructive writes.
-			gt.Bool(t, slices.Contains(names, "core__list_actions")).True()
-			gt.Bool(t, slices.Contains(names, "core__create_action")).True()
-			gt.Bool(t, slices.Contains(names, "core__update_action_status")).True()
-			// The three an unattended run must not have.
-			gt.Bool(t, slices.Contains(names, "core__archive_action")).False()
-			gt.Bool(t, slices.Contains(names, "core__unarchive_action")).False()
-			gt.Bool(t, slices.Contains(names, "core__delete_action_step")).False()
-			// Case edits, the channel-pinned poster, and Slack reads.
-			gt.Bool(t, slices.Contains(names, "case__update_case")).True()
-			gt.Bool(t, slices.Contains(names, "slack__post_to_case_channel")).True()
-			gt.Bool(t, slices.Contains(names, "slack__get_messages")).True()
-			// A Job has never had GitHub.
-			gt.Bool(t, hasPrefixIn(names, "github__")).False()
-		})
+	// Reads and the non-destructive writes.
+	gt.Bool(t, slices.Contains(names, "core__list_actions")).True()
+	gt.Bool(t, slices.Contains(names, "core__create_action")).True()
+	gt.Bool(t, slices.Contains(names, "core__update_action_status")).True()
+	// The three an unattended run must not have.
+	gt.Bool(t, slices.Contains(names, "core__archive_action")).False()
+	gt.Bool(t, slices.Contains(names, "core__unarchive_action")).False()
+	gt.Bool(t, slices.Contains(names, "core__delete_action_step")).False()
+	// Case edits, the channel-pinned poster, and Slack reads.
+	gt.Bool(t, slices.Contains(names, "case__update_case")).True()
+	gt.Bool(t, slices.Contains(names, "slack__post_to_case_channel")).True()
+	gt.Bool(t, slices.Contains(names, "slack__get_messages")).True()
+	// A Job has never had GitHub.
+	gt.Bool(t, hasPrefixIn(names, "github__")).False()
+}
+
+type stubMemoMutator struct {
+	memotool.MemoMutator
+}
+
+type stubCaseMultiUC struct {
+	casemulti.CaseUsecase
+}
+
+type stubCaseMultiActionUC struct {
+	casemulti.ActionUsecase
+}
+
+// writeTools is every tool that changes something outside the run, across the
+// palettes a planner's agent kind may hold.
+var writeTools = []string{
+	"core__create_action",
+	"core__update_action",
+	"core__update_action_status",
+	"core__archive_action",
+	"case__update_case",
+	"case__assign",
+	"case__close_case",
+	"case__create_case",
+	"case__create_action",
+	"slack__post_to_case_channel",
+	"slack__post_message",
+	"memo__apply_memo_changes",
+	"knowledge__create_knowledge",
+	"knowledge__update_knowledge",
+}
+
+func noWriteTool(t *testing.T, names []string) {
+	t.Helper()
+	for _, name := range writeTools {
+		gt.Bool(t, slices.Contains(names, name)).False()
 	}
+}
+
+// TestToolFactoryDeclaresAPlannerOnlyItsReadTools pins that a plan-execute
+// agent's root Process is declared the read half of its palette. A write the
+// planner made itself bypassed the task it should have been planned as: a
+// planner called a Slack post with a placeholder text and the text was posted.
+// The writes stay with the sub-agents its tasks spawn.
+func TestToolFactoryDeclaresAPlannerOnlyItsReadTools(t *testing.T) {
+	ctx := context.Background()
+	repo := memory.New()
+	ctx = seedCase(t, ctx, repo, &model.Case{Title: "planner target", SlackChannelID: "C-PLAN"})
+
+	ws := channelWorkspace()
+	ws.MemoConfig = &config.MemoConfig{FieldSchema: &config.FieldSchema{Fields: []config.FieldDefinition{
+		{ID: "note", Type: types.FieldTypeText},
+	}}}
+
+	deps := kernel.ToolDeps{
+		Repo:              repo,
+		Registry:          testRegistry(ws),
+		SlackBot:          stubSlackBot{},
+		SlackPoster:       stubSlackPoster{},
+		ActionUC:          stubActionMutator{},
+		CaseUC:            stubCaseMutator{},
+		MemoUC:            stubMemoMutator{},
+		CaseMultiUC:       stubCaseMultiUC{},
+		CaseMultiActionUC: stubCaseMultiActionUC{},
+		KnowledgeAccessor: stubKnowledgeAccessor{},
+		KnowledgeMutator:  stubKnowledgeMutator{},
+	}
+	factory, err := kernel.NewToolFactory(deps)
+	gt.NoError(t, err).Required()
+
+	sc := kernel.Scope{WorkspaceID: "ws-1", CaseID: 1, ActorUserID: "U1", ToolSets: []string{kernel.ToolSetsAll}}
+
+	t.Run("a plan-execute Job reads but does not write", func(t *testing.T) {
+		tools, err := factory(ctx, newProcess(kernel.AgentJob, sc))
+		gt.NoError(t, err).Required()
+		names := toolNames(tools)
+		noWriteTool(t, names)
+		for _, name := range []string{
+			"core__list_actions", "core__get_action",
+			"slack__get_messages",
+			"memo__list_memos", "memo__get_memo",
+			"knowledge__search_knowledge",
+		} {
+			gt.Bool(t, slices.Contains(names, name)).True()
+		}
+	})
+
+	t.Run("a thread case planner reads but does not write", func(t *testing.T) {
+		tools, err := factory(ctx, newProcess(kernel.AgentCaseThread, sc))
+		gt.NoError(t, err).Required()
+		names := toolNames(tools)
+		noWriteTool(t, names)
+		gt.Bool(t, slices.Contains(names, "slack__get_messages")).True()
+	})
+
+	t.Run("a workspace planner reads cases but does not write them", func(t *testing.T) {
+		tools, err := factory(ctx, newProcess(kernel.AgentWorkspace, sc))
+		gt.NoError(t, err).Required()
+		names := toolNames(tools)
+		noWriteTool(t, names)
+		for _, name := range []string{"case__list_cases", "case__get_case", "case__list_actions", "case__get_action"} {
+			gt.Bool(t, slices.Contains(names, name)).True()
+		}
+	})
+
+	// The agents that do the work themselves keep their writers.
+	t.Run("a simple Job still writes", func(t *testing.T) {
+		tools, err := factory(ctx, newProcess(kernel.AgentJobSimple, sc))
+		gt.NoError(t, err).Required()
+		names := toolNames(tools)
+		gt.Bool(t, slices.Contains(names, "slack__post_to_case_channel")).True()
+		gt.Bool(t, slices.Contains(names, "case__update_case")).True()
+		gt.Bool(t, slices.Contains(names, "memo__apply_memo_changes")).True()
+	})
+
+	t.Run("the channel case agent still writes", func(t *testing.T) {
+		tools, err := factory(ctx, newProcess(kernel.AgentCaseChannel, sc))
+		gt.NoError(t, err).Required()
+		names := toolNames(tools)
+		gt.Bool(t, slices.Contains(names, "core__create_action")).True()
+		gt.Bool(t, slices.Contains(names, "case__update_case")).True()
+		gt.Bool(t, slices.Contains(names, "knowledge__create_knowledge")).True()
+	})
+
+	// The narrowing follows the agent kind, not the "*" expansion: a planner whose
+	// scope names a writer explicitly still gets only the reads.
+	t.Run("a planner naming a writer explicitly gets only the reads", func(t *testing.T) {
+		explicit := sc
+		explicit.ToolSets = []string{agent.ToolSetSlackPost, agent.ToolSetCoreJob}
+		tools, err := factory(ctx, newProcess(kernel.AgentJob, explicit))
+		gt.NoError(t, err).Required()
+		names := toolNames(tools)
+		noWriteTool(t, names)
+		gt.Bool(t, slices.Contains(names, "core__list_actions")).True()
+	})
+
+	t.Run("a planner naming an unclassified toolset fails the claim", func(t *testing.T) {
+		unknown := sc
+		unknown.ToolSets = []string{"not_a_toolset"}
+		tools, err := factory(ctx, newProcess(kernel.AgentJob, unknown))
+		gt.Value(t, err).NotNil()
+		gt.Array(t, tools).Length(0)
+	})
+
+	// A planner's task carries its toolsets explicitly, so the writer it was
+	// granted reaches the sub-agent.
+	t.Run("a task granted the poster gets it", func(t *testing.T) {
+		task := sc
+		task.ToolSets = []string{agent.ToolSetSlackPost}
+		tools, err := factory(ctx, newProcess(kernel.AgentTask, task))
+		gt.NoError(t, err).Required()
+		gt.Bool(t, slices.Contains(toolNames(tools), "slack__post_to_case_channel")).True()
+	})
 }
 
 // The case-draft agent is the one that has NOT chosen a workspace yet, so it is

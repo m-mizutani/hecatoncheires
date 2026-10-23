@@ -59,6 +59,12 @@ type plannerPromptInput struct {
 	// prompt that asked for a field the schema does not offer would drive
 	// the planner into a rejection loop.
 	AllocatesBudget bool
+
+	// PlannerToolRounds is how many rounds of its own tool calls the planner
+	// may make per decision before tool calls are disabled. It is stated in
+	// the prompt so the planner knows its own calls are part of the protocol
+	// and when they stop.
+	PlannerToolRounds int
 }
 
 // renderPlannerSystemPrompt builds the planner system prompt by piping
@@ -70,6 +76,9 @@ func renderPlannerSystemPrompt(in plannerPromptInput) (string, error) {
 	}
 	if len(in.KnownToolIDs) == 0 {
 		return "", goerr.New("known tool ids must not be empty")
+	}
+	if in.PlannerToolRounds <= 0 {
+		return "", goerr.New("planner tool rounds must be positive", goerr.V("rounds", in.PlannerToolRounds))
 	}
 	var buf bytes.Buffer
 	if err := plannerBaseTemplate.Execute(&buf, in); err != nil {

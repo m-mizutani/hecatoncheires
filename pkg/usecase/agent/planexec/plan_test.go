@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gollem-dev/gollem"
+	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/gt"
 	"github.com/m-mizutani/hecatoncheires/pkg/usecase/agent/planexec"
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
@@ -138,6 +139,46 @@ func TestParsePlanResult_RejectsDirectTooManyTools(t *testing.T) {
 	raw := []byte(`{"direct":{"tools":["core_ro","slack_ro","notion","github","core_ro"]}}`)
 	_, err := planexec.ParsePlanResultForTest(raw, knownTools, true, nil)
 	gt.Error(t, err)
+}
+
+// ----- parsePlanResult: finalize -----------------------------------
+
+func TestParsePlanResult_Finalize(t *testing.T) {
+	raw := []byte(`{"message":"my own calls already synced the record","finalize":{"reason":"nothing left to do"}}`)
+	for _, allowDirect := range []bool{false, true} {
+		p, err := planexec.ParsePlanResultForTest(raw, knownTools, allowDirect, nil)
+		gt.NoError(t, err).Required()
+		gt.Value(t, p.Finalize).NotNil().Required()
+		gt.String(t, p.Finalize.Reason).Equal("nothing left to do")
+		gt.Array(t, p.Tasks).Length(0)
+		gt.Value(t, p.Direct).Nil()
+	}
+}
+
+func TestParsePlanResult_RejectsFinalizeWithAnotherAction(t *testing.T) {
+	task := `{"id":"t-1","title":"a","description":"d","acceptance_criteria":"a","tools":["slack_ro"]}`
+	for name, raw := range map[string]string{
+		"tasks":  `{"finalize":{},"tasks":[` + task + `]}`,
+		"direct": `{"finalize":{},"direct":{}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := planexec.ParsePlanResultForTest([]byte(raw), knownTools, true, nil)
+			gt.Error(t, err)
+			gt.String(t, err.Error()).Contains("exactly one of tasks, direct, or finalize")
+		})
+	}
+}
+
+// An empty plan names every action the host offers, so the correction the
+// planner receives tells it how to end a turn with nothing left to do.
+func TestParsePlanResult_NoActionNamesFinalize(t *testing.T) {
+	_, err := planexec.ParsePlanResultForTest([]byte(`{"message":"done","tasks":[]}`), knownTools, false, nil)
+	gt.Error(t, err)
+	gt.String(t, err.Error()).Contains("provide exactly one of tasks or finalize")
+
+	_, err = planexec.ParsePlanResultForTest([]byte(`{"message":"done","tasks":[]}`), knownTools, true, nil)
+	gt.Error(t, err)
+	gt.String(t, err.Error()).Contains("provide exactly one of tasks, direct, or finalize")
 }
 
 // ----- parseReplanResult (subsequent rounds) -----------------------
@@ -555,6 +596,16 @@ func TestDirectCarriesNoBudgetProperty(t *testing.T) {
 
 // ----- schema shape ------------------------------------------------
 
+// The correction names the rejection and offers `finalize`, so a planner whose
+// output was rejected for setting no action learns how to end the turn.
+func TestPlanRetryInput(t *testing.T) {
+	got, err := planexec.RenderPlanRetryInputForTest(goerr.New("plan set no action"))
+	gt.NoError(t, err).Required()
+	gt.String(t, got).Equal("Your previous response was rejected: plan set no action. " +
+		"Emit a single JSON object that matches the schema exactly. " +
+		"If nothing remains to be done, set `finalize`.")
+}
+
 func TestPlanSchema_Shape(t *testing.T) {
 	raw := planexec.PlanSchemaForTest(knownTools, false, false, false)
 	schema, ok := raw.(*gollem.Parameter)
@@ -562,6 +613,9 @@ func TestPlanSchema_Shape(t *testing.T) {
 	gt.Value(t, schema.Type).Equal(gollem.TypeObject)
 	gt.Map(t, schema.Properties).HasKey("tasks")
 	gt.Map(t, schema.Properties).HasKey("message")
+	// Round 1 offers finalize too: a planner whose lookups show there is nothing
+	// to do has no other valid output.
+	gt.Map(t, schema.Properties).HasKey("finalize")
 	// direct is absent unless allowDirect is set.
 	_, hasDirect := schema.Properties["direct"]
 	gt.Bool(t, hasDirect).False()
@@ -625,7 +679,7 @@ func TestSchemas_OnlyMessageIsRequired(t *testing.T) {
 	}{
 		"plan": {
 			raw:     planexec.PlanSchemaForTest(knownTools, false, true, true),
-			actions: []string{"direct", "tasks"},
+			actions: []string{"direct", "finalize", "tasks"},
 		},
 		"replan": {
 			raw:     planexec.ReplanSchemaForTest(knownTools, true, true),

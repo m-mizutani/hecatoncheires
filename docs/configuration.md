@@ -1986,6 +1986,12 @@ not support it rejects every request with a `400`, and that error is returned as
 the run's failure. The key names follow the request fields they are sent as, so a
 value the API adds to one of those fields later needs no new key.
 
+**A `claude` entry reached through Vertex AI sends no `output_config.format`.**
+Where the agent asks for a JSON reply, the response schema is stated in a user
+message instead, so the API does not constrain the reply to the schema. A
+`claude` entry reached with `--llm-claude-api-key` still sends the schema as
+`output_config.format`.
+
 **Write the prices from the provider's own pricing page**, in dollars per 1M
 tokens — the unit those pages use. Two rules follow from what the figure is for:
 

@@ -13,15 +13,32 @@ package planexec
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"slices"
 	"strings"
+	"text/template"
 
 	"github.com/gollem-dev/gollem"
 	"github.com/m-mizutani/goerr/v2"
 
 	"github.com/m-mizutani/hecatoncheires/pkg/utils/pricing"
 )
+
+//go:embed prompts/plan_retry.md
+var planRetryTmpl string
+
+var planRetryTemplate = template.Must(template.New("planexec_plan_retry").Parse(planRetryTmpl))
+
+// renderPlanRetryInput renders the correction handed to the planner after its
+// output was rejected.
+func renderPlanRetryInput(cause error) (string, error) {
+	var buf bytes.Buffer
+	if err := planRetryTemplate.Execute(&buf, retryPromptInput{Cause: cause.Error()}); err != nil {
+		return "", goerr.Wrap(err, "render plan retry prompt")
+	}
+	return strings.TrimSpace(buf.String()), nil
+}
 
 // Validation limits applied during parsePlanResult / parseReplanResult.
 // Adjusting these requires updating the planner system prompt as well so
@@ -50,13 +67,19 @@ const (
 const rationaleDescription = "1-2 sentence rationale for this decision. NOT shown to the user — never put the user's answer here — but it is kept in this run's record, so state the reason plainly enough that someone reading the run later understands the decision."
 
 // PlanResult is the parsed shape of the first planner-round JSON output.
-// The planner must choose exactly one of two shapes:
+// The planner must choose exactly one of these shapes:
 //   - Tasks: the parallel investigation phase (the default path). At least
-//     one task is required; if the host wants the planner to terminate after
-//     a phase, that is a replan-round concern.
+//     one task is required.
 //   - Direct: skip investigation entirely and answer the user directly
 //     (round-1 fast path). Only valid when the host set
 //     RunRequest.AllowDirect.
+//   - Finalize: end the turn without any phase. The planner may call tools
+//     itself before deciding, and a host prompt can ask it to (a Job that
+//     reads its thread and syncs a record); when those calls already did
+//     what the request asks, or there is nothing to do, no phase is left to
+//     run. Without this shape round 1 had no valid output for that state:
+//     an empty `tasks` was rejected, and the planner re-emitted it until it
+//     invented a placeholder task to pass validation.
 type PlanResult struct {
 	// Message is a 1-2 sentence rationale for the decision. No code reads it, and
 	// that is not a reason to remove it: the planner reply carrying it is committed
@@ -81,6 +104,9 @@ type PlanResult struct {
 	// common case) means "investigate via Tasks". Mutually exclusive with
 	// Tasks; rejected unless RunRequest.AllowDirect is true.
 	Direct *DirectPlan `json:"direct,omitempty"`
+	// Finalize, when non-nil, ends the turn without running any phase; the
+	// final output is produced exactly as after a replan round's finalize.
+	Finalize *FinalizePlan `json:"finalize,omitempty"`
 }
 
 // DirectPlan is the round-1 "answer directly" payload. It carries only the
@@ -344,6 +370,20 @@ func parsePlanResult(raw []byte, knownToolIDs []string, allowDirect bool,
 	if err := json.Unmarshal(body, &p); err != nil {
 		return nil, goerr.Wrap(err, "decode plan json")
 	}
+	if p.Finalize != nil {
+		if len(p.Tasks) > 0 || p.Direct != nil {
+			return nil, goerr.New("plan sets finalize together with tasks or direct: provide exactly one of tasks, direct, or finalize",
+				goerr.V("has_tasks", len(p.Tasks) > 0),
+				goerr.V("has_direct", p.Direct != nil))
+		}
+		return &p, nil
+	}
+	if p.Direct == nil && len(p.Tasks) == 0 {
+		if allowDirect {
+			return nil, goerr.New("plan set no action: provide exactly one of tasks, direct, or finalize")
+		}
+		return nil, goerr.New("plan set no action: provide exactly one of tasks or finalize")
+	}
 	if p.Direct != nil {
 		if !allowDirect {
 			return nil, goerr.New("plan produced a direct payload but AllowDirect is false")
@@ -580,19 +620,20 @@ type schemaOptions struct {
 }
 
 // planSchema returns the gollem.Parameter applied to the planner LLM's
-// JSON output for the FIRST round. `tasks` is always offered; `direct` is
-// added only when the host opted in (allowDirect). The schema cannot express
-// the tasks/direct mutual exclusion (gollem has no oneOf), so that, plus the
-// task-count bounds, is enforced Go-side in parsePlanResult.
+// JSON output for the FIRST round. `tasks` and `finalize` are always offered;
+// `direct` is added only when the host opted in (allowDirect). The schema
+// cannot express their mutual exclusion (gollem has no oneOf), so that, plus
+// the task-count bounds, is enforced Go-side in parsePlanResult.
 func planSchema(opts schemaOptions) *gollem.Parameter {
 	props := map[string]*gollem.Parameter{
-		"message": messageSchema(),
-		"tasks":   tasksSchema(opts.knownToolIDs, opts.withBudget),
+		"message":  messageSchema(),
+		"tasks":    tasksSchema(opts.knownToolIDs, opts.withBudget),
+		"finalize": finalizeSchema(),
 	}
-	desc := "Initial planner output: parallel investigation tasks for round 1."
+	desc := "Initial planner output: set EXACTLY ONE of `tasks` (run an investigation phase) or `finalize` (the request calls for no action). Leaving both unset is rejected."
 	if opts.allowDirect {
 		props["direct"] = directSchema(opts.knownToolIDs)
-		desc = "Initial planner output: either parallel investigation `tasks`, or a `direct` answer (round 1 only). Set exactly one."
+		desc = "Initial planner output: set EXACTLY ONE of `tasks` (run an investigation phase), `direct` (answer directly, round 1 only), or `finalize` (the request calls for no action). Leaving all unset is rejected."
 	}
 	return &gollem.Parameter{
 		Type:        gollem.TypeObject,
@@ -648,7 +689,7 @@ func replanSchema(opts schemaOptions) *gollem.Parameter {
 // alphabetically. With every top-level property optional, a replan was emitted
 // as `finalize` → `message` → `question` → `tasks`, so once the planner had
 // started writing its rationale `finalize` could no longer be emitted (in the
-// plan schema, `direct` likewise precedes `message`). A planner whose `message`
+// plan schema, `direct` and `finalize` likewise precede `message`). A planner whose `message`
 // said it was finishing then satisfied "set exactly one action" with the only
 // action still ahead of it: a placeholder `question` (reason "x", options
 // "a" / "b") that Question.Validate accepts and the host posts to the thread.
@@ -669,7 +710,7 @@ func messageSchema() *gollem.Parameter {
 func finalizeSchema() *gollem.Parameter {
 	return &gollem.Parameter{
 		Type:        gollem.TypeObject,
-		Description: "Declare the turn complete and produce the final output. Set this (instead of `tasks`) when the goal is met — an empty `tasks` list alone does NOT signal completion.",
+		Description: "Declare the turn complete and produce the final output. Set this (instead of `tasks`) when the goal is met or nothing (more) needs to be done — an empty `tasks` list alone does NOT signal completion.",
 		Properties: map[string]*gollem.Parameter{
 			"reason": {
 				Type:        gollem.TypeString,
